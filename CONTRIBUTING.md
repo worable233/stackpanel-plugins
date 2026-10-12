@@ -81,8 +81,8 @@ pnpm --filter @stackpanel/api test
 ## 文档
 
 面向使用者的公开文档是 README 与
-[Wiki](https://github.com/worable233/stackpanel/wiki)。仓库内部面向 AI 代理的
-开发笔记与公开文档相互独立，公开文档中不得引用内部笔记。
+[Wiki](https://github.com/worable233/stackpanel/wiki)。开发笔记不对外公开，
+公开文档中不引用内部笔记。
 
 ## 安全问题
 

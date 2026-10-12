@@ -102,4 +102,4 @@ packages/plugins/<id>/
 
 ## 许可证
 
-[MIT](./LICENSE) © 2026 worable
+本项目基于 [MIT](./LICENSE) 许可开源。

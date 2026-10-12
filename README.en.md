@@ -107,4 +107,4 @@ security issues privately as described in [SECURITY.md](./SECURITY.md).
 
 ## License
 
-[MIT](./LICENSE) © 2026 worable
+Released under the [MIT](./LICENSE) license.
