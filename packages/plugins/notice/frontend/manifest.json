@@ -1,0 +1,112 @@
+{
+  "version": "0.1.0",
+  "revision": "96b57ed8a6e2",
+  "entry": "frontend/dist/index.js",
+  "pages": [
+    {
+      "path": "/notice",
+      "component": "notice/index",
+      "data": [
+        {
+          "finder": "notice.list",
+          "as": "announcements"
+        }
+      ]
+    }
+  ],
+  "layouts": [],
+  "finders": ["notice.list", "notice.adminList"],
+  "adminRoutes": [
+    {
+      "path": "/overview",
+      "component": "admin/overview",
+      "permission": "notice.admin",
+      "nav": {
+        "label": "站点公告",
+        "group": "插件"
+      },
+      "data": [
+        {
+          "finder": "notice.adminList",
+          "as": "announcements"
+        }
+      ]
+    }
+  ],
+  "adminActions": [],
+  "actions": [
+    {
+      "id": "notice.create",
+      "method": "POST",
+      "path": "/notice/admin/announcements",
+      "permission": "notice.admin",
+      "input": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "maxLength": 5000
+        },
+        {
+          "name": "sortOrder",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 9999
+        },
+        {
+          "name": "published",
+          "type": "boolean",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "notice.toggle",
+      "method": "PATCH",
+      "path": "/notice/admin/announcements/:id",
+      "permission": "notice.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "published",
+          "type": "boolean",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "notice.delete",
+      "method": "DELETE",
+      "path": "/notice/admin/announcements/:id",
+      "permission": "notice.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    }
+  ],
+  "accountRoutes": [],
+  "accountWidgets": [],
+  "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/admin.js.map",
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
+  ]
+}

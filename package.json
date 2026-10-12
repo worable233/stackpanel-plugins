@@ -1,0 +1,15 @@
+{
+  "name": "stackpanel-plugins",
+  "version": "0.0.0",
+  "private": true,
+  "description": "StackPanel optional plugins, extracted from the kernel repository.",
+  "license": "MIT",
+  "packageManager": "pnpm@11.5.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.7",
+    "typescript": "^6.0.3"
+  }
+}

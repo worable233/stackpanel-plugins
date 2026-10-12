@@ -1,0 +1,39 @@
+# Dependencies
+# No trailing slash: this directory is symlinked to the kernel workspace locally,
+# and a symlink is not a directory as far as git is concerned.
+node_modules
+.pnpm-store/
+
+# Build output
+dist/
+dist-pack/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Testing
+coverage/
+.nyc_output/
+test-results/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Packed plugins (built on demand via the kernel's plugin:pack)
+*.zip
+*.tgz
+
+# Local tool state
+.agents/
+skills-lock.json
+opencode.json

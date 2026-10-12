@@ -1,0 +1,342 @@
+{
+  "version": "0.1.0",
+  "revision": "a4e07b25e88f",
+  "entry": "frontend/dist/index.js",
+  "pages": [],
+  "layouts": [],
+  "finders": [
+    "invoice.adminInvoices",
+    "invoice.adminInvoice",
+    "invoice.orders",
+    "invoice.platform"
+  ],
+  "adminRoutes": [
+    {
+      "path": "/invoices",
+      "component": "admin/invoices",
+      "permission": "invoice.admin",
+      "nav": {
+        "label": "发票管理",
+        "group": "商店插件"
+      },
+      "data": [
+        {
+          "finder": "invoice.adminInvoices",
+          "as": "invoices"
+        }
+      ]
+    },
+    {
+      "path": "/invoices/new",
+      "component": "admin/invoice-new",
+      "permission": "invoice.admin",
+      "data": [
+        {
+          "finder": "invoice.orders",
+          "as": "orders"
+        },
+        {
+          "finder": "invoice.platform",
+          "as": "platform"
+        }
+      ]
+    },
+    {
+      "path": "/invoices/:id",
+      "component": "admin/invoice-editor",
+      "permission": "invoice.admin",
+      "data": [
+        {
+          "finder": "invoice.adminInvoice",
+          "as": "invoice",
+          "input": {
+            "id": ":id"
+          }
+        },
+        {
+          "finder": "invoice.orders",
+          "as": "orders"
+        },
+        {
+          "finder": "invoice.platform",
+          "as": "platform"
+        }
+      ]
+    }
+  ],
+  "adminActions": [],
+  "actions": [
+    {
+      "id": "invoice.create",
+      "method": "POST",
+      "path": "/invoice/admin/invoices",
+      "permission": "invoice.admin",
+      "input": [
+        {
+          "name": "status",
+          "type": "string",
+          "maxLength": 16
+        },
+        {
+          "name": "referenceNumber",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "orderId",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "maxLength": 8
+        },
+        {
+          "name": "issuedAt",
+          "type": "string",
+          "maxLength": 40
+        },
+        {
+          "name": "dueAt",
+          "type": "string",
+          "maxLength": 40
+        },
+        {
+          "name": "customerName",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "customerEmail",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "customerAddress",
+          "type": "string",
+          "maxLength": 500
+        },
+        {
+          "name": "customerTaxId",
+          "type": "string",
+          "maxLength": 64
+        },
+        {
+          "name": "businessName",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "businessAddress",
+          "type": "string",
+          "maxLength": 500
+        },
+        {
+          "name": "businessEmail",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "businessPhone",
+          "type": "string",
+          "maxLength": 64
+        },
+        {
+          "name": "items",
+          "type": "string",
+          "maxLength": 40000
+        },
+        {
+          "name": "discount",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 2000000000
+        },
+        {
+          "name": "discountType",
+          "type": "string",
+          "maxLength": 16
+        },
+        {
+          "name": "discountValue",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 2000000000
+        },
+        {
+          "name": "taxRate",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 100
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "maxLength": 2000
+        },
+        {
+          "name": "paymentInfo",
+          "type": "string",
+          "maxLength": 2000
+        }
+      ],
+      "redirect": {
+        "responsePath": "nextPath"
+      }
+    },
+    {
+      "id": "invoice.update",
+      "method": "PATCH",
+      "path": "/invoice/admin/invoices/:id",
+      "permission": "invoice.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "maxLength": 16
+        },
+        {
+          "name": "referenceNumber",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "orderId",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "maxLength": 8
+        },
+        {
+          "name": "issuedAt",
+          "type": "string",
+          "maxLength": 40
+        },
+        {
+          "name": "dueAt",
+          "type": "string",
+          "maxLength": 40
+        },
+        {
+          "name": "customerName",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "customerEmail",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "customerAddress",
+          "type": "string",
+          "maxLength": 500
+        },
+        {
+          "name": "customerTaxId",
+          "type": "string",
+          "maxLength": 64
+        },
+        {
+          "name": "businessName",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "businessAddress",
+          "type": "string",
+          "maxLength": 500
+        },
+        {
+          "name": "businessEmail",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "businessPhone",
+          "type": "string",
+          "maxLength": 64
+        },
+        {
+          "name": "items",
+          "type": "string",
+          "maxLength": 40000
+        },
+        {
+          "name": "discount",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 2000000000
+        },
+        {
+          "name": "discountType",
+          "type": "string",
+          "maxLength": 16
+        },
+        {
+          "name": "discountValue",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 2000000000
+        },
+        {
+          "name": "taxRate",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 100
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "maxLength": 2000
+        },
+        {
+          "name": "paymentInfo",
+          "type": "string",
+          "maxLength": 2000
+        }
+      ],
+      "redirect": {
+        "responsePath": "nextPath"
+      }
+    },
+    {
+      "id": "invoice.delete",
+      "method": "DELETE",
+      "path": "/invoice/admin/invoices/:id",
+      "permission": "invoice.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    }
+  ],
+  "accountRoutes": [],
+  "accountWidgets": [],
+  "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/admin.js.map",
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
+  ]
+}

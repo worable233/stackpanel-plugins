@@ -1,0 +1,175 @@
+{
+  "version": "0.1.0",
+  "revision": "b2142d6cf8c7",
+  "entry": "frontend/dist/index.js",
+  "pages": [],
+  "layouts": [],
+  "finders": [
+    "catalog.categories",
+    "catalog.products",
+    "catalog.adminCategories",
+    "catalog.adminProducts"
+  ],
+  "adminRoutes": [
+    {
+      "path": "/categories",
+      "component": "admin/categories",
+      "permission": "catalog.admin",
+      "nav": {
+        "label": "商品分类",
+        "group": "商店插件"
+      },
+      "data": [
+        {
+          "finder": "catalog.adminCategories",
+          "as": "categories"
+        }
+      ]
+    }
+  ],
+  "adminActions": [],
+  "actions": [
+    {
+      "id": "catalog.create-category",
+      "method": "POST",
+      "path": "/catalog/admin/categories",
+      "permission": "catalog.admin",
+      "input": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "maxLength": 32
+        },
+        {
+          "name": "parentId",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "sortOrder",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 9999
+        }
+      ]
+    },
+    {
+      "id": "catalog.update-category",
+      "method": "PATCH",
+      "path": "/catalog/admin/categories/:id",
+      "permission": "catalog.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "maxLength": 32
+        },
+        {
+          "name": "parentId",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "sortOrder",
+          "type": "integer",
+          "min": 0,
+          "max": 9999
+        }
+      ]
+    },
+    {
+      "id": "catalog.reorder-categories",
+      "method": "POST",
+      "path": "/catalog/admin/categories/reorder",
+      "permission": "catalog.admin",
+      "input": [
+        {
+          "name": "ids",
+          "type": "ids"
+        },
+        {
+          "name": "parentIds",
+          "type": "ids"
+        },
+        {
+          "name": "sortOrders",
+          "type": "ids"
+        }
+      ]
+    },
+    {
+      "id": "catalog.delete-category",
+      "method": "DELETE",
+      "path": "/catalog/admin/categories/:id",
+      "permission": "catalog.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    },
+    {
+      "id": "catalog.update-product",
+      "method": "PATCH",
+      "path": "/catalog/admin/products/:productId",
+      "permission": "catalog.admin",
+      "input": [
+        {
+          "name": "productId",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "categoryIds",
+          "type": "ids"
+        },
+        {
+          "name": "shelfStatus",
+          "type": "string"
+        },
+        {
+          "name": "sortOrder",
+          "type": "integer",
+          "min": 0,
+          "max": 9999
+        },
+        {
+          "name": "stock",
+          "type": "integer",
+          "min": 0,
+          "max": 1000000
+        }
+      ]
+    }
+  ],
+  "accountRoutes": [],
+  "accountWidgets": [],
+  "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/admin.js.map",
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
+  ]
+}
