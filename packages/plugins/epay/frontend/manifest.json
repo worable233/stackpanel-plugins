@@ -1,18 +1,35 @@
 {
   "version": "0.1.0",
-  "revision": "9d9908fd9fa1",
+  "revision": "7ae7ad149e72",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
   "finders": ["epay.status"],
   "adminRoutes": [
     {
-      "path": "/overview",
+      "path": "/settings",
       "component": "admin/overview",
       "permission": "epay.admin",
       "nav": {
-        "label": "易支付",
-        "group": "商店插件"
+        "label": "配置",
+        "group": "易支付",
+        "order": 20
+      },
+      "data": [
+        {
+          "finder": "epay.status",
+          "as": "status"
+        }
+      ]
+    },
+    {
+      "path": "/overview",
+      "component": "admin/summary",
+      "permission": "epay.admin",
+      "nav": {
+        "label": "概览",
+        "group": "易支付",
+        "order": 10
       },
       "data": [
         {
@@ -68,6 +85,8 @@
   "files": [
     "frontend/dist/admin.js",
     "frontend/dist/admin.js.map",
+    "frontend/dist/admin.runtime.js",
+    "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ]
