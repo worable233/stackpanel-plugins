@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "revision": "96b57ed8a6e2",
+  "revision": "ea86588729d2",
   "entry": "frontend/dist/index.js",
   "pages": [
     {
@@ -22,8 +22,9 @@
       "component": "admin/overview",
       "permission": "notice.admin",
       "nav": {
-        "label": "站点公告",
-        "group": "插件"
+        "label": "公告",
+        "group": "内容",
+        "order": 40
       },
       "data": [
         {
@@ -106,6 +107,8 @@
   "files": [
     "frontend/dist/admin.js",
     "frontend/dist/admin.js.map",
+    "frontend/dist/admin.runtime.js",
+    "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ]
