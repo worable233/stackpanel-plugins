@@ -1,10 +1,13 @@
 {
   "version": "0.1.0",
-  "revision": "e4387fef8662",
+  "revision": "30a279276256",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
   "finders": [
+    "ticket.adminSummary",
+    "ticket.pendingCount",
+    "ticket.mySummary",
     "ticket.myTickets",
     "ticket.ticket",
     "ticket.adminTickets",
@@ -12,12 +15,29 @@
   ],
   "adminRoutes": [
     {
+      "path": "/overview",
+      "component": "admin/summary",
+      "permission": "ticket.admin",
+      "nav": {
+        "label": "概览",
+        "group": "支持",
+        "order": 0
+      },
+      "data": [
+        {
+          "finder": "ticket.adminSummary",
+          "as": "summary"
+        }
+      ]
+    },
+    {
       "path": "/tickets",
       "component": "admin/tickets",
       "permission": "ticket.admin",
       "nav": {
-        "label": "工单管理",
-        "group": "商店插件"
+        "label": "工单",
+        "group": "支持",
+        "order": 10
       },
       "data": [
         {
@@ -48,6 +68,9 @@
       "method": "POST",
       "path": "/tickets",
       "permission": "ticket.create",
+      "redirect": {
+        "responsePath": "redirectUrl"
+      },
       "input": [
         {
           "name": "subject",
@@ -59,7 +82,7 @@
           "name": "body",
           "type": "string",
           "required": true,
-          "maxLength": 191
+          "maxLength": 10000
         }
       ]
     },
@@ -79,7 +102,7 @@
           "name": "body",
           "type": "string",
           "required": true,
-          "maxLength": 191
+          "maxLength": 10000
         }
       ]
     },
@@ -115,12 +138,29 @@
   ],
   "accountRoutes": [
     {
+      "path": "/support",
+      "component": "account/support-overview",
+      "permission": "ticket.view",
+      "nav": {
+        "label": "概览",
+        "group": "支持",
+        "order": 0
+      },
+      "data": [
+        {
+          "finder": "ticket.mySummary",
+          "as": "summary"
+        }
+      ]
+    },
+    {
       "path": "/tickets",
       "component": "account/tickets",
       "permission": "ticket.view",
       "nav": {
         "label": "我的工单",
-        "group": "服务"
+        "group": "支持",
+        "order": 10
       },
       "data": [
         {
@@ -133,13 +173,22 @@
       "path": "/tickets/new",
       "component": "account/tickets/new",
       "permission": "ticket.create",
-      "data": []
+      "data": [
+        {
+          "finder": "ticket.myTickets",
+          "as": "tickets"
+        }
+      ]
     },
     {
       "path": "/tickets/:id",
       "component": "account/tickets/detail",
       "permission": "ticket.view",
       "data": [
+        {
+          "finder": "ticket.myTickets",
+          "as": "tickets"
+        },
         {
           "finder": "ticket.ticket",
           "as": "ticket",
@@ -160,6 +209,8 @@
   "files": [
     "frontend/dist/admin.js",
     "frontend/dist/admin.js.map",
+    "frontend/dist/admin.runtime.js",
+    "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ]
