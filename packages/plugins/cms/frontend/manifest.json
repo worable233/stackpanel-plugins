@@ -1,15 +1,53 @@
 {
   "version": "0.1.0",
-  "revision": "da236d8343b2",
+  "revision": "c071fa6e45c9",
   "entry": "frontend/dist/index.js",
-  "pages": [],
+  "pages": [
+    {
+      "path": "/blog/:slug",
+      "component": "article",
+      "data": [
+        {
+          "finder": "cms.publicPost",
+          "as": "article",
+          "input": {
+            "slug": ":slug"
+          }
+        }
+      ]
+    }
+  ],
   "layouts": [],
   "finders": [
+    "cms.publicPost",
     "cms.adminPosts",
     "cms.adminPages",
     "cms.adminRedirects"
   ],
   "adminRoutes": [
+    {
+      "path": "/overview",
+      "component": "admin/summary",
+      "nav": {
+        "label": "概览",
+        "group": "内容",
+        "order": 0
+      },
+      "data": [
+        {
+          "finder": "cms.adminPosts",
+          "as": "posts"
+        },
+        {
+          "finder": "cms.adminPages",
+          "as": "pages"
+        },
+        {
+          "finder": "cms.adminRedirects",
+          "as": "redirects"
+        }
+      ]
+    },
     {
       "path": "/posts",
       "component": "admin/posts",
@@ -20,8 +58,9 @@
         }
       ],
       "nav": {
-        "label": "内容管理 · 文章",
-        "group": "CMS"
+        "label": "文章",
+        "group": "内容",
+        "order": 10
       }
     },
     {
@@ -34,8 +73,9 @@
         }
       ],
       "nav": {
-        "label": "内容管理 · 页面",
-        "group": "CMS"
+        "label": "页面",
+        "group": "内容",
+        "order": 20
       }
     },
     {
@@ -48,8 +88,9 @@
         }
       ],
       "nav": {
-        "label": "内容管理 · 重定向",
-        "group": "CMS"
+        "label": "重定向",
+        "group": "内容",
+        "order": 30
       }
     },
     {
@@ -76,6 +117,8 @@
   "files": [
     "frontend/dist/admin.js",
     "frontend/dist/admin.js.map",
+    "frontend/dist/admin.runtime.js",
+    "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ]

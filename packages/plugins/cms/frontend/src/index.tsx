@@ -1,6 +1,11 @@
-import type { FinderProvider, FrontendPackage } from '@stackpanel/sdk';
-import { z } from 'zod';
-import type { CmsKind } from './shared.js';
+import { ArticleBody, ErrorPage } from "@stackpanel/ui";
+import type {
+  FinderProvider,
+  FrontendPackage,
+  FrontendPageProps,
+} from "@stackpanel/sdk";
+import { z } from "zod";
+import type { CmsKind } from "./shared.js";
 
 /**
  * CMS admin console — server-side finders and route/action declarations.
@@ -57,14 +62,21 @@ const redirectListSchema = z.object({
   pageSize: z.number(),
 });
 
-function selectInput(input: Record<string, unknown>): { status: string; q: string; page: string; pageSize: string } {
+function selectInput(input: Record<string, unknown>): {
+  status: string;
+  q: string;
+  page: string;
+  pageSize: string;
+} {
   const page = Number(input.page);
   const pageSize = Number(input.pageSize);
   return {
-    status: typeof input.status === 'string' ? input.status : '',
-    q: typeof input.q === 'string' ? input.q.trim() : '',
+    status: typeof input.status === "string" ? input.status : "",
+    q: typeof input.q === "string" ? input.q.trim() : "",
     page: String(Number.isInteger(page) && page > 0 ? page : 1),
-    pageSize: String(Number.isInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, 100) : 20),
+    pageSize: String(
+      Number.isInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, 100) : 20,
+    ),
   };
 }
 
@@ -73,57 +85,134 @@ function adminListFinder(kind: CmsKind): FinderProvider {
     handler: async (input, ctx) => {
       const { status, q, page, pageSize } = selectInput(input);
       const search = new URLSearchParams();
-      if (status) search.set('status', status);
-      if (q) search.set('q', q);
-      search.set('page', page);
-      search.set('pageSize', pageSize);
-      return ctx.api.get(`/cms/admin/content/${kind}?${search.toString()}`, listSchema);
+      if (status) search.set("status", status);
+      if (q) search.set("q", q);
+      search.set("page", page);
+      search.set("pageSize", pageSize);
+      return ctx.api.get(
+        `/cms/admin/content/${kind}?${search.toString()}`,
+        listSchema,
+      );
     },
   };
 }
 
+const postSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  excerpt: z.string(),
+  body: z.string(),
+  publishedAt: z.string().nullable(),
+  updatedAt: z.string(),
+});
+
+function PublicArticle(props: FrontendPageProps) {
+  const result = props.data.article as
+    { post?: z.infer<typeof postSchema>; missing?: boolean } | undefined;
+  if (!result?.post)
+    return <ErrorPage kind={result?.missing ? "not-found" : "server-error"} />;
+  return (
+    <article className="mx-auto max-w-3xl px-6 py-32">
+      <h1 className="mb-8 text-4xl font-semibold">{result.post.title}</h1>
+      <ArticleBody body={result.post.body} />
+    </article>
+  );
+}
+
 const cmsFinders: Record<string, FinderProvider> = {
-  'cms.adminPosts': adminListFinder('post'),
-  'cms.adminPages': adminListFinder('page'),
-  'cms.adminRedirects': {
+  "cms.publicPost": {
+    handler: async (input, ctx) => {
+      try {
+        return {
+          post: await ctx.api.get(
+            `/cms/posts/${encodeURIComponent(String(input.slug ?? ""))}`,
+            postSchema,
+          ),
+        };
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "status" in error &&
+          error.status === 404
+        )
+          return { missing: true };
+        throw error;
+      }
+    },
+  },
+  "cms.adminPosts": adminListFinder("post"),
+  "cms.adminPages": adminListFinder("page"),
+  "cms.adminRedirects": {
     handler: async (input, ctx) => {
       const page = Number(input.page);
       const pageSize = Number(input.pageSize);
       const search = new URLSearchParams();
-      search.set('page', String(Number.isInteger(page) && page > 0 ? page : 1));
-      search.set('pageSize', String(Number.isInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, 100) : 20));
-      return ctx.api.get(`/cms/admin/redirects?${search.toString()}`, redirectListSchema);
+      search.set("page", String(Number.isInteger(page) && page > 0 ? page : 1));
+      search.set(
+        "pageSize",
+        String(
+          Number.isInteger(pageSize) && pageSize > 0
+            ? Math.min(pageSize, 100)
+            : 20,
+        ),
+      );
+      return ctx.api.get(
+        `/cms/admin/redirects?${search.toString()}`,
+        redirectListSchema,
+      );
     },
   },
 };
 
 export const frontend: FrontendPackage = {
   finders: cmsFinders,
+  pages: [
+    {
+      path: "/blog/:slug",
+      component: "article",
+      data: [
+        { finder: "cms.publicPost", as: "article", input: { slug: ":slug" } },
+      ],
+    },
+  ],
+  pageComponents: { article: PublicArticle },
   ui: {
     adminRoutes: [
       {
-        path: '/posts',
-        component: 'admin/posts',
-        data: [{ finder: 'cms.adminPosts', as: 'list' }],
-        nav: { label: '内容管理 · 文章', group: 'CMS' },
+        path: "/overview",
+        component: "admin/summary",
+        nav: { label: "概览", group: "内容", order: 0 },
+        data: [
+          { finder: "cms.adminPosts", as: "posts" },
+          { finder: "cms.adminPages", as: "pages" },
+          { finder: "cms.adminRedirects", as: "redirects" },
+        ],
       },
       {
-        path: '/pages',
-        component: 'admin/pages',
-        data: [{ finder: 'cms.adminPages', as: 'list' }],
-        nav: { label: '内容管理 · 页面', group: 'CMS' },
+        path: "/posts",
+        component: "admin/posts",
+        data: [{ finder: "cms.adminPosts", as: "list" }],
+        nav: { label: "文章", group: "内容", order: 10 },
       },
       {
-        path: '/redirects',
-        component: 'admin/redirects',
-        data: [{ finder: 'cms.adminRedirects', as: 'list' }],
-        nav: { label: '内容管理 · 重定向', group: 'CMS' },
+        path: "/pages",
+        component: "admin/pages",
+        data: [{ finder: "cms.adminPages", as: "list" }],
+        nav: { label: "页面", group: "内容", order: 20 },
+      },
+      {
+        path: "/redirects",
+        component: "admin/redirects",
+        data: [{ finder: "cms.adminRedirects", as: "list" }],
+        nav: { label: "重定向", group: "内容", order: 30 },
       },
       // `/new` must precede `/:id` so it is not captured as an id.
-      { path: '/posts/new', component: 'admin/post-new' },
-      { path: '/pages/new', component: 'admin/page-new' },
-      { path: '/posts/:id', component: 'admin/post-edit' },
-      { path: '/pages/:id', component: 'admin/page-edit' },
+      { path: "/posts/new", component: "admin/post-new" },
+      { path: "/pages/new", component: "admin/page-new" },
+      { path: "/posts/:id", component: "admin/post-edit" },
+      { path: "/pages/:id", component: "admin/page-edit" },
     ],
   },
 };
