@@ -1,0 +1,37 @@
+{
+  "version": "0.1.0",
+  "revision": "4432d3366922",
+  "entry": "frontend/dist/index.js",
+  "pages": [],
+  "layouts": [],
+  "finders": ["smtp.status"],
+  "adminRoutes": [
+    {
+      "path": "/settings",
+      "component": "admin/settings",
+      "permission": "smtp.admin",
+      "systemSettings": {
+        "labelKey": "admin.systemSettings",
+        "order": 130
+      },
+      "data": [
+        {
+          "finder": "smtp.status",
+          "as": "status"
+        }
+      ]
+    }
+  ],
+  "adminActions": [],
+  "actions": [],
+  "accountRoutes": [],
+  "accountWidgets": [],
+  "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/admin.js.map",
+    "frontend/dist/admin.runtime.js",
+    "frontend/dist/admin.runtime.js.map",
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
+  ]
+}
