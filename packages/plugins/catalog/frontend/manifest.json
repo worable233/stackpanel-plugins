@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "revision": "b2142d6cf8c7",
+  "revision": "37dab51687ca",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
@@ -17,7 +17,8 @@
       "permission": "catalog.admin",
       "nav": {
         "label": "商品分类",
-        "group": "商店插件"
+        "group": "商店",
+        "order": 20
       },
       "data": [
         {
@@ -169,6 +170,8 @@
   "files": [
     "frontend/dist/admin.js",
     "frontend/dist/admin.js.map",
+    "frontend/dist/admin.runtime.js",
+    "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ]
