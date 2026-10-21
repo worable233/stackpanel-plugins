@@ -1,0 +1,199 @@
+/**
+ * 计价与计量契约测试（目标五 计价 + 目标四 11/12）。
+ *
+ * 锁死两条会直接算错钱的行为：
+ * - `computeAmount` 的五段计价（普通输入 / 缓存读 / 缓存写 / 输出含推理 / 非 token
+ *   图片·音频），且缓存 token 必须夹在 prompt 内，不能因上游脏数据超额计费；
+ * - 无 usage 时的估算**必须计入 prompt**（旧实现把 prompt 记成 0 是白送输入量）。
+ */
+import { describe, expect, it } from 'vitest';
+import { computeAmount, estimateTokens, extractUsage, type ModelPrice } from './pricing.js';
+import {
+  OutputAccumulator,
+  estimateUsage,
+  resolveStreamUsage,
+  stripSse,
+  toTokenUsage,
+} from './metering.js';
+
+const price: ModelPrice = {
+  inputPrice: 1_000, // minor / 百万 token
+  outputPrice: 2_000,
+  multiplier: 100,
+};
+
+describe('computeAmount', () => {
+  it('charges plain input and output', () => {
+    // 1M 输入 + 0.5M 输出 = 1000 + 1000 = 2000 分。
+    const amount = computeAmount(price, { promptTokens: 1_000_000, completionTokens: 500_000 });
+    expect(amount).toBe(2_000);
+  });
+
+  it('never returns zero for a non-zero usage', () => {
+    expect(computeAmount(price, { promptTokens: 1, completionTokens: 0 })).toBe(1);
+    expect(computeAmount(price, { promptTokens: 0, completionTokens: 1 })).toBe(1);
+  });
+
+  it('applies the multiplier as a percentage', () => {
+    const double: ModelPrice = { ...price, multiplier: 200 };
+    const base = computeAmount(price, { promptTokens: 1_000_000, completionTokens: 0 });
+    const doubled = computeAmount(double, { promptTokens: 1_000_000, completionTokens: 0 });
+    expect(doubled).toBe(base * 2);
+  });
+
+  it('separates cache-read and cache-write, treating them as a subset of prompt', () => {
+    const cached: ModelPrice = {
+      inputPrice: 1_000,
+      outputPrice: 0,
+      multiplier: 100,
+      cacheReadPrice: 100, // 便宜 10 倍
+      cacheWritePrice: 2_000,
+    };
+    // prompt 1M，其中 0.5M 读缓存、0.25M 写缓存，余 0.25M 普通。
+    // 0.25*1000 + 0.5*100 + 0.25*2000 = 250 + 50 + 500 = 800 分。
+    const amount = computeAmount(cached, {
+      promptTokens: 1_000_000,
+      completionTokens: 0,
+      cacheReadTokens: 500_000,
+      cacheWriteTokens: 250_000,
+    });
+    expect(amount).toBe(800);
+  });
+
+  it('clamps cache tokens to the prompt so bad upstream data cannot overcharge', () => {
+    const cached: ModelPrice = {
+      inputPrice: 0,
+      outputPrice: 0,
+      multiplier: 100,
+      cacheReadPrice: 1_000,
+      cacheWritePrice: 1_000,
+    };
+    // 上游谎报 5M 缓存读，但 prompt 只有 1M：最多只能按 1M 计。
+    const amount = computeAmount(cached, {
+      promptTokens: 1_000_000,
+      completionTokens: 0,
+      cacheReadTokens: 5_000_000,
+      cacheWriteTokens: 5_000_000,
+    });
+    expect(amount).toBe(1_000);
+  });
+
+  it('charges reasoning tokens at the higher rate when configured', () => {
+    const reasoning: ModelPrice = {
+      inputPrice: 0,
+      outputPrice: 1_000,
+      reasoningPrice: 3_000,
+      multiplier: 100,
+    };
+    // 1M 输出全是推理：1M*3000/1e6 = 3000 分。
+    const amount = computeAmount(reasoning, {
+      promptTokens: 0,
+      completionTokens: 1_000_000,
+      reasoningTokens: 1_000_000,
+    });
+    expect(amount).toBe(3_000);
+  });
+
+  it('folds image count and audio seconds into the amount (W3 non-token fix)', () => {
+    const media: ModelPrice = {
+      inputPrice: 0,
+      outputPrice: 0,
+      multiplier: 100,
+      imagePrice: 500,
+      audioPrice: 50,
+    };
+    // 2 张图 * 500 + 30 秒 * 50 = 1000 + 1500 = 2500 分。
+    const amount = computeAmount(media, {
+      promptTokens: 0,
+      completionTokens: 0,
+      imageCount: 2,
+      audioSeconds: 30,
+    });
+    expect(amount).toBe(2_500);
+  });
+
+  it('ignores non-token units when they are not priced', () => {
+    // imagePrice 未配置（默认 0）：图片不收费，但 token 部分仍要计。
+    const amount = computeAmount(price, {
+      promptTokens: 0,
+      completionTokens: 0,
+      imageCount: 3,
+    });
+    expect(amount).toBe(0);
+  });
+});
+
+describe('estimateTokens', () => {
+  it('counts CJK characters ~1:1 and non-CJK ~4 chars/token', () => {
+    expect(estimateTokens('你好世界')).toBe(4);
+    expect(estimateTokens('abcd')).toBe(1);
+    expect(estimateTokens('')).toBe(0);
+  });
+});
+
+describe('extractUsage', () => {
+  it('reads the last usage object from a body with several', () => {
+    const text =
+      'data: {"usage":{"prompt_tokens":1,"completion_tokens":1}}\n' +
+      'data: {"usage":{"prompt_tokens":10,"completion_tokens":50,"total_tokens":60}}\n';
+    expect(extractUsage(text)).toEqual({
+      promptTokens: 10,
+      completionTokens: 50,
+      totalTokens: 60,
+    });
+  });
+
+  it('returns null when there is no usage', () => {
+    expect(extractUsage('{"choices":[]}')).toBeNull();
+  });
+});
+
+describe('metering fallbacks', () => {
+  it('toTokenUsage keeps cache / reasoning sub-fields only when non-zero', () => {
+    expect(toTokenUsage({ inputTokens: 10, outputTokens: 5, totalTokens: 15 })).toEqual({
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+    });
+    expect(
+      toTokenUsage({
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+        cacheReadTokens: 4,
+        reasoningTokens: 3,
+      }),
+    ).toMatchObject({ cacheReadTokens: 4, reasoningTokens: 3 });
+  });
+
+  it('estimates usage including the prompt (never zero prompt)', () => {
+    const usage = estimateUsage('data: {"choices":[{"delta":{"content":"hello world"}}]}', 'tell me a story');
+    expect(usage.promptTokens).toBeGreaterThan(0);
+    expect(usage.completionTokens).toBeGreaterThan(0);
+  });
+
+  it('resolveStreamUsage prefers a reported usage and flags estimates', () => {
+    const reported = resolveStreamUsage(
+      { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      '',
+      'irrelevant',
+    );
+    expect(reported.estimated).toBe(false);
+    expect(reported.usage.promptTokens).toBe(10);
+
+    const fallback = resolveStreamUsage(null, 'data: {"choices":[]}', 'hello');
+    expect(fallback.estimated).toBe(true);
+    expect(fallback.usage.promptTokens).toBeGreaterThan(0);
+  });
+
+  it('stripSse keeps only data: payloads', () => {
+    const text = 'event: message\ndata: {"a":1}\ndata: {"b":2}\n';
+    expect(stripSse(text)).toBe('{"a":1}{"b":2}');
+  });
+
+  it('OutputAccumulator keeps only the tail beyond its cap', () => {
+    const acc = new OutputAccumulator();
+    acc.push('a'.repeat(300_000));
+    expect(acc.value.length).toBe(131_072);
+  });
+});

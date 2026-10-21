@@ -7,7 +7,7 @@
   "stackpanel": {
     "builtin": false
   },
-  "description": "API 中转售卖：OpenAI 兼容 LLM 网关——签发用户 key、上游账号池转发、按 token 后付费扣钱包余额。",
+  "description": "模型服务售卖：OpenAI 兼容 LLM 网关——签发用户 key、上游账号池转发、按 token 预授权冻结后结算钱包余额。",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

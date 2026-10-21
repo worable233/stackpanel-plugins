@@ -1,4 +1,5 @@
 import type { Readable } from 'node:stream';
+import { randomUUID } from 'node:crypto';
 import type {
   AuthService,
   PluginLogger,
@@ -8,6 +9,7 @@ import type {
   RawRouteHandler,
   StateLease,
   StateService,
+  WalletHold,
   WalletService,
 } from '@stackpanel/sdk';
 import { isAllowedUpstreamUrl } from './guard.js';
@@ -268,13 +270,13 @@ async function resolveGatewayKey(
     if (!inspection.active) return deny(401, 'API key 无效或已停用', 'invalid_api_key');
     if (inspection.expired) return deny(403, 'API key 已过期', 'key_expired');
     if (!token.scopes.includes(GATEWAY_SCOPE)) {
-      return deny(403, '该密钥未授予 API 中转权限', 'insufficient_scope');
+      return deny(403, '该密钥未授予 模型服务权限', 'insufficient_scope');
     }
     if (!inspection.ipAllowed) {
       return deny(403, '请求来源 IP 不在白名单内', 'ip_not_allowed');
     }
     if (!(await rt.auth.hasPermission(token.userId, GATEWAY_SCOPE).catch(() => false))) {
-      return deny(403, '当前账号已无权使用 API 中转', 'permission_revoked');
+      return deny(403, '当前账号已无权使用 模型服务', 'permission_revoked');
     }
     const policy = await getPolicy(token.id).catch(() => null);
     return {
@@ -303,7 +305,7 @@ async function resolveGatewayKey(
     return deny(403, 'API key 已过期', 'key_expired');
   }
   if (!(await rt.auth.hasPermission(legacy.userId, GATEWAY_SCOPE).catch(() => false))) {
-    return deny(403, '当前账号已无权使用 API 中转', 'permission_revoked');
+    return deny(403, '当前账号已无权使用 模型服务', 'permission_revoked');
   }
   return {
     ok: true,
@@ -433,6 +435,9 @@ export function createRelayHandler(getRuntime: () => GatewayRuntime): RawRouteHa
     const served = resolveServedPrice(await loadPricing(model), model);
     const upstreamModel = model ? served.upstreamModel : model;
 
+    // 预授权状态（ADR-0022 P16）：结算或释放必须恰好发生一次。
+    const preauth: Preauth = { hold: null, settled: false };
+
     let account: AccountRow | null = null;
     let accountLease: StateLease | null = null;
     try {
@@ -513,6 +518,36 @@ export function createRelayHandler(getRuntime: () => GatewayRuntime): RawRouteHa
         sendJson(reply, 400, '上游地址必须为公网地址', 'invalid_upstream');
         return;
       }
+      // 预授权（ADR-0022 P16）：占用上游之前先把预估费用从余额划走。
+      // 「先查余额、用完再扣」下并发请求共享同一余额快照，扣费失败的请求会变成坏账；
+      // 冻结后后到的请求看到的是已扣减的余额，会在**消耗上游之前**被拒。
+      // 预估按 prompt + max_tokens（缺省 4096）算上限，结算时按实际用量多退。
+      const holdAmount = estimateHoldAmount(served, bodyBuffer, ir.maxTokens);
+      if (holdAmount > 0) {
+        try {
+          preauth.hold = await rt.wallet.hold(
+            key.userId,
+            holdAmount,
+            currency,
+            {
+              type: 'llm_gateway_usage',
+              referenceType: 'gateway_hold',
+              referenceId: randomUUID(),
+            },
+            { note: `${model || 'unknown'} 预授权` },
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '预授权失败';
+          if (message.includes('余额不足')) {
+            sendJson(reply, 402, '余额不足，请先充值', 'insufficient_balance');
+          } else {
+            rt.logger.error(`llm-gateway: hold failed: ${message}`);
+            sendJson(reply, 502, '预授权失败', 'preauth_failed');
+          }
+          return;
+        }
+      }
+
       const upstream = await fetch(upstreamUrl, {
         method: req.method === 'GET' ? 'GET' : 'POST',
         headers,
@@ -536,6 +571,7 @@ export function createRelayHandler(getRuntime: () => GatewayRuntime): RawRouteHa
           upstream,
           reply,
           startedAt,
+          preauth,
           clientIp: req.ip,
         });
       } else {
@@ -552,6 +588,7 @@ export function createRelayHandler(getRuntime: () => GatewayRuntime): RawRouteHa
           upstream,
           reply,
           startedAt,
+          preauth,
           bodyBuffer,
           clientIp: req.ip,
         });
@@ -568,8 +605,50 @@ export function createRelayHandler(getRuntime: () => GatewayRuntime): RawRouteHa
       // 租约带唯一 token：只释放本请求自己占的位子，且重复释放是安全的 no-op。
       if (accountLease) await rt.state.releaseLease(accountLease).catch(() => false);
       if (keyLease) await rt.state.releaseLease(keyLease).catch(() => false);
+      // 预授权兜底：请求在任何结算之前就失败了（无可用账号、凭证缺失、上游不可达…），
+      // 把冻结金额全额退回。已经结算过的会置 settled，这里就不再动。
+      if (preauth.hold && !preauth.settled) {
+        preauth.settled = true;
+        await rt.wallet.releaseHold(preauth.hold.id).catch((error: unknown) => {
+          rt.logger.warn(`llm-gateway: release hold failed: ${String(error)}`);
+        });
+      }
     }
   };
+}
+
+/**
+ * 预授权状态（ADR-0022 P16）。`settled` 在结算**尝试之前**置位：结算失败时宁可
+ * 让冻结金额留在账上由内核的过期清扫（15 分钟）归还，也不在 finally 里重复退还 ——
+ * 后者会在「用量已落流水、扣费却失败」时把金额白送出去。
+ */
+interface Preauth {
+  hold: WalletHold | null;
+  settled: boolean;
+}
+
+/** 未声明 max_tokens 时，按这个上限做预授权估算。 */
+const DEFAULT_HOLD_MAX_TOKENS = 4_096;
+
+/**
+ * 预授权金额：按请求体估算的 prompt token + 请求声明的 `max_tokens`（缺省
+ * {@link DEFAULT_HOLD_MAX_TOKENS}）算出**本次最多可能消耗**的费用。结算时按实际用量
+ * 多退（`wallet.settleHold` 会把差额退回余额）。
+ *
+ * 刻意按上限估算：预估偏小就重新打开了「并发共享余额快照」的坏账窗口；偏大只是让
+ * 小额余额用户在预估上被拒（可通过充值或调小 max_tokens 解决）。
+ */
+function estimateHoldAmount(price: ServedPrice, bodyBuffer: Buffer, maxTokens?: number): number {
+  const promptTokens = estimateTokens(bodyBuffer.toString('utf8'));
+  const completionTokens =
+    maxTokens && Number.isFinite(maxTokens) && maxTokens > 0
+      ? Math.floor(maxTokens)
+      : DEFAULT_HOLD_MAX_TOKENS;
+  return computeAmount(price, {
+    promptTokens,
+    completionTokens,
+    totalTokens: promptTokens + completionTokens,
+  });
 }
 
 /** 转发上游响应头（过滤 hop-by-hop）。 */
@@ -598,6 +677,8 @@ interface RelayContext {
   upstream: Response;
   reply: RawHttpReply;
   startedAt: number;
+  /** 预授权句柄：每个请求恰好结算一次，失败则留给内核过期清扫。 */
+  preauth: Preauth;
   clientIp?: string | undefined;
 }
 
@@ -657,6 +738,7 @@ async function relayStream(ctx: RelayContext): Promise<void> {
     account: ctx.account,
     model: ctx.model,
     price: ctx.price,
+    preauth: ctx.preauth,
     usage: finalUsage,
     currency: ctx.currency,
     status: upstream.status < 400 ? 'SUCCESS' : 'ERROR',
@@ -735,7 +817,7 @@ async function relayBuffered(
   const usage = toTokenUsage(ir.usage);
   await settleUsage({
     ...balanceArgs(ctx),
-    usage: usage.totalTokens > 0 ? usage : estimateFrom(rawText, bodyBuffer),
+    usage: (usage.totalTokens ?? 0) > 0 ? usage : estimateFrom(rawText, bodyBuffer),
     status: 'SUCCESS',
     httpStatus: 200,
   });
@@ -776,6 +858,7 @@ function balanceArgs(ctx: RelayContext): {
   currency: string;
   httpStatus: number;
   latencyMs: number;
+  preauth: Preauth;
   clientIp?: string | undefined;
 } {
   return {
@@ -788,6 +871,7 @@ function balanceArgs(ctx: RelayContext): {
     currency: ctx.currency,
     httpStatus: ctx.upstream.status,
     latencyMs: Date.now() - ctx.startedAt,
+    preauth: ctx.preauth,
     ...(ctx.clientIp !== undefined ? { clientIp: ctx.clientIp } : {}),
   };
 }
@@ -828,13 +912,15 @@ interface SettleInput {
   status: 'SUCCESS' | 'ERROR';
   httpStatus: number;
   latencyMs: number;
+  /** 预授权句柄；缺失时回落到后付费 `wallet.debit`。 */
+  preauth?: Preauth | undefined;
   clientIp?: string | undefined;
   error?: string | undefined;
 }
 
 /** 写用量流水 → 后付费扣钱包（幂等引用 = 流水 id）→ 累加 key 已用额度。 */
 async function settleUsage(input: SettleInput): Promise<void> {
-  const { rt, key, account, usage } = input;
+  const { rt, key, account, usage, preauth } = input;
   let amount = 0;
   if (input.status === 'SUCCESS') {
     const price = input.price ?? resolveServedPrice(await loadPricing(input.model), input.model);
@@ -846,14 +932,20 @@ async function settleUsage(input: SettleInput): Promise<void> {
     userId: key.userId,
     accountId: account?.id ?? null,
     model: input.model,
+    protocol: 'openai-chat',
+    endpoint: 'chat.completions',
     promptTokens: usage.promptTokens,
     completionTokens: usage.completionTokens,
     cacheReadTokens: usage.cacheReadTokens ?? 0,
     cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+    reasoningTokens: usage.reasoningTokens ?? 0,
+    imageCount: usage.imageCount ?? 0,
+    audioSeconds: usage.audioSeconds ?? 0,
     totalTokens: usage.totalTokens || usage.promptTokens + usage.completionTokens,
     amount,
     currency: input.currency,
     status: input.status,
+    estimated: false,
     httpStatus: input.httpStatus,
     latencyMs: input.latencyMs,
     clientIp: input.clientIp ?? null,
@@ -873,7 +965,24 @@ async function settleUsage(input: SettleInput): Promise<void> {
     await markAccountUsed(rt, account.id);
   }
 
-  if (amount > 0) {
+  if (amount > 0 && preauth?.hold && !preauth.settled) {
+    // 结算尝试之前就置位：失败时宁可让冻结金额留给内核的过期清扫归位，
+    // 也不在 finally 里退还 —— 用量已落流水，退还等于白送。
+    preauth.settled = true;
+    try {
+      await rt.wallet.settleHold(preauth.hold.id, amount, {
+        type: 'llm_gateway_usage',
+        referenceType: 'gateway_usage_log',
+        referenceId: log.id,
+        note: `${input.model} · ${usage.totalTokens || usage.promptTokens + usage.completionTokens} tokens`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '扣费失败';
+      rt.logger.warn(`llm-gateway: settle failed for log ${log.id}: ${message}`);
+      await setUsageLogError(log.id, `扣费失败：${message}`).catch(() => null);
+    }
+  } else if (amount > 0 && !preauth?.hold) {
+    // 无预授权时回落到后付费路径（兼容直接调用与 hold 金额为 0 的情况）。
     try {
       await rt.wallet.debit(key.userId, amount, input.currency, {
         type: 'llm_gateway_usage',
@@ -886,5 +995,9 @@ async function settleUsage(input: SettleInput): Promise<void> {
       rt.logger.warn(`llm-gateway: debit failed for log ${log.id}: ${message}`);
       await setUsageLogError(log.id, `扣费失败：${message}`).catch(() => null);
     }
+  } else if (preauth?.hold && !preauth.settled) {
+    // 用量为 0（或未计费）：释放冻结。
+    preauth.settled = true;
+    await rt.wallet.releaseHold(preauth.hold.id).catch(() => null);
   }
 }

@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { SectionTitle } from '@stackpanel/ui';
 import { Boxes } from 'lucide-react';
 import { z } from 'zod';
 
@@ -270,10 +271,7 @@ export function Section({
     <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <h2 className="flex items-center gap-2 text-base font-semibold">
-            {icon ? <IconBadge>{icon}</IconBadge> : null}
-            {title}
-          </h2>
+          <SectionTitle icon={icon}>{title}</SectionTitle>
           {description ? (
             <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           ) : null}
@@ -352,173 +350,5 @@ export function Field({
         className="h-10 rounded-lg border bg-background px-3 outline-none focus-visible:border-ring"
       />
     </label>
-  );
-}
-
-/* --------------------------------- 图表 ---------------------------------- */
-
-const SVG_W = 760;
-const SVG_H = 240;
-const PAD_L = 54;
-const PAD_R = 16;
-const PAD_T = 20;
-const PAD_B = 30;
-const PLOT_W = SVG_W - PAD_L - PAD_R;
-const PLOT_H = SVG_H - PAD_T - PAD_B;
-
-/** 取「好看」的坐标轴上限（1/2/2.5/5 × 10^n）。 */
-function niceCeil(value: number): number {
-  if (value <= 0) return 1;
-  const exp = Math.floor(Math.log10(value));
-  const base = 10 ** exp;
-  const frac = value / base;
-  const step = frac <= 1 ? 1 : frac <= 2 ? 2 : frac <= 2.5 ? 2.5 : frac <= 5 ? 5 : 10;
-  return step * base;
-}
-
-/**
- * 单调三次插值（Fritsch–Carlson）→ 平滑曲线。
- *
- * 相比 Catmull-Rom 不会在数据点之间过冲下冲，折线感消失又不会凭空造出
- * 不存在的峰谷——用量图最忌讳假波动。
- */
-function smoothPath(points: Array<[number, number]>): string {
-  if (points.length === 0) return '';
-  const n = points.length;
-  if (n === 1) return `M ${points[0]![0].toFixed(2)} ${points[0]![1].toFixed(2)}`;
-
-  const dx: number[] = [];
-  const slope: number[] = [];
-  for (let i = 0; i < n - 1; i += 1) {
-    const step = points[i + 1]![0] - points[i]![0] || 1e-6;
-    dx.push(step);
-    slope.push((points[i + 1]![1] - points[i]![1]) / step);
-  }
-
-  const tangent: number[] = new Array<number>(n).fill(0);
-  tangent[0] = slope[0]!;
-  tangent[n - 1] = slope[n - 2]!;
-  for (let i = 1; i < n - 1; i += 1) {
-    const a = slope[i - 1]!;
-    const b = slope[i]!;
-    if (a * b <= 0) {
-      tangent[i] = 0;
-    } else {
-      tangent[i] = (2 * a * b) / (a + b);
-    }
-  }
-
-  let d = `M ${points[0]![0].toFixed(2)} ${points[0]![1].toFixed(2)}`;
-  for (let i = 0; i < n - 1; i += 1) {
-    const p1 = points[i]!;
-    const p2 = points[i + 1]!;
-    const step = dx[i]!;
-    const c1x = p1[0] + step / 3;
-    const c1y = p1[1] + (tangent[i]! * step) / 3;
-    const c2x = p2[0] - step / 3;
-    const c2y = p2[1] - (tangent[i + 1]! * step) / 3;
-    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
-  }
-  return d;
-}
-
-/**
- * 服务端渲染的小时用量面积图（纯内联 SVG，零客户端 JS）。
- *
- * 账户页是服务端组件、不能用 recharts（要 hooks），所以手画 SVG：
- * 平滑曲线 + 渐变面积 + 稀疏虚线网格，无可见数据点（悬浮才出提示）。
- */
-export function AreaChart({
-  series,
-  formatValue,
-  labelEvery = 1,
-  labels,
-}: {
-  series: number[];
-  formatValue: (value: number) => string;
-  labelEvery?: number;
-  /** X 轴刻度文案，缺省按小时 `{i}:00`。 */
-  labels?: string[];
-}): ReactElement {
-  const max = niceCeil(Math.max(...series, 0));
-  const n = series.length;
-  const x = (i: number): number => PAD_L + (n <= 1 ? PLOT_W / 2 : (i / (n - 1)) * PLOT_W);
-  const y = (v: number): number => PAD_T + PLOT_H - (v / max) * PLOT_H;
-
-  const points = series.map((value, index) => [x(index), y(value)] as [number, number]);
-  const line = smoothPath(points);
-  const baseline = PAD_T + PLOT_H;
-  const area = `${line} L ${x(n - 1).toFixed(2)} ${baseline} L ${x(0).toFixed(2)} ${baseline} Z`;
-
-  const gridValues = [0, max / 2, max];
-  const tickHours = series.map((_, index) => index).filter((hour) => hour % labelEvery === 0);
-  const tickLabel = (index: number): string => labels?.[index] ?? `${index}:00`;
-
-  return (
-    <svg
-      viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-      className="h-64 w-full text-primary"
-      role="img"
-      aria-label="小时用量"
-    >
-      <defs>
-        <linearGradient id="llmGatewayArea" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="currentColor" stopOpacity={0.28} />
-          <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-
-      {gridValues.map((value) => (
-        <line
-          key={`grid-${value}`}
-          x1={PAD_L}
-          x2={PAD_L + PLOT_W}
-          y1={y(value)}
-          y2={y(value)}
-          className={value === 0 ? 'stroke-border' : 'stroke-border/60'}
-          strokeWidth={1}
-          strokeDasharray={value === 0 ? undefined : '3 5'}
-        />
-      ))}
-      {gridValues.map((value) => (
-        <text
-          key={`label-${value}`}
-          x={PAD_L - 10}
-          y={y(value) + 3.5}
-          textAnchor="end"
-          className="fill-muted-foreground text-[10px] tabular-nums"
-        >
-          {formatValue(value)}
-        </text>
-      ))}
-
-      <path d={area} fill="url(#llmGatewayArea)" />
-      <path
-        d={line}
-        fill="none"
-        className="stroke-primary"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-
-      {points.map(([px, py], index) => (
-        <circle key={`hit-${index}`} cx={px} cy={py} r={9} fill="transparent">
-          <title>{`${tickLabel(index)} · ${formatValue(series[index] ?? 0)}`}</title>
-        </circle>
-      ))}
-
-      {tickHours.map((hour) => (
-        <text
-          key={`tick-${hour}`}
-          x={x(hour)}
-          y={SVG_H - 9}
-          textAnchor="middle"
-          className="fill-muted-foreground text-[10px] tabular-nums"
-        >
-          {tickLabel(hour)}
-        </text>
-      ))}
-    </svg>
   );
 }

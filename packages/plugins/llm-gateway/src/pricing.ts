@@ -8,6 +8,12 @@ export interface ModelPrice {
   cacheReadPrice?: number;
   /** 缓存写单价（minor / 百万 token）；未配置时按 inputPrice 计。 */
   cacheWritePrice?: number;
+  /** 推理 token 单价（minor / 百万 token）；未配置时按 outputPrice 计。 */
+  reasoningPrice?: number;
+  /** 图片单价（minor / 张）；用于 images/* 与多模态图片计费。 */
+  imagePrice?: number;
+  /** 音频单价（minor / 秒）；用于 audio/* 计费。 */
+  audioPrice?: number;
 }
 
 /** 兜底定价行使用的特殊 model 名。 */
@@ -59,6 +65,9 @@ export function resolveServedPrice(
     multiplier: row?.multiplier ?? 100,
     ...(row?.cacheReadPrice !== undefined ? { cacheReadPrice: row.cacheReadPrice } : {}),
     ...(row?.cacheWritePrice !== undefined ? { cacheWritePrice: row.cacheWritePrice } : {}),
+    ...(row?.reasoningPrice !== undefined ? { reasoningPrice: row.reasoningPrice } : {}),
+    ...(row?.imagePrice !== undefined ? { imagePrice: row.imagePrice } : {}),
+    ...(row?.audioPrice !== undefined ? { audioPrice: row.audioPrice } : {}),
     publicModel: model,
     upstreamModel: upstream && upstream.length > 0 ? upstream : model,
   };
@@ -67,14 +76,32 @@ export function resolveServedPrice(
 export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
-  totalTokens: number;
-  /** promptTokens 中命中缓存读的部分（子集）。 */
+  /** 总 token；缺省时调用方应传 `promptTokens + completionTokens`。 */
+  totalTokens?: number;
+  /**
+   * promptTokens 中命中缓存读的部分（**子集**）。`promptTokens` 仍是全部输入，
+   * 含缓存部分；这两个字段只用于计费拆分。
+   */
   cacheReadTokens?: number;
   /** promptTokens 中写入缓存的部分（子集）。 */
   cacheWriteTokens?: number;
+  /** outputTokens 中的推理 token 数（子集）；未配置推理单价时按 outputPrice 计。 */
+  reasoningTokens?: number;
+  /** 图片张数（按张计费）。 */
+  imageCount?: number;
+  /** 音频秒数（按秒计费）。 */
+  audioSeconds?: number;
 }
 
-/** 计算本次应扣金额（minor 单位，向上取整到最小分）。 */
+/**
+ * 计算本次应扣金额（minor 单位，向上取整到最小分）。
+ *
+ * 计价分五段：普通输入 / 缓存读 / 缓存写 / 输出（含推理）/ 非 token 单位
+ * （图片张数、音频秒数）。所有 token 单价单位是 minor/百万 token。
+ *
+ * 纪律：`cacheRead`/`cacheWrite` 是 `promptTokens` 的子集，必须夹在
+ * `[0, promptTokens]` 内，否则上游报错数据会让用户被超额计费。
+ */
 export function computeAmount(price: ModelPrice, usage: TokenUsage): number {
   const output = (usage.completionTokens * price.outputPrice) / 1_000_000;
 
@@ -88,8 +115,20 @@ export function computeAmount(price: ModelPrice, usage: TokenUsage): number {
       cacheWrite * (price.cacheWritePrice ?? price.inputPrice)) /
     1_000_000;
 
+  // 推理 token 通常比普通输出贵；未配置推理单价时按 outputPrice 计（不退化为 0）。
+  const reasoning = Math.min(usage.reasoningTokens ?? 0, usage.completionTokens);
+  const reasoningExtra =
+    reasoning > 0
+      ? (reasoning * ((price.reasoningPrice ?? price.outputPrice) - price.outputPrice)) / 1_000_000
+      : 0;
+
+  // 非 token 单位：图片按张、音频按秒。未定价则为 0（不收费，但依然记账）。
+  const nonToken =
+    (usage.imageCount ?? 0) * (price.imagePrice ?? 0) +
+    (usage.audioSeconds ?? 0) * (price.audioPrice ?? 0);
+
   const multiplier = price.multiplier > 0 ? price.multiplier : 100;
-  const raw = ((input + output) * multiplier) / 100;
+  const raw = ((input + output + reasoningExtra) * multiplier) / 100 + nonToken;
   if (!Number.isFinite(raw) || raw <= 0) return 0;
   // 任何非零用量至少计 1 分，避免四舍五入把小额抹成 0。
   return Math.max(1, Math.round(raw));

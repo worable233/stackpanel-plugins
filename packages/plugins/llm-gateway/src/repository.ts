@@ -1,20 +1,37 @@
 import type { CustomModelDefinition, ExtensionInstance, ExtensionWhere } from '@stackpanel/sdk';
 import {
   gatewayAccountModel,
+  gatewayBillingEntryModel,
+  gatewayConfigModel,
   gatewayKeyPolicyModel,
   gatewayLegacyKeyModel,
   gatewayModelPriceModel,
+  gatewayTaskModel,
   gatewayUsageLogModel,
   gatewayUserSettingModel,
   type GatewayAccountData,
+  type GatewayBillingEntryData,
+  type GatewayConfigData,
   type GatewayKeyPolicyData,
   type GatewayLegacyKeyData,
   type GatewayModelPriceData,
+  type GatewayTaskData,
   type GatewayUsageLogData,
   type GatewayUserSettingData,
 } from './data.js';
 import { extensions } from './context.js';
 import { DEFAULT_PRICE_MODEL } from './pricing.js';
+
+/** 平台配置内置默认值（未配置过时的兜底）。 */
+const DEFAULT_GATEWAY_CONFIG: GatewayConfigData = {
+  globalConcurrency: 0,
+  userRpm: 0,
+  modelRpm: 0,
+  providerRpm: 0,
+  retryAttempts: 3,
+  maxResponseBytes: 32 * 1024 * 1024,
+  holdTtlMs: 15 * 60 * 1000,
+};
 
 /** Extension instance flattened into `{ id, ...spec, createdAt, updatedAt }`. */
 type Row<T> = T & { id: string; createdAt: string; updatedAt: string };
@@ -176,6 +193,33 @@ export async function addPolicyUsage(apiTokenId: string, amount: number): Promis
   await upsertPolicy(apiTokenId, { quotaUsed: amount }).catch(() => undefined);
 }
 
+/* ------------------------------ 平台配置 ------------------------------ */
+
+/** 平台配置单例的实例 id。 */
+export const CONFIG_INSTANCE_ID = 'default';
+
+/** 读平台配置；从未配置过时返回内置默认值。 */
+export async function getConfig(): Promise<GatewayConfigData> {
+  const instance = await extensions()
+    .get<GatewayConfigData>(gatewayConfigModel, CONFIG_INSTANCE_ID)
+    .catch(() => null);
+  if (!instance) return { ...DEFAULT_GATEWAY_CONFIG };
+  return { ...DEFAULT_GATEWAY_CONFIG, ...instance.spec };
+}
+
+/** 写平台配置（整体替换，未给的字段回落默认）。 */
+export async function setConfig(patch: Partial<GatewayConfigData>): Promise<GatewayConfigData> {
+  const current = await getConfig();
+  const next: GatewayConfigData = { ...current, ...patch };
+  const existing = await extensions()
+    .get<GatewayConfigData>(gatewayConfigModel, CONFIG_INSTANCE_ID)
+    .catch(() => null);
+  const instance = existing
+    ? await extensions().update(gatewayConfigModel, CONFIG_INSTANCE_ID, next)
+    : await extensions().create(gatewayConfigModel, next, { name: CONFIG_INSTANCE_ID });
+  return instance.spec;
+}
+
 /* ------------------------------ 计费开关 ------------------------------ */
 
 export async function getSetting(userId: string): Promise<GatewayUserSettingData | null> {
@@ -246,6 +290,110 @@ export async function listRecentAllLogs(take: number): Promise<UsageLogRow[]> {
     pageSize: Math.min(take, 200),
   });
   return rows.items.map(toRow);
+}
+
+/* ------------------------------ 计费台账 ------------------------------ */
+
+export type BillingEntryRow = Row<GatewayBillingEntryData>;
+
+/**
+ * 建一条台账。`referenceId`（= usage-log 的 id）上有唯一索引，因此这一步天然
+ * 幂等：重放同一个 referenceId 会抛唯一约束，调用方据此判定「已经建过」。
+ */
+export async function createBillingEntry(spec: GatewayBillingEntryData): Promise<BillingEntryRow> {
+  const instance = await extensions().create(gatewayBillingEntryModel, spec);
+  return toRow(instance);
+}
+
+export async function getBillingByReference(referenceId: string): Promise<BillingEntryRow | null> {
+  const result = await extensions().list<GatewayBillingEntryData>(gatewayBillingEntryModel, {
+    where: { referenceId: { eq: referenceId } },
+    page: 1,
+    pageSize: 1,
+  });
+  const row = result.items[0];
+  return row ? toRow(row) : null;
+}
+
+export async function getBillingEntry(id: string): Promise<BillingEntryRow | null> {
+  const instance = await extensions().get<GatewayBillingEntryData>(gatewayBillingEntryModel, id);
+  return instance ? toRow(instance) : null;
+}
+
+export async function updateBillingEntry(
+  id: string,
+  patch: Partial<GatewayBillingEntryData>,
+): Promise<BillingEntryRow | null> {
+  const current = await extensions().get<GatewayBillingEntryData>(gatewayBillingEntryModel, id);
+  if (!current) return null;
+  const instance = await extensions().update(gatewayBillingEntryModel, id, {
+    ...current.spec,
+    ...patch,
+  });
+  return toRow(instance);
+}
+
+/** 待补偿队列：COMPENSATING 且已到重试时间的台账，按到期时间升序。 */
+export async function listPendingCompensations(
+  now: number,
+  take = 50,
+): Promise<BillingEntryRow[]> {
+  const rows = await extensions().list<GatewayBillingEntryData>(gatewayBillingEntryModel, {
+    where: { status: { eq: 'COMPENSATING' } },
+    orderBy: { field: 'nextAttemptAt', desc: false },
+    page: 1,
+    pageSize: Math.min(take, 200),
+  });
+  return rows.items.filter((row) => (row.spec.nextAttemptAt ?? 0) <= now).map(toRow);
+}
+
+/** 运维查询：全部补偿相关台账（不分到期与否）。 */
+export async function listCompensationEntries(take = 100): Promise<BillingEntryRow[]> {
+  const rows = await extensions().list<GatewayBillingEntryData>(gatewayBillingEntryModel, {
+    orderBy: { field: 'createdAt', desc: true },
+    page: 1,
+    pageSize: Math.min(take, 200),
+  });
+  return rows.items
+    .filter((row) => row.spec.status === 'COMPENSATING' || row.spec.status === 'FAILED')
+    .map(toRow);
+}
+
+/* ------------------------------ 异步任务 ------------------------------ */
+
+export type TaskRow = Row<GatewayTaskData>;
+
+export async function createTask(spec: GatewayTaskData): Promise<TaskRow> {
+  const instance = await extensions().create(gatewayTaskModel, spec);
+  return toRow(instance);
+}
+
+export async function getTask(id: string): Promise<TaskRow | null> {
+  const instance = await extensions().get<GatewayTaskData>(gatewayTaskModel, id);
+  return instance ? toRow(instance) : null;
+}
+
+export async function updateTask(
+  id: string,
+  patch: Partial<GatewayTaskData>,
+): Promise<TaskRow | null> {
+  const current = await extensions().get<GatewayTaskData>(gatewayTaskModel, id);
+  if (!current) return null;
+  const instance = await extensions().update(gatewayTaskModel, id, {
+    ...current.spec,
+    ...patch,
+  });
+  return toRow(instance);
+}
+
+export async function listTasks(take = 100, status?: string): Promise<TaskRow[]> {
+  const result = await extensions().list<GatewayTaskData>(gatewayTaskModel, {
+    ...(status ? { where: { status: { eq: status } } } : {}),
+    orderBy: { field: 'createdAt', desc: true },
+    page: 1,
+    pageSize: Math.min(take, 200),
+  });
+  return result.items.map(toRow);
 }
 
 /* ------------------------------ 模型定价 ------------------------------ */

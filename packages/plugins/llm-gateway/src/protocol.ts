@@ -86,6 +86,17 @@ export interface IRUsage {
    */
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /**
+   * 推理 token 数（o 系列 / DeepSeek-R1 / Claude thinking / Gemini thinking）。
+   * 是 `outputTokens` 的**子集**，仅用于计费拆分与展示。上游未返回时为 0。
+   */
+  reasoningTokens?: number;
+  /**
+   * 目标四（11/12）：本用量是否为**估算值**（上游未返回 usage，或流式兜底）。
+   * 为 true 时账单标记 estimated，运维可据此排查上游漏报。**估算必须包含
+   * prompt**（不允许把流式 fallback 的 prompt token 计为 0）。
+   */
+  estimated?: boolean;
 }
 
 export const ZERO_USAGE: IRUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
