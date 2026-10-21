@@ -1,11 +1,6 @@
 import { definePlugin, PluginError } from '@stackpanel/sdk';
 import type { HttpReply, HttpRequest } from '@stackpanel/sdk';
-import {
-  CATEGORY_KIND,
-  PRODUCT_KIND,
-  catalogProductModel,
-  categoryModel,
-} from './data.js';
+import { CATEGORY_KIND, PRODUCT_KIND, catalogProductModel, categoryModel } from './data.js';
 import {
   listAdminCategories,
   listPublicCategories,

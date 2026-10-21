@@ -1,5 +1,5 @@
-import type { FinderProvider, FrontendPackage } from "@stackpanel/sdk";
-import { z } from "zod";
+import type { FinderProvider, FrontendPackage } from '@stackpanel/sdk';
+import { z } from 'zod';
 
 interface CategoryNode {
   id: string;
@@ -69,41 +69,34 @@ const catalogProductsSchema = z.object({
 });
 
 const catalogFinders: Record<string, FinderProvider> = {
-  "catalog.categories": {
+  'catalog.categories': {
     handler: async (_input, ctx) =>
-      (await ctx.api.get("/catalog/categories", categoriesSchema)).categories,
+      (await ctx.api.get('/catalog/categories', categoriesSchema)).categories,
   },
-  "catalog.products": {
+  'catalog.products': {
     handler: async (input, ctx) => {
       const query = new URLSearchParams();
-      query.set("page", coercePositiveInt(input.page, 1));
-      query.set("pageSize", coercePositiveInt(input.pageSize, 60));
-      if (typeof input.categoryId === "string" && input.categoryId) {
-        query.set("categoryId", input.categoryId);
+      query.set('page', coercePositiveInt(input.page, 1));
+      query.set('pageSize', coercePositiveInt(input.pageSize, 60));
+      if (typeof input.categoryId === 'string' && input.categoryId) {
+        query.set('categoryId', input.categoryId);
       }
-      if (typeof input.showAll === "string" && input.showAll === "1") {
-        query.set("showAll", "1");
+      if (typeof input.showAll === 'string' && input.showAll === '1') {
+        query.set('showAll', '1');
       }
-      if (typeof input.q === "string" && input.q.trim()) {
-        query.set("q", input.q.trim());
+      if (typeof input.q === 'string' && input.q.trim()) {
+        query.set('q', input.q.trim());
       }
-      return ctx.api.get(
-        `/catalog/products?${query.toString()}`,
-        catalogProductsSchema,
-      );
+      return ctx.api.get(`/catalog/products?${query.toString()}`, catalogProductsSchema);
     },
   },
-  "catalog.adminCategories": {
+  'catalog.adminCategories': {
     handler: async (_input, ctx) =>
-      (await ctx.api.get("/catalog/admin/categories", categoriesSchema))
-        .categories,
+      (await ctx.api.get('/catalog/admin/categories', categoriesSchema)).categories,
   },
-  "catalog.adminProducts": {
+  'catalog.adminProducts': {
     handler: async (_input, ctx) =>
-      ctx.api.get(
-        "/catalog/admin/products?page=1&pageSize=100",
-        adminProductsSchema,
-      ),
+      ctx.api.get('/catalog/admin/products?page=1&pageSize=100', adminProductsSchema),
   },
 };
 
@@ -120,69 +113,69 @@ export const frontend: FrontendPackage = {
   ui: {
     actions: [
       {
-        id: "catalog.create-category",
-        method: "POST",
-        path: "/catalog/admin/categories",
-        permission: "catalog.admin",
+        id: 'catalog.create-category',
+        method: 'POST',
+        path: '/catalog/admin/categories',
+        permission: 'catalog.admin',
         input: [
-          { name: "name", type: "string", required: true, maxLength: 191 },
-          { name: "icon", type: "string", maxLength: 32 },
-          { name: "parentId", type: "string", maxLength: 191 },
-          { name: "sortOrder", type: "integer", default: 0, min: 0, max: 9999 },
+          { name: 'name', type: 'string', required: true, maxLength: 191 },
+          { name: 'icon', type: 'string', maxLength: 32 },
+          { name: 'parentId', type: 'string', maxLength: 191 },
+          { name: 'sortOrder', type: 'integer', default: 0, min: 0, max: 9999 },
         ],
       },
       {
-        id: "catalog.update-category",
-        method: "PATCH",
-        path: "/catalog/admin/categories/:id",
-        permission: "catalog.admin",
+        id: 'catalog.update-category',
+        method: 'PATCH',
+        path: '/catalog/admin/categories/:id',
+        permission: 'catalog.admin',
         input: [
-          { name: "id", type: "string", required: true, maxLength: 191 },
-          { name: "name", type: "string", maxLength: 191 },
-          { name: "icon", type: "string", maxLength: 32 },
-          { name: "parentId", type: "string", maxLength: 191 },
-          { name: "sortOrder", type: "integer", min: 0, max: 9999 },
+          { name: 'id', type: 'string', required: true, maxLength: 191 },
+          { name: 'name', type: 'string', maxLength: 191 },
+          { name: 'icon', type: 'string', maxLength: 32 },
+          { name: 'parentId', type: 'string', maxLength: 191 },
+          { name: 'sortOrder', type: 'integer', min: 0, max: 9999 },
         ],
       },
       {
-        id: "catalog.reorder-categories",
-        method: "POST",
-        path: "/catalog/admin/categories/reorder",
-        permission: "catalog.admin",
+        id: 'catalog.reorder-categories',
+        method: 'POST',
+        path: '/catalog/admin/categories/reorder',
+        permission: 'catalog.admin',
         input: [
-          { name: "ids", type: "ids" },
-          { name: "parentIds", type: "ids" },
-          { name: "sortOrders", type: "ids" },
+          { name: 'ids', type: 'ids' },
+          { name: 'parentIds', type: 'ids' },
+          { name: 'sortOrders', type: 'ids' },
         ],
       },
       {
-        id: "catalog.delete-category",
-        method: "DELETE",
-        path: "/catalog/admin/categories/:id",
-        permission: "catalog.admin",
-        input: [{ name: "id", type: "string", required: true, maxLength: 191 }],
+        id: 'catalog.delete-category',
+        method: 'DELETE',
+        path: '/catalog/admin/categories/:id',
+        permission: 'catalog.admin',
+        input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
       },
       {
-        id: "catalog.update-product",
-        method: "PATCH",
-        path: "/catalog/admin/products/:productId",
-        permission: "catalog.admin",
+        id: 'catalog.update-product',
+        method: 'PATCH',
+        path: '/catalog/admin/products/:productId',
+        permission: 'catalog.admin',
         input: [
-          { name: "productId", type: "string", required: true, maxLength: 191 },
-          { name: "categoryIds", type: "ids" },
-          { name: "shelfStatus", type: "string" },
-          { name: "sortOrder", type: "integer", min: 0, max: 9999 },
-          { name: "stock", type: "integer", min: 0, max: 1000000 },
+          { name: 'productId', type: 'string', required: true, maxLength: 191 },
+          { name: 'categoryIds', type: 'ids' },
+          { name: 'shelfStatus', type: 'string' },
+          { name: 'sortOrder', type: 'integer', min: 0, max: 9999 },
+          { name: 'stock', type: 'integer', min: 0, max: 1000000 },
         ],
       },
     ],
     adminRoutes: [
       {
-        path: "/categories",
-        component: "admin/categories",
-        permission: "catalog.admin",
-        nav: { label: "商品分类", group: "商店", order: 20 },
-        data: [{ finder: "catalog.adminCategories", as: "categories" }],
+        path: '/categories',
+        component: 'admin/categories',
+        permission: 'catalog.admin',
+        nav: { label: '商品分类', group: '商店', order: 20 },
+        data: [{ finder: 'catalog.adminCategories', as: 'categories' }],
       },
     ],
   },

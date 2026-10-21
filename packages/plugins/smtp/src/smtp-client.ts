@@ -1,5 +1,5 @@
-import { connect as netConnect, type Socket } from "node:net";
-import { connect as tlsConnect, type TLSSocket } from "node:tls";
+import { connect as netConnect, type Socket } from 'node:net';
+import { connect as tlsConnect, type TLSSocket } from 'node:tls';
 
 /**
  * 极简 SMTP 客户端（零外部依赖）。
@@ -33,7 +33,7 @@ export interface SmtpConfig {
     user: string;
     pass: string;
     /** 强制认证方式；缺省按服务端能力自动选择。 */
-    method?: "plain" | "login";
+    method?: 'plain' | 'login';
   };
   /** 发件人（信封与 From 头）。 */
   from: string;
@@ -76,7 +76,7 @@ export class SmtpError extends Error {
     readonly code?: number,
   ) {
     super(message);
-    this.name = "SmtpError";
+    this.name = 'SmtpError';
   }
 }
 
@@ -112,16 +112,10 @@ class SmtpPool {
     private readonly config: SmtpConfig,
     private readonly logger: { warn: (message: string) => void },
   ) {
-    this.maxConnections = Math.max(
-      1,
-      config.maxConnections ?? DEFAULT_MAX_CONNECTIONS,
-    );
+    this.maxConnections = Math.max(1, config.maxConnections ?? DEFAULT_MAX_CONNECTIONS);
     this.maxQueue = Math.max(0, config.maxQueue ?? DEFAULT_MAX_QUEUE);
     this.ratePerMinute = Math.max(0, config.ratePerMinute ?? 0);
-    this.sendTimeoutMs = Math.max(
-      1,
-      config.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS,
-    );
+    this.sendTimeoutMs = Math.max(1, config.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS);
     this.tokens = this.ratePerMinute;
   }
 
@@ -143,7 +137,7 @@ class SmtpPool {
           this.wake();
         }
       },
-      "SMTP 发送超时",
+      'SMTP 发送超时',
     );
   }
 
@@ -152,7 +146,7 @@ class SmtpPool {
     for (const connection of this.idle.splice(0)) connection.destroy();
     // 排队中的请求不再等待：立即失败，交由内核退避重试。
     for (const waiter of this.waiters.splice(0)) {
-      waiter.reject(new SmtpError("SMTP 连接池已关闭"));
+      waiter.reject(new SmtpError('SMTP 连接池已关闭'));
     }
   }
 
@@ -180,7 +174,7 @@ class SmtpPool {
         // 超时后把自己移出等待队列，避免占用名额。
         const index = this.waiters.findIndex((w) => w.resolve === wrapped);
         if (index >= 0) this.waiters.splice(index, 1);
-        reject(new SmtpError("等待 SMTP 连接超时"));
+        reject(new SmtpError('等待 SMTP 连接超时'));
       }, POOL_ACQUIRE_TIMEOUT_MS);
       const wrapped = (connection: SmtpConnection): void => {
         if (settled) {
@@ -229,19 +223,13 @@ class SmtpPool {
       .catch((error: unknown) => {
         connection.destroy();
         this.active -= 1;
-        waiter.reject(
-          error instanceof Error ? error : new Error(String(error)),
-        );
+        waiter.reject(error instanceof Error ? error : new Error(String(error)));
         this.wake();
       });
   }
 
   /** 给一个操作套上整体时限；超时即抛错（底层 socket 由命令级超时自行断开）。 */
-  private async withDeadline<T>(
-    ms: number,
-    fn: () => Promise<T>,
-    message: string,
-  ): Promise<T> {
+  private async withDeadline<T>(ms: number, fn: () => Promise<T>, message: string): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
@@ -269,12 +257,8 @@ class SmtpPool {
         this.tokens -= 1;
         return;
       }
-      const waitMs = Math.ceil(
-        (1 - this.tokens) * (60_000 / this.ratePerMinute),
-      );
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.min(waitMs, 1000)),
-      );
+      const waitMs = Math.ceil((1 - this.tokens) * (60_000 / this.ratePerMinute));
+      await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 1000)));
     }
   }
 }
@@ -283,7 +267,7 @@ class SmtpPool {
 
 class SmtpConnection {
   private socket: Socket | TLSSocket | null = null;
-  private buffer = "";
+  private buffer = '';
   private pending: {
     resolve: (value: string) => void;
     reject: (error: Error) => void;
@@ -296,8 +280,7 @@ class SmtpConnection {
 
   async connect(): Promise<void> {
     const { host, port, secure } = this.config;
-    const timeout =
-      this.config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
+    const timeout = this.config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
     const socket = secure
       ? tlsConnect({
           host,
@@ -308,16 +291,13 @@ class SmtpConnection {
     this.attachSocket(socket);
 
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new SmtpError("SMTP 连接超时")),
-        timeout,
-      );
+      const timer = setTimeout(() => reject(new SmtpError('SMTP 连接超时')), timeout);
       const onReady = (): void => {
         clearTimeout(timer);
         resolve();
       };
-      socket.once(secure ? "secureConnect" : "connect", onReady);
-      socket.once("error", (error) => {
+      socket.once(secure ? 'secureConnect' : 'connect', onReady);
+      socket.once('error', (error) => {
         clearTimeout(timer);
         reject(error);
       });
@@ -327,18 +307,18 @@ class SmtpConnection {
     this.assertCode(greeting, [220]);
 
     const caps = await this.ehlo();
-    if (!secure && this.config.requireStartTls && caps.has("STARTTLS")) {
+    if (!secure && this.config.requireStartTls && caps.has('STARTTLS')) {
       await this.startTls();
       caps.clear();
-      caps.add("__done");
+      caps.add('__done');
       await this.ehlo();
     } else if (
       !secure &&
       this.config.requireStartTls &&
-      !caps.has("STARTTLS") &&
+      !caps.has('STARTTLS') &&
       !this.config.allowInsecure
     ) {
-      throw new SmtpError("服务端不支持 STARTTLS，且未允许明文发送");
+      throw new SmtpError('服务端不支持 STARTTLS，且未允许明文发送');
     }
 
     if (this.config.auth) {
@@ -355,10 +335,10 @@ class SmtpConnection {
       const rcpt = await this.command(`RCPT TO:<${recipient}>`);
       this.assertCode(rcpt, [250, 251]);
     }
-    const data = await this.command("DATA");
+    const data = await this.command('DATA');
     this.assertCode(data, [354]);
     // 报文必须以 CRLF 结尾，且独立一行的 "." 结束；正文中的行首 "." 需转义。
-    const body = `${dotStuff(message.raw).replace(/\r?\n/g, "\r\n")}\r\n.`;
+    const body = `${dotStuff(message.raw).replace(/\r?\n/g, '\r\n')}\r\n.`;
     const accepted = await this.command(body);
     this.assertCode(accepted, [250]);
   }
@@ -383,38 +363,36 @@ class SmtpConnection {
    */
   private attachSocket(socket: Socket | TLSSocket): void {
     this.socket = socket;
-    this.buffer = "";
+    this.buffer = '';
     this.pending = null;
-    socket.setTimeout(
-      this.config.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
-    );
-    socket.on("timeout", () => {
+    socket.setTimeout(this.config.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+    socket.on('timeout', () => {
       this.destroy();
-      this.fail(new SmtpError("SMTP 读超时（服务端无响应）"));
+      this.fail(new SmtpError('SMTP 读超时（服务端无响应）'));
     });
-    socket.on("error", (error) => this.fail(error));
-    socket.on("close", () => this.fail(new SmtpError("连接已关闭")));
-    socket.on("data", (chunk: Buffer) => this.onData(chunk));
+    socket.on('error', (error) => this.fail(error));
+    socket.on('close', () => this.fail(new SmtpError('连接已关闭')));
+    socket.on('data', (chunk: Buffer) => this.onData(chunk));
   }
 
   private async ehlo(): Promise<Set<string>> {
-    const response = await this.command("EHLO stackpanel");
+    const response = await this.command('EHLO stackpanel');
     this.assertCode(response, [250, 502]);
     // 解析多行能力（250-...），首行是域名，其余是能力。
     const caps = new Set<string>();
-    for (const line of response.split("\n").slice(1)) {
-      const capability = line.replace(/^\d{3}[- ]/, "").trim();
-      const [keyword] = capability.split(" ");
+    for (const line of response.split('\n').slice(1)) {
+      const capability = line.replace(/^\d{3}[- ]/, '').trim();
+      const [keyword] = capability.split(' ');
       if (keyword) caps.add(keyword.toUpperCase());
     }
     return caps;
   }
 
   private async startTls(): Promise<void> {
-    const response = await this.command("STARTTLS");
+    const response = await this.command('STARTTLS');
     this.assertCode(response, [220]);
     const plain = this.socket;
-    if (!plain) throw new SmtpError("STARTTLS 时连接已断开");
+    if (!plain) throw new SmtpError('STARTTLS 时连接已断开');
     const { host } = this.config;
     const secureSocket = tlsConnect({
       socket: plain,
@@ -423,40 +401,38 @@ class SmtpConnection {
     });
     this.attachSocket(secureSocket);
     await new Promise<void>((resolve, reject) => {
-      secureSocket.once("secureConnect", () => resolve());
-      secureSocket.once("error", reject);
+      secureSocket.once('secureConnect', () => resolve());
+      secureSocket.once('error', reject);
     });
   }
 
   private async authenticate(
-    auth: NonNullable<SmtpConfig["auth"]>,
+    auth: NonNullable<SmtpConfig['auth']>,
     caps: Set<string>,
   ): Promise<void> {
-    const method = auth.method ?? (caps.has("AUTH") ? "plain" : "plain");
-    const token = Buffer.from(`\0${auth.user}\0${auth.pass}`).toString(
-      "base64",
-    );
-    if (method === "plain") {
+    const method = auth.method ?? (caps.has('AUTH') ? 'plain' : 'plain');
+    const token = Buffer.from(`\0${auth.user}\0${auth.pass}`).toString('base64');
+    if (method === 'plain') {
       const response = await this.command(`AUTH PLAIN ${token}`);
       this.assertCode(response, [235]);
       return;
     }
     // AUTH LOGIN：用户名/密码分两次 base64 往返。
-    const start = await this.command("AUTH LOGIN");
+    const start = await this.command('AUTH LOGIN');
     this.assertCode(start, [334]);
-    const user = await this.command(Buffer.from(auth.user).toString("base64"));
+    const user = await this.command(Buffer.from(auth.user).toString('base64'));
     this.assertCode(user, [334]);
-    const pass = await this.command(Buffer.from(auth.pass).toString("base64"));
+    const pass = await this.command(Buffer.from(auth.pass).toString('base64'));
     this.assertCode(pass, [235]);
   }
 
   private async command(payload: string): Promise<string> {
-    if (!this.socket) throw new SmtpError("连接未建立");
+    if (!this.socket) throw new SmtpError('连接未建立');
     return this.roundtrip(`${payload}\r\n`);
   }
 
   private roundtrip(raw: string): Promise<string> {
-    if (!this.socket) return Promise.reject(new SmtpError("连接未建立"));
+    if (!this.socket) return Promise.reject(new SmtpError('连接未建立'));
     const pending = new Promise<string>((resolve, reject) => {
       this.pending = { resolve, reject };
     });
@@ -466,19 +442,19 @@ class SmtpConnection {
   }
 
   private onData(chunk: Buffer): void {
-    this.buffer += chunk.toString("utf8");
+    this.buffer += chunk.toString('utf8');
     this.flushBuffer();
   }
 
   /** Resolve the pending read if a complete response is already buffered. */
   private flushBuffer(): void {
     if (!this.pending) return;
-    const lines = this.buffer.split("\r\n");
+    const lines = this.buffer.split('\r\n');
     for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index] ?? "";
+      const line = lines[index] ?? '';
       if (/^\d{3} /.test(line)) {
-        const response = lines.slice(0, index + 1).join("\n");
-        this.buffer = lines.slice(index + 1).join("\r\n");
+        const response = lines.slice(0, index + 1).join('\n');
+        this.buffer = lines.slice(index + 1).join('\r\n');
         const pending = this.pending;
         this.pending = null;
         pending.resolve(response);
@@ -497,22 +473,19 @@ class SmtpConnection {
     const match = /^(\d{3})/.exec(response);
     const code = match ? Number(match[1]) : 0;
     if (!expected.includes(code)) {
-      throw new SmtpError(
-        `SMTP 响应 ${code}：${response.replace(/\n/g, " ")}`,
-        code,
-      );
+      throw new SmtpError(`SMTP 响应 ${code}：${response.replace(/\n/g, ' ')}`, code);
     }
   }
 
   private readResponse(): Promise<string> {
-    if (!this.socket) throw new SmtpError("连接未建立");
-    return this.roundtrip("");
+    if (!this.socket) throw new SmtpError('连接未建立');
+    return this.roundtrip('');
   }
 }
 
 /** SMTP DATA 阶段的行首点转义（RFC 5321 §4.5.2）。 */
 export function dotStuff(raw: string): string {
-  return raw.replace(/\r?\n\./g, "\r\n..").replace(/^\./, "..");
+  return raw.replace(/\r?\n\./g, '\r\n..').replace(/^\./, '..');
 }
 
 /**

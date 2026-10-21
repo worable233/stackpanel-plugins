@@ -44,7 +44,8 @@ export const cmsPlugin = definePlugin({
     id: 'cms',
     name: 'CMS 内容管理',
     version: '0.3.0',
-    description: '文章与页面：草稿 / 版本 / 定时发布 / 预览 + slug 变更 301，含内容语言与译文分组。',
+    description:
+      '文章与页面：草稿 / 版本 / 定时发布 / 预览 + slug 变更 301，含内容语言与译文分组。',
     permissions: CMS_PERMISSIONS,
     roleTemplates: [
       { role: 'USER', permissions: ['custom.cms.post.read', 'custom.cms.page.read'] },

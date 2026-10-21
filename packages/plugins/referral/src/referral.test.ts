@@ -272,7 +272,10 @@ function baseConfig(overrides: Partial<ReferralConfig> = {}): ReferralConfig {
   };
 }
 
-function seedCode(fake: ReturnType<typeof createFakeExtensions>, overrides: Partial<ReferralCode> = {}) {
+function seedCode(
+  fake: ReturnType<typeof createFakeExtensions>,
+  overrides: Partial<ReferralCode> = {},
+) {
   return fake.seed(
     codeModel.kind,
     {

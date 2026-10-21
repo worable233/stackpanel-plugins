@@ -48,7 +48,9 @@ export async function listCodes(ownerId: string): Promise<Array<ExtensionInstanc
  * 停用的码不再归因（`state !== 'active'` 直接拒绝），所以这里返回 null 而不是
  * 抛出，交给调用方决定是静默跳过还是报错。
  */
-export async function findActiveCode(code: string): Promise<ExtensionInstance<ReferralCode> | null> {
+export async function findActiveCode(
+  code: string,
+): Promise<ExtensionInstance<ReferralCode> | null> {
   const { items } = await context().extensions.list<ReferralCode>(codeModel, {
     where: { code: { eq: code }, state: { eq: 'active' } },
     page: 1,
@@ -121,9 +123,13 @@ export async function updateCode(
 /** 成功归因后，对该渠道计数 +1（原子自增，不读改写）。 */
 export async function bumpSignupCount(name: string): Promise<void> {
   try {
-    await context().extensions.updateWhere(codeModel, { name: { eq: name } }, {
-      signupCount: { inc: 1 },
-    });
+    await context().extensions.updateWhere(
+      codeModel,
+      { name: { eq: name } },
+      {
+        signupCount: { inc: 1 },
+      },
+    );
   } catch (error) {
     // 计数只是展示用，不能因为一次计数失败把已经成立的归因回滚掉。
     context().logger.warn(`referral: 推广码计数失败 ${name} ${String(error)}`);

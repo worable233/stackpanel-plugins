@@ -97,8 +97,7 @@ export function genericExtractUsage(body: unknown): IRUsage | null {
     const value = usage[key];
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   };
-  const input =
-    num('prompt_tokens') ?? num('input_tokens') ?? num('promptTokenCount') ?? undefined;
+  const input = num('prompt_tokens') ?? num('input_tokens') ?? num('promptTokenCount') ?? undefined;
   const output =
     num('completion_tokens') ?? num('output_tokens') ?? num('candidatesTokenCount') ?? undefined;
   const total = num('total_tokens') ?? num('totalTokenCount');
@@ -109,8 +108,7 @@ export function genericExtractUsage(body: unknown): IRUsage | null {
     num('cache_read_input_tokens') ??
     num('prompt_tokens_details_cache_read') ??
     ((usage['prompt_tokens_details'] as Record<string, unknown> | undefined)?.['cached_tokens'] as
-      | number
-      | undefined) ??
+      number | undefined) ??
     num('cachedContentTokenCount');
   const cacheWrite =
     num('cache_creation_input_tokens') ??

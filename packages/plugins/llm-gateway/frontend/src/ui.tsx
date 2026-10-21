@@ -272,9 +272,7 @@ export function Section({
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <SectionTitle icon={icon}>{title}</SectionTitle>
-          {description ? (
-            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-          ) : null}
+          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
       </div>

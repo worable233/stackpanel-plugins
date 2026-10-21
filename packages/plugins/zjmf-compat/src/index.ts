@@ -101,13 +101,17 @@ export const zjmfCompatPlugin = definePlugin({
       kind: 'raw',
       method: 'GET',
       path: '/api/product/:id',
-      handler: rawRoute((request) => current().getProduct(bearer(request), request.params['id'] ?? '')),
+      handler: rawRoute((request) =>
+        current().getProduct(bearer(request), request.params['id'] ?? ''),
+      ),
     },
     {
       kind: 'raw',
       method: 'GET',
       path: '/api/v1/product/:id',
-      handler: rawRoute((request) => current().getProduct(bearer(request), request.params['id'] ?? '')),
+      handler: rawRoute((request) =>
+        current().getProduct(bearer(request), request.params['id'] ?? ''),
+      ),
     },
     {
       kind: 'raw',

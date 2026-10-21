@@ -28,11 +28,7 @@ export interface AuthDenial {
 
 export type AuthResult = { ok: true; key: GatewayKey } | AuthDenial;
 
-function deny(
-  status: number,
-  code: AuthDenial['code'],
-  message: string,
-): AuthDenial {
+function deny(status: number, code: AuthDenial['code'], message: string): AuthDenial {
   return { ok: false, status, code, message };
 }
 
@@ -47,9 +43,7 @@ export async function resolveGatewayKey(
   plaintext: string,
   clientIp: string | undefined,
 ): Promise<AuthResult> {
-  const inspection = await rt.auth
-    .inspectPlatformToken(plaintext, clientIp)
-    .catch(() => null);
+  const inspection = await rt.auth.inspectPlatformToken(plaintext, clientIp).catch(() => null);
 
   if (inspection) {
     const token = inspection.token;

@@ -14,7 +14,14 @@ import type {
 } from '@stackpanel/sdk';
 import { isAllowedUpstreamUrl } from './guard.js';
 import { extractApiKey, GATEWAY_SCOPE, hashKey, toStringArray } from './keys.js';
-import { computeAmount, estimateTokens, resolveServedPrice, type PricedRow, type ServedPrice, type TokenUsage } from './pricing.js';
+import {
+  computeAmount,
+  estimateTokens,
+  resolveServedPrice,
+  type PricedRow,
+  type ServedPrice,
+  type TokenUsage,
+} from './pricing.js';
 import { isProtocol, type IRUsage, type Protocol } from './protocol.js';
 import { codecFor, matchIngress } from './codecs/index.js';
 import type { ProtocolCodec, StreamDecoder, StreamEncoder } from './codecs/types.js';
@@ -256,15 +263,16 @@ async function resolveGatewayKey(
   plaintext: string,
   clientIp: string | undefined,
 ): Promise<
-  | { ok: true; key: GatewayKey }
-  | { ok: false; status: number; message: string; code: string }
+  { ok: true; key: GatewayKey } | { ok: false; status: number; message: string; code: string }
 > {
-  const deny = (status: number, message: string, code: string) =>
-    ({ ok: false as const, status, message, code });
+  const deny = (status: number, message: string, code: string) => ({
+    ok: false as const,
+    status,
+    message,
+    code,
+  });
 
-  const inspection = await rt.auth
-    .inspectPlatformToken(plaintext, clientIp)
-    .catch(() => null);
+  const inspection = await rt.auth.inspectPlatformToken(plaintext, clientIp).catch(() => null);
   if (inspection) {
     const token = inspection.token;
     if (!inspection.active) return deny(401, 'API key 无效或已停用', 'invalid_api_key');
@@ -377,7 +385,9 @@ export function createRelayHandler(getRuntime: () => GatewayRuntime): RawRouteHa
 
     // 读请求体（GET/HEAD 无体），解析以便选路与计量。
     const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
-    const bodyBuffer = hasBody ? await readAll(req.body).catch(() => Buffer.alloc(0)) : Buffer.alloc(0);
+    const bodyBuffer = hasBody
+      ? await readAll(req.body).catch(() => Buffer.alloc(0))
+      : Buffer.alloc(0);
     let bodyJson: unknown = null;
     if (bodyBuffer.length > 0) {
       try {
@@ -686,7 +696,9 @@ interface RelayContext {
 async function relayStream(ctx: RelayContext): Promise<void> {
   const { rt, upstream, reply, ingressCodec, upstreamCodec, passthrough } = ctx;
   const decoder: StreamDecoder = upstreamCodec.createStreamDecoder();
-  const encoder: StreamEncoder | null = passthrough ? null : ingressCodec.createStreamEncoder(ctx.model);
+  const encoder: StreamEncoder | null = passthrough
+    ? null
+    : ingressCodec.createStreamEncoder(ctx.model);
   const reader = upstream.body?.getReader();
 
   reply.status(upstream.status);
@@ -751,9 +763,7 @@ async function relayStream(ctx: RelayContext): Promise<void> {
 }
 
 /** 非流式：读全量，转换后写出，并计费。 */
-async function relayBuffered(
-  ctx: RelayContext & { bodyBuffer: Buffer },
-): Promise<void> {
+async function relayBuffered(ctx: RelayContext & { bodyBuffer: Buffer }): Promise<void> {
   const { upstream, reply, ingressCodec, upstreamCodec, passthrough, bodyBuffer } = ctx;
   const rawText = await upstream.text();
 

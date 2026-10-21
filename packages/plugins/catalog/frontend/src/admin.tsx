@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import type { AdminPageComponentProps } from "@stackpanel/sdk";
-import type { ReactElement } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import type { AdminPageComponentProps } from '@stackpanel/sdk';
+import type { ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   DndContext,
   DragOverlay,
@@ -12,7 +12,7 @@ import {
   useDroppable,
   useSensor,
   useSensors,
-} from "@dnd-kit/core";
+} from '@dnd-kit/core';
 import {
   Button,
   Dialog,
@@ -24,9 +24,9 @@ import {
   Input,
   Label,
   PageHeader,
-} from "@stackpanel/ui";
-import EmojiPickerLib, { EmojiStyle } from "emoji-picker-react";
-import { FolderTree, Plus } from "lucide-react";
+} from '@stackpanel/ui';
+import EmojiPickerLib, { EmojiStyle } from 'emoji-picker-react';
+import { FolderTree, Plus } from 'lucide-react';
 
 interface CategoryNode {
   id: string;
@@ -64,25 +64,21 @@ function EmojiPicker({ value, onChange }: EmojiPickerProps): ReactElement {
     function onDocClick(event: MouseEvent) {
       const target = event.target as Node;
       if (buttonRef.current?.contains(target)) return;
-      if (target instanceof Element && target.closest(".epr-main")) return;
+      if (target instanceof Element && target.closest('.epr-main')) return;
       setOpen(false);
     }
-    document.addEventListener("mousedown", onDocClick);
-    window.addEventListener("resize", compute);
+    document.addEventListener('mousedown', onDocClick);
+    window.addEventListener('resize', compute);
     return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      window.removeEventListener("resize", compute);
+      document.removeEventListener('mousedown', onDocClick);
+      window.removeEventListener('resize', compute);
     };
   }, [open]);
 
   const picker = (
     <div
       className="z-50 rounded-xl border bg-card shadow-lg"
-      style={
-        position
-          ? { position: "fixed", top: position.top, left: position.left }
-          : undefined
-      }
+      style={position ? { position: 'fixed', top: position.top, left: position.left } : undefined}
     >
       <EmojiPickerLib
         width={340}
@@ -98,16 +94,11 @@ function EmojiPicker({ value, onChange }: EmojiPickerProps): ReactElement {
 
   return (
     <>
-      <Button
-        ref={buttonRef}
-        type="button"
-        variant="outline"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="text-base leading-none">{value ?? "🙂"}</span>
+      <Button ref={buttonRef} type="button" variant="outline" onClick={() => setOpen((v) => !v)}>
+        <span className="text-base leading-none">{value ?? '🙂'}</span>
         <span className="text-xs text-muted-foreground">图标</span>
       </Button>
-      {open && position && typeof window !== "undefined"
+      {open && position && typeof window !== 'undefined'
         ? createPortal(picker, document.body)
         : null}
     </>
@@ -182,10 +173,10 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
   };
   const initial = data.categories ?? [];
   const [categories, setCategories] = useState<CategoryNode[]>(initial);
-  const [draftName, setDraftName] = useState("");
+  const [draftName, setDraftName] = useState('');
   const [draftIcon, setDraftIcon] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
+  const [editName, setEditName] = useState('');
   const [editIcon, setEditIcon] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -197,21 +188,18 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
   }> | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{
     id: string;
-    position: "before" | "inside" | "after";
+    position: 'before' | 'inside' | 'after';
   } | null>(null);
   const dropIndicatorRef = useRef<{
     id: string;
-    position: "before" | "inside" | "after";
+    position: 'before' | 'inside' | 'after';
   } | null>(null);
 
-  const actions = props.actions as Record<
-    string,
-    (formData: FormData) => Promise<void>
-  >;
-  const createAction = actions["catalog.create-category"];
-  const updateAction = actions["catalog.update-category"];
-  const deleteAction = actions["catalog.delete-category"];
-  const reorderAction = actions["catalog.reorder-categories"];
+  const actions = props.actions as Record<string, (formData: FormData) => Promise<void>>;
+  const createAction = actions['catalog.create-category'];
+  const updateAction = actions['catalog.update-category'];
+  const deleteAction = actions['catalog.delete-category'];
+  const reorderAction = actions['catalog.reorder-categories'];
 
   const byId = useMemo(() => {
     const map = new Map<string, CategoryNode>();
@@ -225,9 +213,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
     return map;
   }, [categories]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const flat = useMemo(() => flattenTree(categories), [categories]);
   const [dragId, setDragId] = useState<string | null>(null);
   const pointerYRef = useRef(0);
@@ -238,8 +224,8 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
       pointerYRef.current = event.clientY;
     };
     // 捕获阶段先于 dnd-kit 内部处理器更新指针坐标，供 onDragOver 判定。
-    window.addEventListener("pointermove", onMove, true);
-    return () => window.removeEventListener("pointermove", onMove, true);
+    window.addEventListener('pointermove', onMove, true);
+    return () => window.removeEventListener('pointermove', onMove, true);
   }, [dragId]);
 
   function handleDragStart(event: DragStartEventLike) {
@@ -250,16 +236,14 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
     const activeId = String(_event.active.id);
     const pointerY = pointerYRef.current;
     // 用真实指针位置自行命中目标行，避免 dnd-kit 的 over 因卡片高度偏移。
-    const rowEls = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-row-id]"),
-    );
+    const rowEls = Array.from(document.querySelectorAll<HTMLElement>('[data-row-id]'));
     let target: { id: string; top: number; height: number } | null = null;
     for (const el of rowEls) {
       if (el.dataset.rowId === activeId) continue;
       const rect = el.getBoundingClientRect();
       if (pointerY >= rect.top && pointerY <= rect.bottom) {
         target = {
-          id: el.dataset.rowId ?? "",
+          id: el.dataset.rowId ?? '',
           top: rect.top,
           height: rect.height,
         };
@@ -271,10 +255,9 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
       setDropIndicator(null);
       return;
     }
-    const ratio =
-      target.height > 0 ? (pointerY - target.top) / target.height : 0.5;
-    const position: "before" | "inside" | "after" =
-      ratio < 0.33 ? "before" : ratio > 0.66 ? "after" : "inside";
+    const ratio = target.height > 0 ? (pointerY - target.top) / target.height : 0.5;
+    const position: 'before' | 'inside' | 'after' =
+      ratio < 0.33 ? 'before' : ratio > 0.66 ? 'after' : 'inside';
     dropIndicatorRef.current = { id: target.id, position };
     setDropIndicator(dropIndicatorRef.current);
   }
@@ -304,7 +287,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
 
       // 阻止把节点拖成自己的后代（active 是 over 的祖先时，退化为同级插入）。
       let targetParentId: string | null;
-      if (position === "inside") {
+      if (position === 'inside') {
         if (isAncestor(activeNode, overId)) {
           targetParentId = overNode.parentId;
         } else {
@@ -322,7 +305,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
       newFlat.splice(activeIndex, 1);
       const overIndex = newFlat.findIndex((item) => item.id === overId);
       let insertIndex: number;
-      if (position === "after") {
+      if (position === 'after') {
         insertIndex = overIndex < 0 ? newFlat.length : overIndex + 1;
       } else {
         // before 或 inside：插到 over 之前；inside 时 over 成为父级。
@@ -360,9 +343,9 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
     if (!reorderAction || !pendingFlat) return;
     const formData = new FormData();
     for (const item of pendingFlat) {
-      formData.append("ids", item.id);
-      formData.append("parentIds", item.parentId ?? "__root__");
-      formData.append("sortOrders", String(item.sortOrder));
+      formData.append('ids', item.id);
+      formData.append('parentIds', item.parentId ?? '__root__');
+      formData.append('sortOrders', String(item.sortOrder));
     }
     void reorderAction(formData);
     setPendingFlat(null);
@@ -406,11 +389,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
                   node={node}
                   depth={depthOf(item.id, flat)}
                   dragging={dragId === item.id}
-                  dropIndicator={
-                    dropIndicator?.id === item.id
-                      ? dropIndicator.position
-                      : null
-                  }
+                  dropIndicator={dropIndicator?.id === item.id ? dropIndicator.position : null}
                   onEditStart={() => {
                     setEditingId(item.id);
                     setEditName(node.name);
@@ -426,11 +405,9 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
             {dragId ? (
               <div className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2 shadow-lg">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
-                  {byId.get(dragId)?.icon ?? "🙂"}
+                  {byId.get(dragId)?.icon ?? '🙂'}
                 </span>
-                <span className="truncate text-sm font-medium">
-                  {byId.get(dragId)?.name}
-                </span>
+                <span className="truncate text-sm font-medium">{byId.get(dragId)?.name}</span>
               </div>
             ) : null}
           </DragOverlay>
@@ -439,12 +416,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
         <Empty text="暂无分类" />
       )}
       {/* 触发 server action 的重排表单（由拖拽后提交） */}
-      <input
-        type="hidden"
-        value={reorderToken}
-        onChange={() => undefined}
-        aria-hidden
-      />
+      <input type="hidden" value={reorderToken} onChange={() => undefined} aria-hidden />
 
       {createOpen && createAction ? (
         <Dialog
@@ -452,7 +424,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
           onOpenChange={(open) => {
             if (!open) {
               setCreateOpen(false);
-              setDraftName("");
+              setDraftName('');
               setDraftIcon(null);
             }
           }}
@@ -460,17 +432,10 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
           <DialogContent className="!left-auto !right-0 !top-0 !h-dvh !max-h-dvh !max-w-md !translate-x-0 !translate-y-0 !rounded-none !border-y-0 !border-r-0 data-open:slide-in-from-right data-closed:slide-out-to-right">
             <DialogHeader>
               <DialogTitle>新建分类</DialogTitle>
-              <DialogDescription>
-                创建后可在列表中拖拽调整层级与顺序。
-              </DialogDescription>
+              <DialogDescription>创建后可在列表中拖拽调整层级与顺序。</DialogDescription>
             </DialogHeader>
             <form action={createAction} className="grid gap-4 py-2">
-              <input
-                name="icon"
-                type="hidden"
-                value={draftIcon ?? ""}
-                onChange={() => undefined}
-              />
+              <input name="icon" type="hidden" value={draftIcon ?? ''} onChange={() => undefined} />
               <div className="flex items-end gap-3">
                 <EmojiPicker value={draftIcon} onChange={setDraftIcon} />
                 <div className="grid flex-1 gap-1.5">
@@ -485,11 +450,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
                 </div>
               </div>
               <DialogFooter className="flex-row justify-end">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setCreateOpen(false)}
-                >
+                <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
                   取消
                 </Button>
                 <Button type="submit">创建</Button>
@@ -513,12 +474,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
             </DialogHeader>
             <form action={updateAction} className="grid gap-4 py-2">
               <input type="hidden" name="id" value={editingId} />
-              <input
-                type="hidden"
-                name="icon"
-                value={editIcon ?? ""}
-                onChange={() => undefined}
-              />
+              <input type="hidden" name="icon" value={editIcon ?? ''} onChange={() => undefined} />
               <div className="flex items-end gap-3">
                 <EmojiPicker value={editIcon} onChange={setEditIcon} />
                 <div className="grid flex-1 gap-1.5">
@@ -533,11 +489,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
                 </div>
               </div>
               <DialogFooter className="flex-row justify-end">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setEditingId(null)}
-                >
+                <Button type="button" variant="ghost" onClick={() => setEditingId(null)}>
                   取消
                 </Button>
                 <Button type="submit">保存</Button>
@@ -557,23 +509,13 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>删除分类</DialogTitle>
-              <DialogDescription>
-                删除后，该分类下的商品将变为未分类。确定删除？
-              </DialogDescription>
+              <DialogDescription>删除后，该分类下的商品将变为未分类。确定删除？</DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex-row justify-end">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setConfirmDelete(null)}
-              >
+              <Button type="button" variant="ghost" onClick={() => setConfirmDelete(null)}>
                 取消
               </Button>
-              <Button
-                type="submit"
-                variant="destructive"
-                form={`delete-category-${confirmDelete}`}
-              >
+              <Button type="submit" variant="destructive" form={`delete-category-${confirmDelete}`}>
                 删除
               </Button>
             </DialogFooter>
@@ -616,7 +558,7 @@ function SortableRow({
   node: CategoryNode;
   depth: number;
   dragging: boolean;
-  dropIndicator: "before" | "inside" | "after" | null;
+  dropIndicator: 'before' | 'inside' | 'after' | null;
   onEditStart: () => void;
   onDeleteRequest: () => void;
   deleteAction?: (formData: FormData) => Promise<void>;
@@ -636,19 +578,19 @@ function SortableRow({
       data-row-id={node.id}
       className={`relative rounded-xl border bg-card ${
         isDragging
-          ? "opacity-50"
-          : dropIndicator === "inside"
-            ? "border-primary ring-2 ring-primary/30"
-            : ""
+          ? 'opacity-50'
+          : dropIndicator === 'inside'
+            ? 'border-primary ring-2 ring-primary/30'
+            : ''
       }`}
     >
-      {dropIndicator === "before" ? (
+      {dropIndicator === 'before' ? (
         <div
           className="absolute inset-x-0 top-0 h-0.5 -translate-y-1 rounded-full bg-primary"
           aria-hidden="true"
         />
       ) : null}
-      {dropIndicator === "after" ? (
+      {dropIndicator === 'after' ? (
         <div
           className="absolute inset-x-0 bottom-0 h-0.5 translate-y-1 rounded-full bg-primary"
           aria-hidden="true"
@@ -671,7 +613,7 @@ function SortableRow({
           <span className="text-sm leading-none">⠿</span>
         </Button>
         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
-          {node.icon ?? "🙂"}
+          {node.icon ?? '🙂'}
         </span>
         <span className="flex-1 truncate text-sm font-medium">{node.name}</span>
         {node.productCount > 0 ? (
@@ -683,22 +625,13 @@ function SortableRow({
           <Button type="button" variant="ghost" size="sm" onClick={onEditStart}>
             编辑
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onDeleteRequest}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={onDeleteRequest}>
             删除
           </Button>
         </div>
       </div>
       {deleteAction ? (
-        <form
-          id={`delete-category-${node.id}`}
-          action={deleteAction}
-          className="hidden"
-        >
+        <form id={`delete-category-${node.id}`} action={deleteAction} className="hidden">
           <input type="hidden" name="id" value={node.id} />
         </form>
       ) : null}
@@ -716,5 +649,5 @@ function Empty({ text }: { text: string }): ReactElement {
 }
 
 export const adminPages = {
-  "admin/categories": CatalogAdminPage,
+  'admin/categories': CatalogAdminPage,
 } as const;

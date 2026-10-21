@@ -1,20 +1,11 @@
-"use client";
+'use client';
 
-import type { AdminPageComponentProps } from "@stackpanel/sdk";
-import { PageHeader, SectionTitle } from "@stackpanel/ui";
-import type { ReactElement, ReactNode } from "react";
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import {
-  Download,
-  GripVertical,
-  Hash,
-  Plus,
-  Printer,
-  Save,
-  Send,
-  Trash2,
-} from "lucide-react";
+import type { AdminPageComponentProps } from '@stackpanel/sdk';
+import { PageHeader, SectionTitle } from '@stackpanel/ui';
+import type { ReactElement, ReactNode } from 'react';
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { Download, GripVertical, Hash, Plus, Printer, Save, Send, Trash2 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -47,7 +38,7 @@ interface Invoice {
   items: InvoiceItem[];
   subtotal: number;
   discount: number;
-  discountType: "FIXED" | "PERCENT";
+  discountType: 'FIXED' | 'PERCENT';
   discountValue: number;
   taxRate: number;
   taxAmount: number;
@@ -85,39 +76,39 @@ interface PlatformInfo {
 /* ------------------------------------------------------------------ */
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: "草稿", cls: "bg-muted text-muted-foreground" },
+  DRAFT: { label: '草稿', cls: 'bg-muted text-muted-foreground' },
   SENT: {
-    label: "已发送",
-    cls: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+    label: '已发送',
+    cls: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
   },
   PAID: {
-    label: "已支付",
-    cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+    label: '已支付',
+    cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
   },
-  VOID: { label: "已作废", cls: "bg-destructive/10 text-destructive" },
+  VOID: { label: '已作废', cls: 'bg-destructive/10 text-destructive' },
 };
 
 function statusMeta(status: string) {
   return (
     STATUS_META[status] ?? {
       label: status,
-      cls: "bg-muted text-muted-foreground",
+      cls: 'bg-muted text-muted-foreground',
     }
   );
 }
 
 const CURRENCY_SYMBOL: Record<string, string> = {
-  CNY: "¥",
-  USD: "$",
-  EUR: "€",
-  GBP: "£",
-  JPY: "¥",
+  CNY: '¥',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
 };
 
 /** 最小货币单位（分）→ 展示字符串。 */
 function money(amount: number, currency: string): string {
   const symbol = CURRENCY_SYMBOL[currency] ?? `${currency} `;
-  const value = (amount / 100).toLocaleString("zh-CN", {
+  const value = (amount / 100).toLocaleString('zh-CN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -125,41 +116,40 @@ function money(amount: number, currency: string): string {
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return '—';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
   });
 }
 
 function toDateInput(value: string | null): string {
-  if (!value) return "";
+  if (!value) return '';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
+  if (Number.isNaN(date.getTime())) return '';
   return date.toISOString().slice(0, 10);
 }
 
 function initials(name: string): string {
   const trimmed = name.trim();
-  if (!trimmed) return "—";
+  if (!trimmed) return '—';
   return trimmed.slice(0, 2).toUpperCase();
 }
 
 function parseOrderLines(raw: unknown): OrderLine[] {
-  if (!raw || typeof raw !== "object") return [];
+  if (!raw || typeof raw !== 'object') return [];
   const items = (raw as { items?: unknown }).items;
   if (!Array.isArray(items)) return [];
   const lines: OrderLine[] = [];
   for (const entry of items) {
-    if (!entry || typeof entry !== "object") continue;
+    if (!entry || typeof entry !== 'object') continue;
     const line = entry as Record<string, unknown>;
-    const name = typeof line["name"] === "string" ? line["name"] : "订单商品";
-    const quantity =
-      typeof line["quantity"] === "number" ? line["quantity"] : 1;
-    const price = typeof line["price"] === "number" ? line["price"] : 0;
+    const name = typeof line['name'] === 'string' ? line['name'] : '订单商品';
+    const quantity = typeof line['quantity'] === 'number' ? line['quantity'] : 1;
+    const price = typeof line['price'] === 'number' ? line['price'] : 0;
     lines.push({ name, quantity, price });
   }
   return lines;
@@ -171,11 +161,7 @@ const TAX_PRESETS = [0, 6, 9, 13];
 /* Small UI primitives                                                 */
 /* ------------------------------------------------------------------ */
 
-function Badge({
-  meta,
-}: {
-  meta: { label: string; cls: string };
-}): ReactElement {
+function Badge({ meta }: { meta: { label: string; cls: string } }): ReactElement {
   return (
     <span
       className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.cls}`}
@@ -186,13 +172,7 @@ function Badge({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}): ReactElement {
+function Field({ label, children }: { label: string; children: ReactNode }): ReactElement {
   return (
     <label className="grid gap-2">
       <span className="text-sm font-semibold text-foreground">{label}</span>
@@ -201,13 +181,7 @@ function Field({
   );
 }
 
-function SectionHeading({
-  title,
-  action,
-}: {
-  title: string;
-  action?: ReactNode;
-}): ReactElement {
+function SectionHeading({ title, action }: { title: string; action?: ReactNode }): ReactElement {
   return (
     <div className="flex items-center justify-between gap-3">
       <SectionTitle>{title}</SectionTitle>
@@ -218,15 +192,15 @@ function SectionHeading({
 
 /** 输入框：白底 + 浅色描边 + 大圆角，贴近参考稿的“悬浮白卡”观感。 */
 const inputCls =
-  "h-11 w-full rounded-xl border border-input bg-card px-3.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
+  'h-11 w-full rounded-xl border border-input bg-card px-3.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40';
 
 /** 明细行内的小尺寸输入框。 */
 const itemInputCls =
-  "h-10 w-full rounded-xl border border-input bg-card px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
+  'h-10 w-full rounded-xl border border-input bg-card px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40';
 
 /** 纯文字动作链（参考稿的 “+ Add Item” 风格）。 */
 const linkActionCls =
-  "inline-flex items-center gap-1 text-sm font-semibold text-foreground transition-opacity hover:opacity-70";
+  'inline-flex items-center gap-1 text-sm font-semibold text-foreground transition-opacity hover:opacity-70';
 
 /* ------------------------------------------------------------------ */
 /* Editor                                                              */
@@ -248,7 +222,7 @@ interface EditorState {
   businessEmail: string;
   businessPhone: string;
   items: InvoiceItem[];
-  discountType: "FIXED" | "PERCENT";
+  discountType: 'FIXED' | 'PERCENT';
   discount: string;
   taxRate: string;
   taxCustom: boolean;
@@ -262,52 +236,52 @@ function initialEditorState(
 ): EditorState {
   if (!invoice) {
     return {
-      status: "DRAFT",
-      referenceNumber: "",
-      orderId: "",
-      currency: "CNY",
+      status: 'DRAFT',
+      referenceNumber: '',
+      orderId: '',
+      currency: 'CNY',
       issuedAt: new Date().toISOString().slice(0, 10),
-      dueAt: "",
-      customerName: "",
-      customerEmail: "",
-      customerAddress: "",
-      customerTaxId: "",
-      businessName: platform?.name ?? "",
-      businessAddress: "",
-      businessEmail: "",
-      businessPhone: "",
+      dueAt: '',
+      customerName: '',
+      customerEmail: '',
+      customerAddress: '',
+      customerTaxId: '',
+      businessName: platform?.name ?? '',
+      businessAddress: '',
+      businessEmail: '',
+      businessPhone: '',
       items: [],
-      discountType: "FIXED",
-      discount: "0",
-      taxRate: "0",
+      discountType: 'FIXED',
+      discount: '0',
+      taxRate: '0',
       taxCustom: false,
-      notes: "",
-      paymentInfo: platform?.url ? `官网：${platform.url}` : "",
+      notes: '',
+      paymentInfo: platform?.url ? `官网：${platform.url}` : '',
     };
   }
   return {
     status: invoice.status,
-    referenceNumber: invoice.referenceNumber ?? "",
-    orderId: invoice.orderId ?? "",
+    referenceNumber: invoice.referenceNumber ?? '',
+    orderId: invoice.orderId ?? '',
     currency: invoice.currency,
     issuedAt: toDateInput(invoice.issuedAt),
     dueAt: toDateInput(invoice.dueAt),
     customerName: invoice.customerName,
-    customerEmail: invoice.customerEmail ?? "",
-    customerAddress: invoice.customerAddress ?? "",
-    customerTaxId: invoice.customerTaxId ?? "",
+    customerEmail: invoice.customerEmail ?? '',
+    customerAddress: invoice.customerAddress ?? '',
+    customerTaxId: invoice.customerTaxId ?? '',
     businessName: invoice.businessName,
-    businessAddress: invoice.businessAddress ?? "",
-    businessEmail: invoice.businessEmail ?? "",
-    businessPhone: invoice.businessPhone ?? "",
+    businessAddress: invoice.businessAddress ?? '',
+    businessEmail: invoice.businessEmail ?? '',
+    businessPhone: invoice.businessPhone ?? '',
     items: invoice.items,
-    discountType: invoice.discountType ?? "FIXED",
+    discountType: invoice.discountType ?? 'FIXED',
     // FIXED：分 → 元（÷100）；PERCENT：基点 → 百分比（÷100）。换算一致。
     discount: (invoice.discountValue / 100).toString(),
     taxRate: invoice.taxRate.toString(),
     taxCustom: !TAX_PRESETS.includes(invoice.taxRate),
-    notes: invoice.notes ?? "",
-    paymentInfo: invoice.paymentInfo ?? "",
+    notes: invoice.notes ?? '',
+    paymentInfo: invoice.paymentInfo ?? '',
   };
 }
 
@@ -319,7 +293,7 @@ function computePreview(state: EditorState, currency: string) {
   const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
   const rawValue = Math.max(0, Number(state.discount || 0));
   const rawDiscount =
-    state.discountType === "PERCENT"
+    state.discountType === 'PERCENT'
       ? Math.round((subtotal * rawValue) / 100)
       : Math.round(rawValue * 100);
   const discount = Math.max(0, Math.min(rawDiscount, subtotal));
@@ -336,32 +310,28 @@ function computePreview(state: EditorState, currency: string) {
   };
 }
 
-type Tab = "invoice" | "payment" | "business";
+type Tab = 'invoice' | 'payment' | 'business';
 
 const TABS: Array<{ id: Tab; label: string }> = [
-  { id: "invoice", label: "发票" },
-  { id: "payment", label: "付款" },
-  { id: "business", label: "商户" },
+  { id: 'invoice', label: '发票' },
+  { id: 'payment', label: '付款' },
+  { id: 'business', label: '商户' },
 ];
 
 const ITEM_GRID =
-  "grid grid-cols-[1rem_minmax(0,1fr)_3.25rem_5rem_5rem_1.75rem] items-center gap-2";
+  'grid grid-cols-[1rem_minmax(0,1fr)_3.25rem_5rem_5rem_1.75rem] items-center gap-2';
 
-export function InvoiceEditorPage(
-  props: AdminPageComponentProps,
-): ReactElement {
+export function InvoiceEditorPage(props: AdminPageComponentProps): ReactElement {
   const invoice = props.data.invoice as Invoice | undefined;
   const orders = (props.data.orders as Order[] | undefined) ?? [];
   const platform = props.data.platform as PlatformInfo | undefined;
-  const createAction = props.actions["invoice.create"];
-  const updateAction = props.actions["invoice.update"];
+  const createAction = props.actions['invoice.create'];
+  const updateAction = props.actions['invoice.update'];
   const isEdit = Boolean(invoice);
   const action = isEdit ? updateAction : createAction;
 
-  const [tab, setTab] = useState<Tab>("invoice");
-  const [state, setState] = useState<EditorState>(() =>
-    initialEditorState(invoice, platform),
-  );
+  const [tab, setTab] = useState<Tab>('invoice');
+  const [state, setState] = useState<EditorState>(() => initialEditorState(invoice, platform));
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   const preview = useMemo(() => computePreview(state, state.currency), [state]);
@@ -384,19 +354,14 @@ export function InvoiceEditorPage(
   function updateItem(index: number, next: Partial<InvoiceItem>) {
     setState((current) => ({
       ...current,
-      items: current.items.map((item, i) =>
-        i === index ? { ...item, ...next } : item,
-      ),
+      items: current.items.map((item, i) => (i === index ? { ...item, ...next } : item)),
     }));
   }
 
   function addItem() {
     setState((current) => ({
       ...current,
-      items: [
-        ...current.items,
-        { description: "", quantity: 1, unitPrice: 0, lineTotal: 0 },
-      ],
+      items: [...current.items, { description: '', quantity: 1, unitPrice: 0, lineTotal: 0 }],
     }));
   }
 
@@ -421,7 +386,7 @@ export function InvoiceEditorPage(
   function applyOrder(orderId: string) {
     const order = orders.find((item) => item.id === orderId);
     if (!order) {
-      patch({ orderId: "" });
+      patch({ orderId: '' });
       return;
     }
     const lines = parseOrderLines(order.items).map((line) => ({
@@ -443,7 +408,7 @@ export function InvoiceEditorPage(
         <PageHeader
           backHref="/admin/plugin/invoice/invoices"
           backLabel="返回发票列表"
-          title={isEdit ? (invoice?.number ?? "编辑发票") : "新建发票"}
+          title={isEdit ? (invoice?.number ?? '编辑发票') : '新建发票'}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -464,7 +429,7 @@ export function InvoiceEditorPage(
                 className="inline-flex h-10 items-center gap-2 rounded-xl bg-foreground px-4 text-sm font-semibold text-background shadow-sm transition-opacity hover:opacity-90"
               >
                 <Send className="size-4" />
-                {isEdit ? "保存修改" : "创建发票"}
+                {isEdit ? '保存修改' : '创建发票'}
               </button>
             </div>
           }
@@ -478,17 +443,10 @@ export function InvoiceEditorPage(
           action={action}
           className="space-y-6 rounded-2xl border bg-card p-6 shadow-sm print:hidden sm:p-7"
         >
-          {isEdit ? (
-            <input type="hidden" name="id" value={invoice?.id} />
-          ) : null}
+          {isEdit ? <input type="hidden" name="id" value={invoice?.id} /> : null}
           <input type="hidden" name="items" value={itemsJson} readOnly />
           <input type="hidden" name="taxRate" value={state.taxRate} readOnly />
-          <input
-            type="hidden"
-            name="discountType"
-            value={state.discountType}
-            readOnly
-          />
+          <input type="hidden" name="discountType" value={state.discountType} readOnly />
           {/* FIXED：元 → 分；PERCENT：百分比 → 基点。两者均为 ×100。 */}
           <input
             type="hidden"
@@ -505,8 +463,8 @@ export function InvoiceEditorPage(
                 onClick={() => setTab(item.id)}
                 className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
                   tab === item.id
-                    ? "bg-card text-foreground shadow-sm ring-1 ring-border"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? 'bg-card text-foreground shadow-sm ring-1 ring-border'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {item.label}
@@ -514,7 +472,7 @@ export function InvoiceEditorPage(
             ))}
           </div>
 
-          <div className={tab === "invoice" ? "space-y-6" : "hidden"}>
+          <div className={tab === 'invoice' ? 'space-y-6' : 'hidden'}>
             <Field label="参考号">
               <div className="relative">
                 <input
@@ -572,10 +530,10 @@ export function InvoiceEditorPage(
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-foreground">
-                    {state.customerName || "未填写客户"}
+                    {state.customerName || '未填写客户'}
                   </p>
                   <p className="truncate text-sm text-muted-foreground">
-                    {state.customerEmail || "填写客户名称与邮箱后显示"}
+                    {state.customerEmail || '填写客户名称与邮箱后显示'}
                   </p>
                 </div>
               </div>
@@ -623,20 +581,14 @@ export function InvoiceEditorPage(
               <SectionHeading
                 title="发票明细"
                 action={
-                  <button
-                    type="button"
-                    onClick={addItem}
-                    className={linkActionCls}
-                  >
+                  <button type="button" onClick={addItem} className={linkActionCls}>
                     <Plus className="size-4" />
                     添加明细
                   </button>
                 }
               />
               <div>
-                <div
-                  className={`${ITEM_GRID} px-1 pb-2 text-sm text-muted-foreground`}
-                >
+                <div className={`${ITEM_GRID} px-1 pb-2 text-sm text-muted-foreground`}>
                   <span aria-hidden="true" />
                   <span>描述</span>
                   <span>数量</span>
@@ -662,7 +614,7 @@ export function InvoiceEditorPage(
                       }}
                       onDragEnd={() => setDragIndex(null)}
                       className={`${ITEM_GRID} rounded-xl px-1 py-1 ${
-                        dragIndex === index ? "bg-muted/60" : ""
+                        dragIndex === index ? 'bg-muted/60' : ''
                       }`}
                     >
                       <span
@@ -673,9 +625,7 @@ export function InvoiceEditorPage(
                       </span>
                       <input
                         value={item.description}
-                        onChange={(e) =>
-                          updateItem(index, { description: e.target.value })
-                        }
+                        onChange={(e) => updateItem(index, { description: e.target.value })}
                         placeholder="描述"
                         draggable={false}
                         className={itemInputCls}
@@ -699,19 +649,14 @@ export function InvoiceEditorPage(
                         value={(item.unitPrice / 100).toString()}
                         onChange={(e) =>
                           updateItem(index, {
-                            unitPrice: Math.round(
-                              (Number(e.target.value) || 0) * 100,
-                            ),
+                            unitPrice: Math.round((Number(e.target.value) || 0) * 100),
                           })
                         }
                         draggable={false}
                         className={itemInputCls}
                       />
                       <span className="pr-2 text-right text-sm font-medium tabular-nums text-foreground">
-                        {money(
-                          Math.round(item.quantity * item.unitPrice),
-                          state.currency,
-                        )}
+                        {money(Math.round(item.quantity * item.unitPrice), state.currency)}
                       </span>
                       <button
                         type="button"
@@ -732,9 +677,9 @@ export function InvoiceEditorPage(
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="税率">
                   <select
-                    value={state.taxCustom ? "custom" : state.taxRate}
+                    value={state.taxCustom ? 'custom' : state.taxRate}
                     onChange={(e) => {
-                      if (e.target.value === "custom") {
+                      if (e.target.value === 'custom') {
                         patch({ taxCustom: true });
                       } else {
                         patch({ taxCustom: false, taxRate: e.target.value });
@@ -768,8 +713,7 @@ export function InvoiceEditorPage(
                         value={state.discountType}
                         onChange={(e) =>
                           patch({
-                            discountType: e.target
-                              .value as EditorState["discountType"],
+                            discountType: e.target.value as EditorState['discountType'],
                           })
                         }
                         className={inputCls}
@@ -788,7 +732,7 @@ export function InvoiceEditorPage(
                         className={`${inputCls} pr-7`}
                       />
                       <span className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-sm text-muted-foreground">
-                        {state.discountType === "PERCENT" ? "%" : "¥"}
+                        {state.discountType === 'PERCENT' ? '%' : '¥'}
                       </span>
                     </div>
                   </div>
@@ -807,7 +751,7 @@ export function InvoiceEditorPage(
             </Field>
           </div>
 
-          <div className={tab === "payment" ? "grid gap-5" : "hidden"}>
+          <div className={tab === 'payment' ? 'grid gap-5' : 'hidden'}>
             <Field label="状态">
               <select
                 value={state.status}
@@ -824,9 +768,7 @@ export function InvoiceEditorPage(
               <input
                 name="currency"
                 value={state.currency}
-                onChange={(e) =>
-                  patch({ currency: e.target.value.toUpperCase() })
-                }
+                onChange={(e) => patch({ currency: e.target.value.toUpperCase() })}
                 maxLength={8}
                 className={inputCls}
               />
@@ -843,7 +785,7 @@ export function InvoiceEditorPage(
             </Field>
           </div>
 
-          <div className={tab === "business" ? "grid gap-5" : "hidden"}>
+          <div className={tab === 'business' ? 'grid gap-5' : 'hidden'}>
             <div className="flex items-start gap-3 rounded-xl border border-input bg-card px-4 py-3">
               {platform?.logoUrl ? (
                 <img
@@ -853,16 +795,15 @@ export function InvoiceEditorPage(
                 />
               ) : (
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-semibold text-foreground">
-                  {initials(state.businessName || platform?.name || "")}
+                  {initials(state.businessName || platform?.name || '')}
                 </span>
               )}
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-foreground">
-                  {platform?.name || "未配置平台信息"}
+                  {platform?.name || '未配置平台信息'}
                 </p>
                 <p className="truncate text-sm text-muted-foreground">
-                  {platform?.description ||
-                    "平台「设置 → 平台信息」中的名称与图标会用于发票。"}
+                  {platform?.description || '平台「设置 → 平台信息」中的名称与图标会用于发票。'}
                 </p>
               </div>
             </div>
@@ -905,9 +846,7 @@ export function InvoiceEditorPage(
               onClick={() =>
                 patch({
                   businessName: platform?.name ?? state.businessName,
-                  paymentInfo: platform?.url
-                    ? `官网：${platform.url}`
-                    : state.paymentInfo,
+                  paymentInfo: platform?.url ? `官网：${platform.url}` : state.paymentInfo,
                 })
               }
               className="inline-flex h-10 w-fit items-center gap-1.5 rounded-xl border border-input bg-card px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
@@ -920,7 +859,7 @@ export function InvoiceEditorPage(
 
         {/* 右：实时预览 */}
         <InvoicePreview
-          number={isEdit ? (invoice?.number ?? "发票") : "预览"}
+          number={isEdit ? (invoice?.number ?? '发票') : '预览'}
           referenceNumber={state.referenceNumber}
           currency={preview.currency}
           issuedAt={state.issuedAt}
@@ -995,9 +934,9 @@ function InvoicePreview({
   paymentInfo: string;
 }): ReactElement {
   const metaRows: Array<{ label: string; value: string }> = [
-    { label: "参考号", value: referenceNumber || "—" },
-    { label: "签发日期", value: formatDate(issuedAt) },
-    { label: "到期日期", value: formatDate(dueAt) },
+    { label: '参考号', value: referenceNumber || '—' },
+    { label: '签发日期', value: formatDate(issuedAt) },
+    { label: '到期日期', value: formatDate(dueAt) },
   ];
 
   return (
@@ -1030,11 +969,7 @@ function InvoicePreview({
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt=""
-                  className="size-11 shrink-0 object-contain"
-                />
+                <img src={logoUrl} alt="" className="size-11 shrink-0 object-contain" />
               ) : (
                 <span
                   className="grid size-11 shrink-0 grid-cols-2 grid-rows-2 gap-1"
@@ -1048,12 +983,8 @@ function InvoicePreview({
               )}
             </div>
             <div className="text-right">
-              <p className="text-3xl font-normal tracking-[0.2em] text-foreground">
-                发票
-              </p>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">
-                {number}
-              </p>
+              <p className="text-3xl font-normal tracking-[0.2em] text-foreground">发票</p>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{number}</p>
             </div>
           </div>
 
@@ -1067,17 +998,13 @@ function InvoicePreview({
               ))}
               <div className="flex gap-1.5">
                 <dt className="text-muted-foreground">状态：</dt>
-                <dd className="font-medium text-foreground">
-                  {statusMeta(status).label}
-                </dd>
+                <dd className="font-medium text-foreground">{statusMeta(status).label}</dd>
               </div>
             </dl>
             <div className="text-xs">
               <p className="font-semibold text-foreground">收款信息</p>
               {paymentInfo ? (
-                <p className="mt-1 whitespace-pre-wrap text-muted-foreground">
-                  {paymentInfo}
-                </p>
+                <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{paymentInfo}</p>
               ) : (
                 <p className="mt-1 text-muted-foreground">—</p>
               )}
@@ -1089,46 +1016,34 @@ function InvoicePreview({
               <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
                 商户
               </p>
-              <p className="mt-1.5 text-sm font-semibold text-foreground">
-                {business.name || "—"}
-              </p>
+              <p className="mt-1.5 text-sm font-semibold text-foreground">{business.name || '—'}</p>
               {business.address ? (
                 <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
                   {business.address}
                 </p>
               ) : null}
               {business.email ? (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {business.email}
-                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{business.email}</p>
               ) : null}
               {business.phone ? (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {business.phone}
-                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{business.phone}</p>
               ) : null}
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
                 客户
               </p>
-              <p className="mt-1.5 text-sm font-semibold text-foreground">
-                {customer.name || "—"}
-              </p>
+              <p className="mt-1.5 text-sm font-semibold text-foreground">{customer.name || '—'}</p>
               {customer.address ? (
                 <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
                   {customer.address}
                 </p>
               ) : null}
               {customer.email ? (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {customer.email}
-                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{customer.email}</p>
               ) : null}
               {customer.taxId ? (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  税号：{customer.taxId}
-                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">税号：{customer.taxId}</p>
               ) : null}
             </div>
           </div>
@@ -1138,9 +1053,7 @@ function InvoicePreview({
               <thead className="bg-muted text-left">
                 <tr className="text-[10px] font-semibold uppercase tracking-wide text-foreground">
                   <th className="px-3 py-2.5 font-semibold">描述</th>
-                  <th className="px-3 py-2.5 text-center font-semibold">
-                    数量
-                  </th>
+                  <th className="px-3 py-2.5 text-center font-semibold">数量</th>
                   <th className="px-3 py-2.5 text-right font-semibold">单价</th>
                   <th className="px-3 py-2.5 text-right font-semibold">小计</th>
                 </tr>
@@ -1148,23 +1061,15 @@ function InvoicePreview({
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={4}
-                      className="px-3 py-6 text-center text-xs text-muted-foreground"
-                    >
+                    <td colSpan={4} className="px-3 py-6 text-center text-xs text-muted-foreground">
                       暂无明细
                     </td>
                   </tr>
                 ) : null}
                 {items.map((item, index) => (
-                  <tr
-                    key={index}
-                    className="border-b border-border/70 last:border-0"
-                  >
-                    <td className="px-3 py-2.5">{item.description || "—"}</td>
-                    <td className="px-3 py-2.5 text-center tabular-nums">
-                      {item.quantity}
-                    </td>
+                  <tr key={index} className="border-b border-border/70 last:border-0">
+                    <td className="px-3 py-2.5">{item.description || '—'}</td>
+                    <td className="px-3 py-2.5 text-center tabular-nums">{item.quantity}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">
                       {money(item.unitPrice, currency)}
                     </td>
@@ -1181,23 +1086,17 @@ function InvoicePreview({
             <dl className="w-full max-w-xs space-y-2 text-xs">
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">净额</dt>
-                <dd className="tabular-nums text-foreground">
-                  {money(subtotal, currency)}
-                </dd>
+                <dd className="tabular-nums text-foreground">{money(subtotal, currency)}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">折扣</dt>
                 <dd className="tabular-nums text-foreground">
-                  {discount > 0
-                    ? `-${money(discount, currency)}`
-                    : money(0, currency)}
+                  {discount > 0 ? `-${money(discount, currency)}` : money(0, currency)}
                 </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">税额（{taxRate}%）</dt>
-                <dd className="tabular-nums text-foreground">
-                  {money(taxAmount, currency)}
-                </dd>
+                <dd className="tabular-nums text-foreground">{money(taxAmount, currency)}</dd>
               </div>
               <div className="flex items-center justify-between border-y-2 border-foreground py-2.5 text-sm font-semibold text-foreground">
                 <dt className="uppercase tracking-wide">应付合计</dt>
@@ -1213,7 +1112,7 @@ function InvoicePreview({
             </div>
             <div className="sm:text-right">
               {notes ? <p className="whitespace-pre-wrap">{notes}</p> : null}
-              <p>由 {business.name || "商户"} 开具</p>
+              <p>由 {business.name || '商户'} 开具</p>
             </div>
           </div>
         </div>
@@ -1227,10 +1126,8 @@ function InvoicePreview({
 /* ------------------------------------------------------------------ */
 
 export function InvoiceListPage(props: AdminPageComponentProps): ReactElement {
-  const invoices =
-    (props.data.invoices as { invoices?: Invoice[] } | undefined)?.invoices ??
-    [];
-  const deleteAction = props.actions["invoice.delete"];
+  const invoices = (props.data.invoices as { invoices?: Invoice[] } | undefined)?.invoices ?? [];
+  const deleteAction = props.actions['invoice.delete'];
   return (
     <main className="w-full space-y-6">
       <PageHeader
@@ -1260,10 +1157,7 @@ export function InvoiceListPage(props: AdminPageComponentProps): ReactElement {
             </thead>
             <tbody>
               {invoices.map((invoice) => (
-                <tr
-                  key={invoice.id}
-                  className="border-b last:border-0 hover:bg-muted/30"
-                >
+                <tr key={invoice.id} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="px-4 py-2.5">
                     <Link
                       href={`/admin/plugin/invoice/invoices/${invoice.id}`}
@@ -1278,7 +1172,7 @@ export function InvoiceListPage(props: AdminPageComponentProps): ReactElement {
                     ) : null}
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
-                    {invoice.customerName || "—"}
+                    {invoice.customerName || '—'}
                   </td>
                   <td className="px-4 py-2.5">
                     <Badge meta={statusMeta(invoice.status)} />
@@ -1313,9 +1207,7 @@ export function InvoiceListPage(props: AdminPageComponentProps): ReactElement {
             <Plus className="size-5" />
           </span>
           <p className="mt-4 text-sm font-medium">还没有发票</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            点击「新建发票」开始开具第一张。
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">点击「新建发票」开始开具第一张。</p>
         </div>
       )}
     </main>
@@ -1323,7 +1215,7 @@ export function InvoiceListPage(props: AdminPageComponentProps): ReactElement {
 }
 
 export const adminPages = {
-  "admin/invoices": InvoiceListPage,
-  "admin/invoice-editor": InvoiceEditorPage,
-  "admin/invoice-new": InvoiceEditorPage,
+  'admin/invoices': InvoiceListPage,
+  'admin/invoice-editor': InvoiceEditorPage,
+  'admin/invoice-new': InvoiceEditorPage,
 } as const;

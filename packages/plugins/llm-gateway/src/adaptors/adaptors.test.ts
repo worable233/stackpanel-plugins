@@ -147,7 +147,9 @@ describe('buildRequest', () => {
 
   it('azure rewrites to the deployments path and sets api-version', () => {
     const call = resolveAdaptor('azure-openai')!.buildRequest(
-      request({ account: account({ options: { deployment: 'my-deploy', apiVersion: '2024-10-21' } }) }),
+      request({
+        account: account({ options: { deployment: 'my-deploy', apiVersion: '2024-10-21' } }),
+      }),
     );
     expect(call.url).toContain('/openai/deployments/my-deploy/chat/completions');
     expect(call.url).toContain('api-version=2024-10-21');
@@ -157,7 +159,9 @@ describe('buildRequest', () => {
   it('vertex rewrites to projects/locations and adds alt=sse when streaming', () => {
     const call = resolveAdaptor('vertex')!.buildRequest(
       request({
-        account: account({ options: { project: 'my-project', region: 'us-central1', accessToken: 'ya29' } }),
+        account: account({
+          options: { project: 'my-project', region: 'us-central1', accessToken: 'ya29' },
+        }),
         subPath: 'v1beta/models/gemini-2.5-pro:generateContent',
         stream: true,
       }),
@@ -222,7 +226,9 @@ describe('capabilities', () => {
   });
 
   it('bedrock is the only customSigning provider', () => {
-    const signing = listAdaptors().filter((a) => a.capabilities.customSigning).map((a) => a.id);
+    const signing = listAdaptors()
+      .filter((a) => a.capabilities.customSigning)
+      .map((a) => a.id);
     expect(signing).toEqual(['bedrock']);
   });
 
@@ -295,7 +301,12 @@ describe('usage extraction', () => {
 
   it('extracts DeepSeek prompt_cache_hit_tokens', () => {
     const usage = resolveAdaptor('deepseek')!.extractUsage({
-      usage: { prompt_tokens: 50, completion_tokens: 10, total_tokens: 60, prompt_cache_hit_tokens: 20 },
+      usage: {
+        prompt_tokens: 50,
+        completion_tokens: 10,
+        total_tokens: 60,
+        prompt_cache_hit_tokens: 20,
+      },
     });
     expect(usage?.cacheReadTokens).toBe(20);
   });
@@ -389,7 +400,9 @@ describe('error classification', () => {
   it('treats Gemini invalid API key as a 502 credential error', () => {
     const error = resolveAdaptor('gemini')!.classifyError({
       status: 400,
-      bodyText: JSON.stringify({ error: { message: 'API key not valid', status: 'INVALID_ARGUMENT' } }),
+      bodyText: JSON.stringify({
+        error: { message: 'API key not valid', status: 'INVALID_ARGUMENT' },
+      }),
       headers: headers({}),
     });
     expect(error.status).toBe(502);
@@ -400,8 +413,12 @@ describe('error classification', () => {
 describe('retry decisions', () => {
   it('isRetryable follows the classified error', () => {
     const adaptor = resolveAdaptor('openai')!;
-    expect(adaptor.isRetryable(new GatewayError(429, 'upstream_rate_limited', 'x'), 429)).toBe(true);
-    expect(adaptor.isRetryable(new GatewayError(400, 'invalid_request', 'x', { retryable: false }), 400)).toBe(false);
+    expect(adaptor.isRetryable(new GatewayError(429, 'upstream_rate_limited', 'x'), 429)).toBe(
+      true,
+    );
+    expect(
+      adaptor.isRetryable(new GatewayError(400, 'invalid_request', 'x', { retryable: false }), 400),
+    ).toBe(false);
   });
 });
 

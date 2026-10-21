@@ -15,9 +15,7 @@ export interface UpstreamRecord extends ZjmfUpstreamData {
   updatedAt: Date;
 }
 
-export function toUpstream(
-  instance: ExtensionInstance<ZjmfUpstreamData>,
-): UpstreamRecord {
+export function toUpstream(instance: ExtensionInstance<ZjmfUpstreamData>): UpstreamRecord {
   return {
     id: instance.name,
     ...instance.spec,
@@ -27,10 +25,7 @@ export function toUpstream(
 }
 
 export async function getUpstream(id: string): Promise<UpstreamRecord | null> {
-  const instance = await extensions().get<ZjmfUpstreamData>(
-    zjmfUpstreamModel,
-    id,
-  );
+  const instance = await extensions().get<ZjmfUpstreamData>(zjmfUpstreamModel, id);
   return instance ? toUpstream(instance) : null;
 }
 
@@ -58,30 +53,17 @@ export interface ProductUpstreamBinding {
   productId: string;
 }
 
-export function readUpstreamBinding(
-  metadata: unknown,
-): ProductUpstreamBinding | null {
-  if (
-    metadata === null ||
-    typeof metadata !== 'object' ||
-    Array.isArray(metadata)
-  )
-    return null;
+export function readUpstreamBinding(metadata: unknown): ProductUpstreamBinding | null {
+  if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
   const upstream = (metadata as Record<string, unknown>)['upstream'];
-  if (
-    upstream === null ||
-    typeof upstream !== 'object' ||
-    Array.isArray(upstream)
-  )
-    return null;
+  if (upstream === null || typeof upstream !== 'object' || Array.isArray(upstream)) return null;
   const record = upstream as Record<string, unknown>;
   if (record['providerId'] !== 'zjmf') return null;
   const productId = record['productId'];
   if (typeof productId !== 'string' || !productId) return null;
   return {
     providerId: 'zjmf',
-    sourceRef:
-      typeof record['sourceRef'] === 'string' ? record['sourceRef'] : null,
+    sourceRef: typeof record['sourceRef'] === 'string' ? record['sourceRef'] : null,
     productId,
   };
 }
@@ -136,10 +118,7 @@ export async function finishSyncRun(
     error?: string | null;
   },
 ): Promise<void> {
-  const instance = await extensions().get<ZjmfSyncRunData>(
-    zjmfSyncRunModel,
-    id,
-  );
+  const instance = await extensions().get<ZjmfSyncRunData>(zjmfSyncRunModel, id);
   const base: ZjmfSyncRunData = instance?.spec ?? {
     upstreamId: '',
     status: 'RUNNING',
@@ -174,15 +153,11 @@ export async function listSyncRuns(
 
 /* ---------- store product capability wrappers ---------- */
 
-export async function getStoreProduct(
-  id: string,
-): Promise<StoreProductSummary | null> {
+export async function getStoreProduct(id: string): Promise<StoreProductSummary | null> {
   return storeProductRead().getById(id);
 }
 
-export async function listStoreProductsByIds(
-  ids: string[],
-): Promise<StoreProductSummary[]> {
+export async function listStoreProductsByIds(ids: string[]): Promise<StoreProductSummary[]> {
   return storeProductRead().listByIds(ids);
 }
 

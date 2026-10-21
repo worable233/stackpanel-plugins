@@ -19,12 +19,7 @@ export type ZJMFProtocol = 'finance' | 'v10';
  *
  * `auto` 表示按实例详情路由自动探测并缓存。
  */
-export type ZJMFV10Module =
-  | 'auto'
-  | 'mf_cloud'
-  | 'remf_cloud'
-  | 'mf_dcim'
-  | 'idcsmart_common';
+export type ZJMFV10Module = 'auto' | 'mf_cloud' | 'remf_cloud' | 'mf_dcim' | 'idcsmart_common';
 
 export interface ZJMFConnection {
   id: string;
@@ -211,9 +206,7 @@ export class ZJMFClient {
    * 顺序探测详情路由，命中后缓存（一个上游实例通常只装一种模块）。
    * 全部 404/400 时回退 `mf_cloud`（最常见），让真实错误浮出而不是静默失败。
    */
-  private async resolveFamily(
-    serviceId: string,
-  ): Promise<Exclude<ZJMFV10Module, 'auto'>> {
+  private async resolveFamily(serviceId: string): Promise<Exclude<ZJMFV10Module, 'auto'>> {
     const known = this.knownFamily();
     if (known) return known;
     const candidates: Array<Exclude<ZJMFV10Module, 'auto'>> = [
@@ -257,10 +250,7 @@ export class ZJMFClient {
    * `idcsmart_common` 没有 `host/:id` 详情，只有 `host/:id/configoption`
    * （配置项即它的详情面）。证据：`public/plugins/server/idcsmart_common/route.php:22`。
    */
-  private familyDetailPath(
-    family: Exclude<ZJMFV10Module, 'auto'>,
-    serviceId: string,
-  ): string {
+  private familyDetailPath(family: Exclude<ZJMFV10Module, 'auto'>, serviceId: string): string {
     const encoded = encodeURIComponent(serviceId);
     return family === 'idcsmart_common'
       ? `${this.familyBase(family)}/${encoded}/configoption`
@@ -273,9 +263,7 @@ export class ZJMFClient {
   }> {
     // 证据：10.4.6/route/api.php:13 `Route::get('product', ...)`（V10 开放 API 已取证）。
     const data = await this.authorizedGet(
-      this.connection.protocol === 'finance'
-        ? '/api/product/list'
-        : '/api/v1/product',
+      this.connection.protocol === 'finance' ? '/api/product/list' : '/api/v1/product',
     );
     const payload = object(data['data']);
     const list = Array.isArray(payload['list']) ? payload['list'] : [];
@@ -315,9 +303,10 @@ export class ZJMFClient {
     const pageSize = Math.min(cap, 50);
     const hosts = new Map<string, ZJMFHost>();
     for (let page = 1; page <= 10000; page++) {
-      const path = this.connection.protocol === 'finance'
-        ? `/host/list?page=${page}&limit=${pageSize}`
-        : `console/v1/host?page=${page}&limit=${pageSize}`;
+      const path =
+        this.connection.protocol === 'finance'
+          ? `/host/list?page=${page}&limit=${pageSize}`
+          : `console/v1/host?page=${page}&limit=${pageSize}`;
       const data = await this.authorizedGet(path);
       const payload = object(data['data']);
       const list = Array.isArray(payload['list']) ? payload['list'] : [];
@@ -328,8 +317,14 @@ export class ZJMFClient {
       }
       if (hosts.size >= cap) return [...hosts.values()].slice(0, cap);
       const total = Number(payload['count'] ?? payload['total']);
-      if (list.length === 0 || (Number.isFinite(total) && hosts.size >= total) || (!Number.isFinite(total) && list.length < pageSize)) return [...hosts.values()];
-      if (hosts.size === before) throw new ZJMFClientError(502, '上游实例分页未前进，无法确认完整列表');
+      if (
+        list.length === 0 ||
+        (Number.isFinite(total) && hosts.size >= total) ||
+        (!Number.isFinite(total) && list.length < pageSize)
+      )
+        return [...hosts.values()];
+      if (hosts.size === before)
+        throw new ZJMFClientError(502, '上游实例分页未前进，无法确认完整列表');
     }
     throw new ZJMFClientError(502, '上游实例分页超过安全限制，未返回不完整列表');
   }
@@ -354,10 +349,11 @@ export class ZJMFClient {
         qty: '1',
         config_options: { configoption: opts.selections ?? {} },
       };
-      if (opts.cycle) body['config_options'] = {
-        ...(body['config_options'] as Record<string, unknown>),
-        cycle: opts.cycle,
-      };
+      if (opts.cycle)
+        body['config_options'] = {
+          ...(body['config_options'] as Record<string, unknown>),
+          cycle: opts.cycle,
+        };
       const data = await this.authorizedPost(
         `console/v1/product/${encoded}/config_option?is_downstream=1`,
         body,
@@ -401,9 +397,7 @@ export class ZJMFClient {
       pid: productId,
       billingcycle: opts.cycle ?? 'monthly',
     });
-    const data = await this.authorizedGet(
-      `/cart/set_config?${params.toString()}`,
-    );
+    const data = await this.authorizedGet(`/cart/set_config?${params.toString()}`);
     // set_config 响应是扁平的（product/option 在顶层），兼容可能的 data 包裹。
     const payload = object(data['data'] ?? data);
     const product = object(payload['product']);
@@ -418,9 +412,7 @@ export class ZJMFClient {
         return { id, label: label ?? id, price };
       })
       .filter((cycle): cycle is NonNullable<typeof cycle> => cycle !== null);
-    const optionRows = Array.isArray(payload['option'])
-      ? payload['option']
-      : [];
+    const optionRows = Array.isArray(payload['option']) ? payload['option'] : [];
     const options = optionRows
       .map((row) => normalizeConfigOption(row))
       .filter((option): option is ZJMFConfigOption => option !== null);
@@ -466,8 +458,7 @@ export class ZJMFClient {
       const priceText = stringOrNull(payload['price']);
       const price = safeMinor(priceText);
       if (price === undefined) return null;
-      const breakdown: Array<{ label: string; value: string; price?: number }> =
-        [];
+      const breakdown: Array<{ label: string; value: string; price?: number }> = [];
       const preview = Array.isArray(payload['preview']) ? payload['preview'] : [];
       for (const row of preview) {
         const o = object(row);
@@ -500,12 +491,10 @@ export class ZJMFClient {
     }
     const data = await this.authorizedPost('/cart/get_total', body);
     const products = object(data['products']);
-    const saleTotal =
-      stringOrNull(products['sale_total']) ?? stringOrNull(products['total']);
+    const saleTotal = stringOrNull(products['sale_total']) ?? stringOrNull(products['total']);
     const quotedTotal = safeMinor(saleTotal);
     if (quotedTotal === undefined) return null;
-    const breakdown: Array<{ label: string; value: string; price?: number }> =
-      [];
+    const breakdown: Array<{ label: string; value: string; price?: number }> = [];
     const child = Array.isArray(products['child']) ? products['child'] : [];
     for (const row of child) {
       const o = object(row);
@@ -525,9 +514,7 @@ export class ZJMFClient {
     return {
       price,
       breakdown,
-      summary: breakdown
-        .map((item) => `${item.label}:${item.value}`)
-        .join(' · '),
+      summary: breakdown.map((item) => `${item.label}:${item.value}`).join(' · '),
     };
   }
 
@@ -546,7 +533,10 @@ export class ZJMFClient {
       quantity?: number;
       reference?: string;
       downstream?: { id: string; token: string; url: string };
-      checkpoint?: (service: { providerServiceId: string; runtime: Record<string, unknown> }) => Promise<void>;
+      checkpoint?: (service: {
+        providerServiceId: string;
+        runtime: Record<string, unknown>;
+      }) => Promise<void>;
       cycle?: string;
       selections?: Record<string, string | number>;
     } = {},
@@ -555,8 +545,14 @@ export class ZJMFClient {
     credentials: Record<string, string>;
     runtime: Record<string, unknown>;
   }> {
-    if ((opts.quantity ?? 1) !== 1) throw new ZJMFClientError(409, '上游实例必须逐台下单，禁止丢弃批量实例标识');
-    if (opts.downstream && (!/^\d+$/.test(opts.downstream.id) || !/^[a-f0-9]{32}$/.test(opts.downstream.token) || !/^https:\/\/[^/?#]+\/?$/.test(opts.downstream.url)))
+    if ((opts.quantity ?? 1) !== 1)
+      throw new ZJMFClientError(409, '上游实例必须逐台下单，禁止丢弃批量实例标识');
+    if (
+      opts.downstream &&
+      (!/^\d+$/.test(opts.downstream.id) ||
+        !/^[a-f0-9]{32}$/.test(opts.downstream.token) ||
+        !/^https:\/\/[^/?#]+\/?$/.test(opts.downstream.url))
+    )
       throw new ZJMFClientError(409, '下游关联参数无效，禁止提交上游请求');
     if (this.connection.protocol === 'finance') {
       return this.createServiceFinance(productId, opts);
@@ -571,7 +567,10 @@ export class ZJMFClient {
       quantity?: number;
       reference?: string;
       downstream?: { id: string; token: string; url: string };
-      checkpoint?: (service: { providerServiceId: string; runtime: Record<string, unknown> }) => Promise<void>;
+      checkpoint?: (service: {
+        providerServiceId: string;
+        runtime: Record<string, unknown>;
+      }) => Promise<void>;
       cycle?: string;
       selections?: Record<string, string | number>;
     },
@@ -600,7 +599,13 @@ export class ZJMFClient {
     // 证据：`app/common/logic/ResModuleLogic.php:415-425`。
     const settle = await this.authorizedPost('console/v1/cart/settle', {
       positions: ['0'],
-      ...(opts.downstream ? { downstream_host_id: opts.downstream.id, downstream_token: opts.downstream.token, downstream_url: opts.downstream.url } : {}),
+      ...(opts.downstream
+        ? {
+            downstream_host_id: opts.downstream.id,
+            downstream_token: opts.downstream.token,
+            downstream_url: opts.downstream.url,
+          }
+        : {}),
     });
     const payload = object(settle['data']);
     // V10 返回 host_ids[]，财务返回 hostid。
@@ -618,15 +623,32 @@ export class ZJMFClient {
     const amount = Number(payload['amount'] ?? 0);
     let paid = payload['amount'] !== undefined && Number.isFinite(amount) && amount === 0;
     const orderId = stringOrNull(payload['order_id']);
-    const checkpointRuntime: Record<string, unknown> = { invoiceId: orderId, billingCycle: opts.cycle ?? 'monthly', config: opts.selections ?? {}, paid: false, paymentState: 'ORDER_CREATED', status: 'PENDING_INVOICE' };
+    const checkpointRuntime: Record<string, unknown> = {
+      invoiceId: orderId,
+      billingCycle: opts.cycle ?? 'monthly',
+      config: opts.selections ?? {},
+      paid: false,
+      paymentState: 'ORDER_CREATED',
+      status: 'PENDING_INVOICE',
+    };
     await opts.checkpoint?.({ providerServiceId, runtime: checkpointRuntime });
     if (Array.isArray(hostIds) && hostIds.length !== 1) {
-      await opts.checkpoint?.({ providerServiceId, runtime: { ...checkpointRuntime, providerServiceIds: hostIds, paymentState: 'REQUIRES_RECONCILIATION' } });
+      await opts.checkpoint?.({
+        providerServiceId,
+        runtime: {
+          ...checkpointRuntime,
+          providerServiceIds: hostIds,
+          paymentState: 'REQUIRES_RECONCILIATION',
+        },
+      });
       throw new ZJMFClientError(409, '上游返回了非预期数量的实例，已保留全部标识，禁止付款');
     }
     let paymentState = paid ? 'PAID' : 'PAYMENT_REQUIRED';
     if (!paid && orderId) {
-      await opts.checkpoint?.({ providerServiceId, runtime: { ...checkpointRuntime, paymentState: 'PAYMENT_IN_FLIGHT' } });
+      await opts.checkpoint?.({
+        providerServiceId,
+        runtime: { ...checkpointRuntime, paymentState: 'PAYMENT_IN_FLIGHT' },
+      });
       try {
         const pay = await this.authorizedPost('console/v1/pay', {
           id: orderId,
@@ -634,7 +656,11 @@ export class ZJMFClient {
         });
         // V10 付费返回 code=Paid 表示完成，Unpaid 表示还需三方支付。
         paid = pay['code'] === 'Paid';
-        paymentState = paid ? 'PAID' : pay['code'] === 'Unpaid' ? 'PAYMENT_REQUIRED' : 'PAYMENT_UNKNOWN';
+        paymentState = paid
+          ? 'PAID'
+          : pay['code'] === 'Unpaid'
+            ? 'PAYMENT_REQUIRED'
+            : 'PAYMENT_UNKNOWN';
       } catch {
         paid = false;
         paymentState = 'PAYMENT_UNKNOWN';
@@ -663,14 +689,10 @@ export class ZJMFClient {
    * 开通后拉一次实例详情，提取初始登录凭证与 IP。
    * 上游此时可能仍在「开通中」，详情为空/失败都属正常 → 返回空对象。
    */
-  private async fetchV10Credentials(
-    serviceId: string,
-  ): Promise<Record<string, string>> {
+  private async fetchV10Credentials(serviceId: string): Promise<Record<string, string>> {
     try {
       const family = await this.resolveFamily(serviceId);
-      const data = await this.authorizedGet(
-        this.familyDetailPath(family, serviceId),
-      );
+      const data = await this.authorizedGet(this.familyDetailPath(family, serviceId));
       return extractCredentials(object(data['data']));
     } catch {
       return {};
@@ -685,12 +707,27 @@ export class ZJMFClient {
   /** Pay a known invoice once. Caller must durably fence concurrent/repeated payments. */
   async payServiceInvoice(invoiceId: string): Promise<{ paid: boolean; paymentState: string }> {
     try {
-      const payment = this.connection.protocol === 'finance'
-        ? await this.authorizedPost('/apply_credit', { invoiceid: invoiceId, use_credit: '1', enough: '1', is_api: '1' })
-        : await this.authorizedPost('console/v1/pay', { id: invoiceId, gateway: 'credit' });
-      const paid = this.connection.protocol === 'finance' ? payment['status'] === 1001 : payment['code'] === 'Paid';
-      const unpaid = this.connection.protocol === 'finance' ? payment['status'] === 200 : payment['code'] === 'Unpaid';
-      return { paid, paymentState: paid ? 'PAID' : unpaid ? 'PAYMENT_REQUIRED' : 'PAYMENT_UNKNOWN' };
+      const payment =
+        this.connection.protocol === 'finance'
+          ? await this.authorizedPost('/apply_credit', {
+              invoiceid: invoiceId,
+              use_credit: '1',
+              enough: '1',
+              is_api: '1',
+            })
+          : await this.authorizedPost('console/v1/pay', { id: invoiceId, gateway: 'credit' });
+      const paid =
+        this.connection.protocol === 'finance'
+          ? payment['status'] === 1001
+          : payment['code'] === 'Paid';
+      const unpaid =
+        this.connection.protocol === 'finance'
+          ? payment['status'] === 200
+          : payment['code'] === 'Unpaid';
+      return {
+        paid,
+        paymentState: paid ? 'PAID' : unpaid ? 'PAYMENT_REQUIRED' : 'PAYMENT_UNKNOWN',
+      };
     } catch {
       // Unknown is not unpaid. Never automatically submit another debit.
       return { paid: false, paymentState: 'PAYMENT_UNKNOWN' };
@@ -699,19 +736,42 @@ export class ZJMFClient {
 
   /** Finance V1 UserInvoiceController::getInvoicesDetail: GET only, account-scoped. */
   async verifyCancelledInvoice(invoiceId: string, serviceIds: string[]): Promise<void> {
-    if (this.connection.protocol !== 'finance' || !/^\d+$/.test(invoiceId) || serviceIds.length !== 1)
+    if (
+      this.connection.protocol !== 'finance' ||
+      !/^\d+$/.test(invoiceId) ||
+      serviceIds.length !== 1
+    )
       throw new ZJMFClientError(409, '缺少可核验的老财务原账单及实例标识');
-    const response = await this.authorizedGet(`/get_invoices_detail?id=${encodeURIComponent(invoiceId)}`);
+    const response = await this.authorizedGet(
+      `/get_invoices_detail?id=${encodeURIComponent(invoiceId)}`,
+    );
     const data = object(response['data']);
     const detail = object(data['detail']);
-    const zero = (value: unknown) => (typeof value === 'number' || typeof value === 'string') && /^0+(\.0+)?$/.test(String(value));
-    const money = (value: unknown) => (typeof value === 'number' || typeof value === 'string') && /^\d+(\.\d+)?$/.test(String(value));
-    if (stringOrNull(detail['id']) !== invoiceId || detail['status'] !== 'Cancelled' || !zero(detail['paid_time']) || !zero(detail['credit']) || !zero(detail['use_credit_limit']) || !money(detail['subtotal']) || !money(detail['total']) || Number(detail['subtotal']) !== Number(detail['total']) || !Array.isArray(data['accounts']) || data['accounts'].length !== 0)
+    const zero = (value: unknown) =>
+      (typeof value === 'number' || typeof value === 'string') && /^0+(\.0+)?$/.test(String(value));
+    const money = (value: unknown) =>
+      (typeof value === 'number' || typeof value === 'string') &&
+      /^\d+(\.\d+)?$/.test(String(value));
+    if (
+      stringOrNull(detail['id']) !== invoiceId ||
+      detail['status'] !== 'Cancelled' ||
+      !zero(detail['paid_time']) ||
+      !zero(detail['credit']) ||
+      !zero(detail['use_credit_limit']) ||
+      !money(detail['subtotal']) ||
+      !money(detail['total']) ||
+      Number(detail['subtotal']) !== Number(detail['total']) ||
+      !Array.isArray(data['accounts']) ||
+      data['accounts'].length !== 0
+    )
       throw new ZJMFClientError(409, '原账单未取消、存在付款/余额抵扣，或财务证据不完整，禁止重开');
     const items = data['invoice_items'];
     if (!Array.isArray(items)) throw new ZJMFClientError(409, '原账单缺少实例关联证据');
-    const hosts = items.map(object).filter(item => item['type'] === 'host').map(item => stringOrNull(item['rel_id']));
-    if (hosts.length !== serviceIds.length || !serviceIds.every(id => hosts.includes(id)))
+    const hosts = items
+      .map(object)
+      .filter((item) => item['type'] === 'host')
+      .map((item) => stringOrNull(item['rel_id']));
+    if (hosts.length !== serviceIds.length || !serviceIds.every((id) => hosts.includes(id)))
       throw new ZJMFClientError(409, '原账单与实例不匹配，禁止重开');
     for (const id of serviceIds) {
       const header = await this.authorizedGet(`/host/header?host_id=${encodeURIComponent(id)}`);
@@ -729,7 +789,10 @@ export class ZJMFClient {
       downstream?: { id: string; token: string; url: string };
       cycle?: string;
       selections?: Record<string, string | number>;
-      checkpoint?: (service: { providerServiceId: string; runtime: Record<string, unknown> }) => Promise<void>;
+      checkpoint?: (service: {
+        providerServiceId: string;
+        runtime: Record<string, unknown>;
+      }) => Promise<void>;
     },
   ): Promise<{
     providerServiceId: string;
@@ -738,14 +801,20 @@ export class ZJMFClient {
   }> {
     const billingCycle = opts.cycle ?? 'monthly';
     // 共享购物车必须串行清空成功，失败则停止，避免混入其他请求的商品。
-    const downstream: FormBody = opts.downstream ? {
-      downstream_id: opts.downstream.id, downstream_token: opts.downstream.token, downstream_url: opts.downstream.url,
-    } : {};
+    const downstream: FormBody = opts.downstream
+      ? {
+          downstream_id: opts.downstream.id,
+          downstream_token: opts.downstream.token,
+          downstream_url: opts.downstream.url,
+        }
+      : {};
     const cleared = await this.clearCartWithTimeout(downstream);
     const restoredId = stringOrNull(cleared['hostid']);
     const restoredInvoice = stringOrNull(cleared['invoiceid']);
-    if (restoredInvoice && !restoredId) throw new ZJMFClientError(409, '原上游账单已存在但缺少实例，禁止重新下单');
-    if (restoredId && !restoredInvoice) throw new ZJMFClientError(409, '原上游实例已存在但缺少账单，禁止重新下单');
+    if (restoredInvoice && !restoredId)
+      throw new ZJMFClientError(409, '原上游账单已存在但缺少实例，禁止重新下单');
+    if (restoredId && !restoredInvoice)
+      throw new ZJMFClientError(409, '原上游实例已存在但缺少账单，禁止重新下单');
 
     const addBody: FormBody = {
       pid: productId,
@@ -760,7 +829,9 @@ export class ZJMFClient {
     }
     if (!restoredId) await this.authorizedPost('/cart/add_to_shop', addBody);
 
-    const settle = restoredId ? { data: { hostid: restoredId, invoiceid: restoredInvoice } } : await this.authorizedPost('/cart/settle', downstream);
+    const settle = restoredId
+      ? { data: { hostid: restoredId, invoiceid: restoredInvoice } }
+      : await this.authorizedPost('/cart/settle', downstream);
     const settlePayload = object(settle['data']);
     const hostIds = settlePayload['hostid'];
     const invoiceId = stringOrNull(settlePayload['invoiceid']);
@@ -771,12 +842,26 @@ export class ZJMFClient {
       throw new ZJMFClientError(502, '上游结算未返回服务 ID');
     }
 
-    const checkpointRuntime: Record<string, unknown> = { invoiceId, billingCycle, config: opts.selections ?? {}, paid: false, paymentState: 'ORDER_CREATED', status: 'PENDING_INVOICE' };
+    const checkpointRuntime: Record<string, unknown> = {
+      invoiceId,
+      billingCycle,
+      config: opts.selections ?? {},
+      paid: false,
+      paymentState: 'ORDER_CREATED',
+      status: 'PENDING_INVOICE',
+    };
     // Durable identity must reach the provider/store before any payment can start.
     await opts.checkpoint?.({ providerServiceId, runtime: checkpointRuntime });
 
     if (Array.isArray(hostIds) && hostIds.length !== 1) {
-      await opts.checkpoint?.({ providerServiceId, runtime: { ...checkpointRuntime, providerServiceIds: hostIds, paymentState: 'REQUIRES_RECONCILIATION' } });
+      await opts.checkpoint?.({
+        providerServiceId,
+        runtime: {
+          ...checkpointRuntime,
+          providerServiceIds: hostIds,
+          paymentState: 'REQUIRES_RECONCILIATION',
+        },
+      });
       throw new ZJMFClientError(409, '上游返回了非预期数量的实例，已保留全部标识，禁止付款');
     }
 
@@ -784,7 +869,10 @@ export class ZJMFClient {
     let paid = false;
     let paymentState = 'PAYMENT_REQUIRED';
     if (invoiceId) {
-      await opts.checkpoint?.({ providerServiceId, runtime: { ...checkpointRuntime, paymentState: 'PAYMENT_IN_FLIGHT' } });
+      await opts.checkpoint?.({
+        providerServiceId,
+        runtime: { ...checkpointRuntime, paymentState: 'PAYMENT_IN_FLIGHT' },
+      });
       try {
         const credit = await this.authorizedPost('/apply_credit', {
           invoiceid: invoiceId,
@@ -794,7 +882,11 @@ export class ZJMFClient {
           ...downstream,
         });
         paid = credit['status'] === 1001;
-        paymentState = paid ? 'PAID' : credit['status'] === 200 ? 'PAYMENT_REQUIRED' : 'PAYMENT_UNKNOWN';
+        paymentState = paid
+          ? 'PAID'
+          : credit['status'] === 200
+            ? 'PAYMENT_REQUIRED'
+            : 'PAYMENT_UNKNOWN';
       } catch {
         paid = false;
         paymentState = 'PAYMENT_UNKNOWN';
@@ -834,8 +926,7 @@ export class ZJMFClient {
         stringOrNull(host['status']) ??
         stringOrNull(host['status_text']);
       const statusLabel =
-        stringOrNull(host['domainstatus_desc']) ??
-        stringOrNull(host['status_text']);
+        stringOrNull(host['domainstatus_desc']) ?? stringOrNull(host['status_text']);
       return pickServiceDetail({
         ...(summary ?? {}),
         ...host,
@@ -850,9 +941,7 @@ export class ZJMFClient {
     const family = await this.resolveFamily(serviceId);
     const [generic, specific] = await Promise.all([
       this.authorizedGet(`console/v1/host/${encoded}`).catch(() => null),
-      this.authorizedGet(this.familyDetailPath(family, serviceId)).catch(
-        () => null,
-      ),
+      this.authorizedGet(this.familyDetailPath(family, serviceId)).catch(() => null),
     ]);
     const genericPayload = object(object(generic?.['data'])['host']);
     const specificPayload = object(specific?.['data']);
@@ -860,15 +949,9 @@ export class ZJMFClient {
     return pickServiceDetail({
       ...merged,
       // power_status 是运行状态（on/off/operating/fault）；host.status 是生命周期状态。
-      status:
-        stringOrNull(merged['power_status']) ??
-        stringOrNull(merged['status']),
-      ...(epochToIso(merged['due_time'])
-        ? { expiresAt: epochToIso(merged['due_time']) }
-        : {}),
-      ...(stringOrNull(merged['billing_cycle'])
-        ? { cycle: merged['billing_cycle'] }
-        : {}),
+      status: stringOrNull(merged['power_status']) ?? stringOrNull(merged['status']),
+      ...(epochToIso(merged['due_time']) ? { expiresAt: epochToIso(merged['due_time']) } : {}),
+      ...(stringOrNull(merged['billing_cycle']) ? { cycle: merged['billing_cycle'] } : {}),
     });
   }
 
@@ -878,32 +961,24 @@ export class ZJMFClient {
    * 上游成功但列表无匹配项 → 返回 null（无规格，属合法「空」）；
    * 传输/鉴权/HTTP 错误则上抛，不再静默降级（工单 #2 §3.1）。
    */
-  private async getHostSummary(
-    serviceId: string,
-  ): Promise<Record<string, unknown> | null> {
+  private async getHostSummary(serviceId: string): Promise<Record<string, unknown> | null> {
     const data = await this.authorizedGet('/host/list?limit=200');
     const list = object(data['data'])['list'];
     if (!Array.isArray(list)) return null;
-    const item = list
-      .map(object)
-      .find((entry) => String(entry['id']) === serviceId);
+    const item = list.map(object).find((entry) => String(entry['id']) === serviceId);
     if (!item) return null;
     const summary: Record<string, unknown> = {};
     const copy = (from: string, to: string): void => {
       const value = item[from];
-      if (value !== undefined && value !== null && value !== '')
-        summary[to] = value;
+      if (value !== undefined && value !== null && value !== '') summary[to] = value;
     };
     copy('cpu', 'cpu');
     copy('memory', 'memory');
     copy('system_disk_size', 'disk');
     copy('bw', 'bandwidth');
-    const area =
-      stringOrNull(item['area']) ?? stringOrNull(item['area_name']);
+    const area = stringOrNull(item['area']) ?? stringOrNull(item['area_name']);
     if (area) {
-      summary['region'] = area.includes('^')
-        ? area.split('^').slice(1).join('^').trim()
-        : area;
+      summary['region'] = area.includes('^') ? area.split('^').slice(1).join('^').trim() : area;
     }
     return summary;
   }
@@ -975,9 +1050,7 @@ export class ZJMFClient {
     const encoded = encodeURIComponent(serviceId);
     if (this.connection.protocol === 'finance') {
       // 上游成功但无监控数据 → []（合法「空」）；传输/鉴权/HTTP 失败则上抛（§3.1）。
-      const data = await this.authorizedGet(
-        `/host/monitor?host_id=${encoded}`,
-      );
+      const data = await this.authorizedGet(`/host/monitor?host_id=${encoded}`);
       const payload = object(data['data']);
       return normalizeMetrics(payload);
     }
@@ -1000,32 +1073,21 @@ export class ZJMFClient {
                 // `public/plugins/server/idcsmart_common/route.php:26`。
                 object(
                   (
-                    await this.authorizedPost(
-                      `${base}/configoption/chart`,
-                      {
-                        chart: [
-                          {
-                            type,
-                            start: String(
-                              Math.floor(Date.now() / 1000) - 3600,
-                            ),
-                          },
-                        ],
-                      },
-                    )
+                    await this.authorizedPost(`${base}/configoption/chart`, {
+                      chart: [
+                        {
+                          type,
+                          start: String(Math.floor(Date.now() / 1000) - 3600),
+                        },
+                      ],
+                    })
                   )['data'],
                 )
               : // 云/物理机：`GET chart?type=cpu|memory|bw`。
-                object(
-                  (
-                    await this.authorizedGet(`${base}/chart?type=${type}`)
-                  )['data'],
-                );
+                object((await this.authorizedGet(`${base}/chart?type=${type}`))['data']);
           // chart 响应按类型给不同字段：cpu→value，memory→used/total，bw→in_bw/out_bw。
           const points = normalizeChartPoints(payload, type);
-          return points.length > 0
-            ? { id: type, label, unit, points }
-            : null;
+          return points.length > 0 ? { id: type, label, unit, points } : null;
         } catch {
           return null;
         }
@@ -1098,12 +1160,9 @@ export class ZJMFClient {
         ...configOptionBody(opts.selections),
         hid: encoded,
       });
-      const checkout = await this.authorizedPost(
-        'upgrade/checkout_config_upgrade',
-        {
-          hid: encoded,
-        },
-      );
+      const checkout = await this.authorizedPost('upgrade/checkout_config_upgrade', {
+        hid: encoded,
+      });
       const invoiceId = invoiceIdOf(checkout);
       if (invoiceId) await this.applyCredit(invoiceId);
       return checkout;
@@ -1133,12 +1192,9 @@ export class ZJMFClient {
         pid: productId,
         ...(opts.cycle ? { billingcycle: opts.cycle } : {}),
       });
-      const checkout = await this.authorizedPost(
-        'upgrade/checkout_upgrade_product',
-        {
-          hid: encoded,
-        },
-      );
+      const checkout = await this.authorizedPost('upgrade/checkout_upgrade_product', {
+        hid: encoded,
+      });
       const invoiceId = invoiceIdOf(checkout);
       if (invoiceId) await this.applyCredit(invoiceId);
       return checkout;
@@ -1183,9 +1239,7 @@ export class ZJMFClient {
       ...configOptionBody(opts.selections),
       hid: encoded,
     });
-    const page = await this.authorizedGet(
-      `upgrade/upgrade_config_page?hid=${encoded}`,
-    );
+    const page = await this.authorizedGet(`upgrade/upgrade_config_page?hid=${encoded}`);
     const payload = object(page['data']);
     return buildChangeQuote(payload);
   }
@@ -1232,9 +1286,7 @@ export class ZJMFClient {
     if (family === 'mf_dcim' && !V10_DCIM_RESOURCES.has(segment)) {
       throw new ZJMFClientError(400, '上游不支持该资源类型');
     }
-    const data = await this.authorizedGet(
-      `${this.familyBase(family)}/${encoded}/${segment}`,
-    );
+    const data = await this.authorizedGet(`${this.familyBase(family)}/${encoded}/${segment}`);
     return normalizeResourceList(data, kind);
   }
 
@@ -1316,9 +1368,7 @@ export class ZJMFClient {
     if (order['code'] === 'Paid') return;
     const payload = object(order['data']);
     const orderId =
-      stringOrNull(payload['id']) ??
-      stringOrNull(payload['order_id']) ??
-      stringOrNull(order['id']);
+      stringOrNull(payload['id']) ?? stringOrNull(payload['order_id']) ?? stringOrNull(order['id']);
     const amount = Number(payload['amount'] ?? payload['price'] ?? 0);
     if (!orderId || (Number.isFinite(amount) && amount <= 0)) return;
     try {
@@ -1344,18 +1394,18 @@ export class ZJMFClient {
   /** A failed/unknown debit must never fall back to partial credit or another debit. */
   private async applyCredit(invoiceId: string): Promise<void> {
     const payment = await this.payServiceInvoice(invoiceId);
-    if (!payment.paid) throw new ZJMFClientError(409,
-      `原上游账单 ${invoiceId} 付款${payment.paymentState === 'PAYMENT_UNKNOWN' ? '结果未知' : '未完成'}，禁止自动重新下单或扣款`);
+    if (!payment.paid)
+      throw new ZJMFClientError(
+        409,
+        `原上游账单 ${invoiceId} 付款${payment.paymentState === 'PAYMENT_UNKNOWN' ? '结果未知' : '未完成'}，禁止自动重新下单或扣款`,
+      );
   }
 
   private async authorizedGet(path: string): Promise<Record<string, unknown>> {
     return this.authorizedRequest(path, 'GET');
   }
 
-  private async authorizedPost(
-    path: string,
-    body: FormBody,
-  ): Promise<Record<string, unknown>> {
+  private async authorizedPost(path: string, body: FormBody): Promise<Record<string, unknown>> {
     return this.authorizedRequest(path, 'POST', true, body);
   }
 
@@ -1372,11 +1422,7 @@ export class ZJMFClient {
       return this.authorizedRequest(path, method, false, body);
     }
     // 老财务前台接口的成功状态既有 200 也有 1001（已支付/已结算）。
-    if (
-      response.status !== undefined &&
-      response.status !== 200 &&
-      response.status !== 1001
-    ) {
+    if (response.status !== undefined && response.status !== 200 && response.status !== 1001) {
       throw new ZJMFClientError(502, response.message ?? '上游请求失败');
     }
     return response.data;
@@ -1385,10 +1431,7 @@ export class ZJMFClient {
   private async authenticate(): Promise<string> {
     if (this.token) return this.token;
     // 证据：10.4.6/route/api.php:17 `Route::post('auth', ...)`（V10 开放 API 已取证）。
-    const loginPath =
-      this.connection.protocol === 'finance'
-        ? '/zjmf_api_login'
-        : '/api/v1/auth';
+    const loginPath = this.connection.protocol === 'finance' ? '/zjmf_api_login' : '/api/v1/auth';
     const response = await this.request(loginPath, 'POST', null, {
       username: this.connection.username,
       password: this.connection.password,
@@ -1430,10 +1473,25 @@ export class ZJMFClient {
     const startedAt = Date.now();
     const transportError = (error: unknown) => {
       const candidate = error as { name?: string; cause?: { code?: string } };
-      const reason = candidate?.name === 'TimeoutError' || candidate?.name === 'AbortError' ? 'TIMEOUT' :
-        ['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT', 'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'].includes(candidate?.cause?.code ?? '') ? candidate.cause!.code! : 'TRANSPORT_ERROR';
+      const reason =
+        candidate?.name === 'TimeoutError' || candidate?.name === 'AbortError'
+          ? 'TIMEOUT'
+          : [
+                'ECONNRESET',
+                'ECONNREFUSED',
+                'ENOTFOUND',
+                'EAI_AGAIN',
+                'UND_ERR_CONNECT_TIMEOUT',
+                'CERT_HAS_EXPIRED',
+                'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+              ].includes(candidate?.cause?.code ?? '')
+            ? candidate.cause!.code!
+            : 'TRANSPORT_ERROR';
       // Never persist headers, credentials, query strings, response bodies or arbitrary error text.
-      return new ZJMFClientError(502, `上游请求失败：${method} ${url.pathname} ${reason} (${Date.now() - startedAt}ms)`);
+      return new ZJMFClientError(
+        502,
+        `上游请求失败：${method} ${url.pathname} ${reason} (${Date.now() - startedAt}ms)`,
+      );
     };
     try {
       response = await this.fetchImpl(url, {
@@ -1442,9 +1500,7 @@ export class ZJMFClient {
         headers: {
           Accept: 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...(body
-            ? { 'Content-Type': 'application/x-www-form-urlencoded' }
-            : {}),
+          ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
         },
         // '&' is an empty urlencoded form. Some finance gateways hang after applying
         // a zero-length POST; a nonzero framing body avoids losing their response.
@@ -1458,10 +1514,18 @@ export class ZJMFClient {
     // 但业务错误通常是 HTTP 200 + body.status=400。先把能解析的 body 解析出来，
     // 只有「非 2xx 且不是 JSON」才当成传输层错误。
     let text: string;
-    try { text = await response.text(); } catch (error) { throw transportError(error); }
+    try {
+      text = await response.text();
+    } catch (error) {
+      throw transportError(error);
+    }
     if (!response.ok) {
-      if (method === 'GET' && [401, 405].includes(response.status)) return { status: response.status, message: '上游鉴权失效', data: {} };
-      throw new ZJMFClientError(response.status === 404 ? 404 : 502, `上游返回 HTTP ${response.status}`);
+      if (method === 'GET' && [401, 405].includes(response.status))
+        return { status: response.status, message: '上游鉴权失效', data: {} };
+      throw new ZJMFClientError(
+        response.status === 404 ? 404 : 502,
+        `上游返回 HTTP ${response.status}`,
+      );
     }
     let json: unknown = null;
     try {
@@ -1521,9 +1585,7 @@ function financeCartTotal(
  * 对象按 `key[sub]=v` 展开）。
  */
 export type FormBodyValue =
-  | string
-  | Array<string | Record<string, unknown>>
-  | Record<string, unknown>;
+  string | Array<string | Record<string, unknown>> | Record<string, unknown>;
 export type FormBody = Record<string, FormBodyValue>;
 
 /**
@@ -1561,17 +1623,10 @@ export function normalizeBaseUrl(value: string): string {
   } catch {
     throw new ZJMFClientError(400, '上游 URL 无效');
   }
-  if (
-    url.protocol !== 'https:' ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
     throw new ZJMFClientError(400, '上游 URL 无效');
   }
-  if (isUnsafeHostname(url.hostname))
-    throw new ZJMFClientError(400, '上游 URL 必须为公网地址');
+  if (isUnsafeHostname(url.hostname)) throw new ZJMFClientError(400, '上游 URL 必须为公网地址');
   url.pathname = url.pathname.replace(/\/+$/, '');
   return `${url.toString().replace(/\/$/, '')}/`;
 }
@@ -1586,8 +1641,7 @@ export async function assertPublicUpstreamUrl(value: string): Promise<string> {
   const hostname = new URL(normalized).hostname;
   const literal = normalizedIp(hostname);
   if (literal) {
-    if (isUnsafeIpAddress(literal))
-      throw new ZJMFClientError(400, '上游 URL 必须为公网地址');
+    if (isUnsafeIpAddress(literal)) throw new ZJMFClientError(400, '上游 URL 必须为公网地址');
     return normalized;
   }
   let addresses: Array<{ address: string }>;
@@ -1596,10 +1650,7 @@ export async function assertPublicUpstreamUrl(value: string): Promise<string> {
   } catch {
     throw new ZJMFClientError(502, '无法解析上游主机');
   }
-  if (
-    addresses.length === 0 ||
-    addresses.some(({ address }) => isUnsafeIpAddress(address))
-  ) {
+  if (addresses.length === 0 || addresses.some(({ address }) => isUnsafeIpAddress(address))) {
     throw new ZJMFClientError(400, '上游 URL 必须解析到公网地址');
   }
   return normalized;
@@ -1616,8 +1667,7 @@ async function assertNoPrivateResolution(value: string): Promise<void> {
   const hostname = new URL(normalized).hostname;
   const literal = normalizedIp(hostname);
   if (literal) {
-    if (isUnsafeIpAddress(literal))
-      throw new ZJMFClientError(400, '上游 URL 必须解析到公网地址');
+    if (isUnsafeIpAddress(literal)) throw new ZJMFClientError(400, '上游 URL 必须解析到公网地址');
     return;
   }
   let addresses: Array<{ address: string }>;
@@ -1638,14 +1688,12 @@ export function decimalToMinor(value: string): number {
   const whole = BigInt(match[1] ?? '0');
   const fraction = (match[2] ?? '').padEnd(2, '0');
   const minor = whole * 100n + BigInt(fraction || '0');
-  if (minor > 2_000_000_000n)
-    throw new ZJMFClientError(502, '上游商品价格超出范围');
+  if (minor > 2_000_000_000n) throw new ZJMFClientError(502, '上游商品价格超出范围');
   return Number(minor);
 }
 
 export function applyMarkup(price: number, markupBps: number): number {
-  const result =
-    (BigInt(price) * BigInt(10_000 + markupBps) + 5_000n) / 10_000n;
+  const result = (BigInt(price) * BigInt(10_000 + markupBps) + 5_000n) / 10_000n;
   if (result < 1n || result > 2_000_000_000n)
     throw new ZJMFClientError(422, '计算后的价格超出范围');
   return Number(result);
@@ -1662,8 +1710,7 @@ function normalizeProduct(value: unknown): ZJMFProduct | null {
     name: name.slice(0, 191),
     description: productDescription(raw),
     price,
-    currency:
-      stringOrNull(raw['currency_code']) ?? stringOrNull(raw['currency']),
+    currency: stringOrNull(raw['currency_code']) ?? stringOrNull(raw['currency']),
     raw,
   };
 }
@@ -1673,7 +1720,10 @@ function productDescription(raw: Record<string, unknown>): string | null {
   for (const key of ['description', 'brief', 'summary', 'intro', 'remark', 'notes']) {
     const value = stringOrNull(raw[key]);
     if (!value) continue;
-    const plain = value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const plain = value
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     if (plain) return plain.slice(0, 191);
   }
   return null;
@@ -1698,9 +1748,7 @@ function normalizeHost(value: unknown): ZJMFHost | null {
     stringOrNull(raw['instance_id']);
   if (!id) return null;
   const productName =
-    stringOrNull(raw['product_name']) ??
-    stringOrNull(raw['name']) ??
-    stringOrNull(raw['domain']);
+    stringOrNull(raw['product_name']) ?? stringOrNull(raw['name']) ?? stringOrNull(raw['domain']);
   const status =
     stringOrNull(raw['domainstatus']) ??
     stringOrNull(raw['status']) ??
@@ -1710,14 +1758,10 @@ function normalizeHost(value: unknown): ZJMFHost | null {
     stringOrNull(raw['status_text']) ??
     stringOrNull(raw['status_label']);
   const host =
-    stringOrNull(raw['ip']) ??
-    stringOrNull(raw['hostname']) ??
-    stringOrNull(raw['host']);
+    stringOrNull(raw['ip']) ?? stringOrNull(raw['hostname']) ?? stringOrNull(raw['host']);
   const expiresAt = readExpiry(raw);
   const priceText =
-    stringOrNull(raw['amount']) ??
-    stringOrNull(raw['price']) ??
-    stringOrNull(raw['total']);
+    stringOrNull(raw['amount']) ?? stringOrNull(raw['price']) ?? stringOrNull(raw['total']);
   let amount: number | null = null;
   if (priceText) {
     try {
@@ -1728,7 +1772,8 @@ function normalizeHost(value: unknown): ZJMFHost | null {
   }
   return {
     id,
-    productId: stringOrNull(raw['product_id']) ?? stringOrNull(raw['productid']) ?? stringOrNull(raw['pid']),
+    productId:
+      stringOrNull(raw['product_id']) ?? stringOrNull(raw['productid']) ?? stringOrNull(raw['pid']),
     name: stringOrNull(raw['domain']) ?? productName ?? `#${id}`,
     productName,
     status,
@@ -1737,15 +1782,13 @@ function normalizeHost(value: unknown): ZJMFHost | null {
     expiresAt,
     openedAt: readOpenedAt(raw),
     amount,
-    currency:
-      stringOrNull(raw['currency_code']) ?? stringOrNull(raw['currency']),
+    currency: stringOrNull(raw['currency_code']) ?? stringOrNull(raw['currency']),
     raw,
   };
 }
 
 function stringOrNull(value: unknown): string | null {
-  if (typeof value === 'string' || typeof value === 'number')
-    return String(value);
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
   return null;
 }
 
@@ -1768,7 +1811,14 @@ function epochToIso(value: unknown): string | null {
 
 /** List and detail endpoints use different date names and seconds/milliseconds. */
 function readExpiry(payload: Record<string, unknown>): string | null {
-  for (const key of ['expiresAt', 'due_time', 'nextduedate', 'expires_at', 'expire_at', 'due_date']) {
+  for (const key of [
+    'expiresAt',
+    'due_time',
+    'nextduedate',
+    'expires_at',
+    'expire_at',
+    'due_date',
+  ]) {
     const date = epochToIso(payload[key]);
     if (date) return date;
   }
@@ -1794,12 +1844,7 @@ function normalizeConfigOption(raw: unknown): ZJMFConfigOption | null {
   const type: 'select' | 'quantity' = rawType === 14 ? 'quantity' : 'select';
   const choices: ZJMFConfigOption['choices'] = [];
   const sub = o['sub'];
-  if (
-    rawType === 5 &&
-    sub !== null &&
-    typeof sub === 'object' &&
-    !Array.isArray(sub)
-  ) {
+  if (rawType === 5 && sub !== null && typeof sub === 'object' && !Array.isArray(sub)) {
     // 操作系统：sub 是按系统名的对象，child[] 为具体版本。
     for (const group of Object.values(sub as Record<string, unknown>)) {
       const g = object(group);
@@ -1807,8 +1852,7 @@ function normalizeConfigOption(raw: unknown): ZJMFConfigOption | null {
       for (const row of child) {
         const c = object(row);
         const cid = stringOrNull(c['id']);
-        const version =
-          stringOrNull(c['version']) ?? stringOrNull(c['show_pricing']);
+        const version = stringOrNull(c['version']) ?? stringOrNull(c['show_pricing']);
         if (!cid || !version) continue;
         choices.push({ id: cid, label: version });
       }
@@ -1819,13 +1863,10 @@ function normalizeConfigOption(raw: unknown): ZJMFConfigOption | null {
       const area = Array.isArray(s['area']) ? s['area'] : [];
       const areaFirst = area[0] !== undefined ? object(area[0]) : {};
       const cid = stringOrNull(areaFirst['id']) ?? stringOrNull(s['id']);
-      const name =
-        stringOrNull(s['option_name']) ?? stringOrNull(s['show_pricing']);
+      const name = stringOrNull(s['option_name']) ?? stringOrNull(s['show_pricing']);
       if (!cid || !name) continue;
-      const qtyMin =
-        typeof s['qty_minimum'] === 'number' ? s['qty_minimum'] : undefined;
-      const qtyMax =
-        typeof s['qty_maximum'] === 'number' ? s['qty_maximum'] : undefined;
+      const qtyMin = typeof s['qty_minimum'] === 'number' ? s['qty_minimum'] : undefined;
+      const qtyMax = typeof s['qty_maximum'] === 'number' ? s['qty_maximum'] : undefined;
       const prices = normalizeChoicePrices(s['pricing']);
       const requires = normalizeChoiceRequires(s);
       choices.push({
@@ -1839,10 +1880,8 @@ function normalizeConfigOption(raw: unknown): ZJMFConfigOption | null {
     }
   }
   if (choices.length === 0) return null;
-  const min =
-    typeof o['qty_minimum'] === 'number' ? o['qty_minimum'] : undefined;
-  const max =
-    typeof o['qty_maximum'] === 'number' ? o['qty_maximum'] : undefined;
+  const min = typeof o['qty_minimum'] === 'number' ? o['qty_minimum'] : undefined;
+  const max = typeof o['qty_maximum'] === 'number' ? o['qty_maximum'] : undefined;
   const group = optionGroup(label, rawType);
   const defaultChoice =
     stringOrNull(o['default']) ??
@@ -1854,9 +1893,7 @@ function normalizeConfigOption(raw: unknown): ZJMFConfigOption | null {
     label,
     type,
     ...(group ? { group } : {}),
-    ...(typeof o['description'] === 'string' && o['description']
-      ? { help: o['description'] }
-      : {}),
+    ...(typeof o['description'] === 'string' && o['description'] ? { help: o['description'] } : {}),
     ...(defaultChoice !== undefined ? { defaultChoice } : {}),
     ...(visibleWhen ? { visibleWhen } : {}),
     ...(typeof o['unit'] === 'string' && o['unit'] ? { unit: o['unit'] } : {}),
@@ -1896,17 +1933,10 @@ function normalizeChoicePrices(
     const minor = safeMinor(pricing);
     return minor !== undefined && minor >= 0 ? { price: minor } : null;
   }
-  if (
-    pricing !== null &&
-    typeof pricing === 'object' &&
-    !Array.isArray(pricing)
-  ) {
+  if (pricing !== null && typeof pricing === 'object' && !Array.isArray(pricing)) {
     const prices: Record<string, number> = {};
-    for (const [cycle, value] of Object.entries(
-      pricing as Record<string, unknown>,
-    )) {
-      const minor =
-        typeof value === 'number' ? Math.round(value * 100) : safeMinor(value);
+    for (const [cycle, value] of Object.entries(pricing as Record<string, unknown>)) {
+      const minor = typeof value === 'number' ? Math.round(value * 100) : safeMinor(value);
       if (minor !== undefined && minor >= 0) prices[cycle] = minor;
     }
     return Object.keys(prices).length > 0 ? { prices } : null;
@@ -1919,9 +1949,7 @@ function normalizeChoiceRequires(
   sub: Record<string, unknown>,
 ): Record<string, string | string[]> | undefined {
   const parentId = stringOrNull(sub['configoption_id']);
-  const parentSub =
-    stringOrNull(sub['configoption_sub_id']) ??
-    stringOrNull(sub['parent_sub_id']);
+  const parentSub = stringOrNull(sub['configoption_sub_id']) ?? stringOrNull(sub['parent_sub_id']);
   if (!parentId || !parentSub) return undefined;
   return { [parentId]: parentSub };
 }
@@ -1933,8 +1961,7 @@ function normalizeOptionVisibility(
   const parentId = stringOrNull(option['configoption_id']);
   if (!parentId) return undefined;
   const parentSub =
-    stringOrNull(option['configoption_sub_id']) ??
-    stringOrNull(option['parent_sub_id']);
+    stringOrNull(option['configoption_sub_id']) ?? stringOrNull(option['parent_sub_id']);
   if (!parentSub) return { field: parentId };
   return { field: parentId, equals: parentSub };
 }
@@ -2064,16 +2091,9 @@ const V10_COMMON_PROVISION_FUNC: Record<string, string> = {
 };
 
 /** 物理机家族实际存在的子资源段（无 snapshot/backup/disk）。 */
-const V10_DCIM_RESOURCES = new Set([
-  'ip',
-  'ipv6',
-  'flow',
-  'log',
-  'nat_acl',
-  'nat_web',
-]);
+const V10_DCIM_RESOURCES = new Set(['ip', 'ipv6', 'flow', 'log', 'nat_acl', 'nat_web']);
 
-/** 物理机家族实际存在的动作末段。 *//** 物理机家族实际存在的动作末段。 */
+/** 物理机家族实际存在的动作末段。 */ /** 物理机家族实际存在的动作末段。 */
 const V10_DCIM_ACTIONS = new Set([
   'on',
   'off',
@@ -2135,9 +2155,7 @@ const RESOURCE_ACTION_FUNC: Record<string, string> = {
 };
 
 /** 把结账选择映射为老财务的 `configoption[optionId]=value` 请求字段。 */
-function configOptionBody(
-  selections: Record<string, string | number> | undefined,
-): FormBody {
+function configOptionBody(selections: Record<string, string | number> | undefined): FormBody {
   const body: FormBody = {};
   for (const [optionId, value] of Object.entries(selections ?? {})) {
     if (value === undefined || value === null || value === '') continue;
@@ -2212,15 +2230,12 @@ function normalizeResourceList(
   for (const row of raw) {
     const o = object(row);
     const id =
-      stringOrNull(o['id']) ??
-      stringOrNull(o['snapshot_id']) ??
-      stringOrNull(o['backup_id']);
+      stringOrNull(o['id']) ?? stringOrNull(o['snapshot_id']) ?? stringOrNull(o['backup_id']);
     if (!id) continue;
     const fields: Record<string, string> = {};
     for (const [key, value] of Object.entries(o)) {
       if (key === 'id') continue;
-      if (value === undefined || value === null || typeof value === 'object')
-        continue;
+      if (value === undefined || value === null || typeof value === 'object') continue;
       fields[key] = String(value);
     }
     result.push({ id, fields });
@@ -2297,14 +2312,10 @@ function toPoints(value: unknown): Array<{ t: number; v: number }> {
 }
 
 /** 从开通/详情负载里提取服务字段（ROOT/密码/IP/状态/规格）。 */
-function pickServiceDetail(
-  payload: Record<string, unknown>,
-): Record<string, unknown> {
+function pickServiceDetail(payload: Record<string, unknown>): Record<string, unknown> {
   const status =
     stringOrNull(payload['status']) ??
-    (payload['status'] === true
-      ? 'ACTIVE'
-      : stringOrNull(payload['status_text']));
+    (payload['status'] === true ? 'ACTIVE' : stringOrNull(payload['status_text']));
   return {
     providerServiceId:
       stringOrNull(payload['service_id']) ??
@@ -2316,21 +2327,14 @@ function pickServiceDetail(
       stringOrNull(payload['username']) ??
       stringOrNull(payload['root']) ??
       stringOrNull(payload['account']),
-    password:
-      stringOrNull(payload['password']) ??
-      stringOrNull(payload['root_password']),
+    password: stringOrNull(payload['password']) ?? stringOrNull(payload['root_password']),
     status,
-    statusLabel:
-      stringOrNull(payload['status_text']) ??
-      stringOrNull(payload['statusLabel']),
+    statusLabel: stringOrNull(payload['status_text']) ?? stringOrNull(payload['statusLabel']),
     ...(readExpiry(payload) ? { expiresAt: readExpiry(payload) } : {}),
     ...(readOpenedAt(payload) ? { openedAt: readOpenedAt(payload) } : {}),
-    ...(stringOrNull(payload['billing_cycle']) ??
-    stringOrNull(payload['cycle'])
+    ...((stringOrNull(payload['billing_cycle']) ?? stringOrNull(payload['cycle']))
       ? {
-          cycle:
-            stringOrNull(payload['billing_cycle']) ??
-            stringOrNull(payload['cycle']),
+          cycle: stringOrNull(payload['billing_cycle']) ?? stringOrNull(payload['cycle']),
         }
       : {}),
     specs: pickSpecs(payload),
@@ -2364,9 +2368,7 @@ function pickSpecs(payload: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** 从开通响应里提取登录凭证（主机账号/密码）。 */
-function extractCredentials(
-  payload: Record<string, unknown>,
-): Record<string, string> {
+function extractCredentials(payload: Record<string, unknown>): Record<string, string> {
   const credentials: Record<string, string> = {};
   const username =
     stringOrNull(payload['username']) ??

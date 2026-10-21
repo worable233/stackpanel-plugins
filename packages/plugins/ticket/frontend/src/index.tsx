@@ -5,16 +5,13 @@ import type {
   FinderContext,
   FrontendPackage,
   PluginActionDefinition,
-} from "@stackpanel/sdk";
-import { FeatureOverview, TicketWorkspace } from "@stackpanel/ui";
-import type { ReactElement } from "react";
-import Link from "next/link";
-import { z } from "zod";
+} from '@stackpanel/sdk';
+import { FeatureOverview, TicketWorkspace } from '@stackpanel/ui';
+import type { ReactElement } from 'react';
+import Link from 'next/link';
+import { z } from 'zod';
 
-import {
-  ArrowUpRight,
-  Inbox,
-} from "lucide-react";
+import { ArrowUpRight, Inbox } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
 /* Types & schemas                                                     */
@@ -91,25 +88,25 @@ const ticketDetailSchema = z.object({
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   OPEN: {
-    label: "待处理",
-    cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+    label: '待处理',
+    cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
   },
   IN_PROGRESS: {
-    label: "处理中",
-    cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+    label: '处理中',
+    cls: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
   },
   RESOLVED: {
-    label: "已解决",
-    cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+    label: '已解决',
+    cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
   },
-  CLOSED: { label: "已关闭", cls: "bg-muted text-muted-foreground" },
+  CLOSED: { label: '已关闭', cls: 'bg-muted text-muted-foreground' },
 };
 
 function statusMeta(status: string) {
   return (
     STATUS_META[status] ?? {
       label: status,
-      cls: "bg-muted text-muted-foreground",
+      cls: 'bg-muted text-muted-foreground',
     }
   );
 }
@@ -119,15 +116,30 @@ function statusMeta(status: string) {
 /* ------------------------------------------------------------------ */
 
 function TicketAccountListPage(props: AccountPageComponentProps): ReactElement {
-  return <TicketWorkspace mode="list" tickets={(props.data.tickets as Ticket[] | undefined) ?? []} />;
+  return (
+    <TicketWorkspace mode="list" tickets={(props.data.tickets as Ticket[] | undefined) ?? []} />
+  );
 }
 
 function TicketNewPage(props: AccountPageComponentProps): ReactElement {
-  return <TicketWorkspace mode="new" tickets={(props.data.tickets as Ticket[] | undefined) ?? []} create={props.actions["ticket.create"]} />;
+  return (
+    <TicketWorkspace
+      mode="new"
+      tickets={(props.data.tickets as Ticket[] | undefined) ?? []}
+      create={props.actions['ticket.create']}
+    />
+  );
 }
 
 function TicketAccountDetailPage(props: AccountPageComponentProps): ReactElement {
-  return <TicketWorkspace mode="detail" tickets={(props.data.tickets as Ticket[] | undefined) ?? []} ticket={props.data.ticket as TicketDetail | undefined} reply={props.actions["ticket.reply"]} />;
+  return (
+    <TicketWorkspace
+      mode="detail"
+      tickets={(props.data.tickets as Ticket[] | undefined) ?? []}
+      ticket={props.data.ticket as TicketDetail | undefined}
+      reply={props.actions['ticket.reply']}
+    />
+  );
 }
 
 function TicketAccountWidget(_props: AccountWidgetProps): ReactElement {
@@ -140,9 +152,7 @@ function TicketAccountWidget(_props: AccountWidgetProps): ReactElement {
         <Inbox className="size-5" />
       </span>
       <p className="mt-4 text-sm font-semibold">服务工单</p>
-      <p className="mt-1.5 text-sm text-muted-foreground">
-        查看已提交的服务请求。
-      </p>
+      <p className="mt-1.5 text-sm text-muted-foreground">查看已提交的服务请求。</p>
     </Link>
   );
 }
@@ -162,9 +172,7 @@ function TicketAdminWidget(_props: AdminWidgetProps): ReactElement {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold">工单管理</span>
-        <span className="mt-1 block text-xs text-muted-foreground">
-          查看并跟进服务请求
-        </span>
+        <span className="mt-1 block text-xs text-muted-foreground">查看并跟进服务请求</span>
       </span>
       <ArrowUpRight className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
     </Link>
@@ -176,23 +184,22 @@ function TicketAdminWidget(_props: AdminWidgetProps): ReactElement {
 /* ------------------------------------------------------------------ */
 
 function SupportOverview(props: AccountPageComponentProps): ReactElement {
-  const summary = props.data.summary as
-    { total: number; tickets: Ticket[] } | undefined;
+  const summary = props.data.summary as { total: number; tickets: Ticket[] } | undefined;
   return (
     <FeatureOverview
       title="概览"
       description="查看你的工单与最近处理状态。"
       unavailable={!summary}
-      metrics={[{ label: "工单总数", value: summary?.total ?? "—" }]}
+      metrics={[{ label: '工单总数', value: summary?.total ?? '—' }]}
       links={[
         {
-          label: "我的工单",
-          description: "查看回复和处理进度。",
-          href: "/account/tickets",
+          label: '我的工单',
+          description: '查看回复和处理进度。',
+          href: '/account/tickets',
         },
       ]}
       activity={{
-        title: "最近工单",
+        title: '最近工单',
         items: (summary?.tickets ?? []).map((ticket) => ({
           label: ticket.subject,
           detail: statusMeta(ticket.status).label,
@@ -204,23 +211,19 @@ function SupportOverview(props: AccountPageComponentProps): ReactElement {
 }
 
 const ticketFinders = {
-  "ticket.adminSummary": {
+  'ticket.adminSummary': {
     handler: async (_input: Record<string, unknown>, ctx: FinderContext) =>
-      ctx.api.get("/ticket/admin/tickets?page=1&pageSize=5", ticketListSchema),
+      ctx.api.get('/ticket/admin/tickets?page=1&pageSize=5', ticketListSchema),
   },
-  "ticket.pendingCount": {
+  'ticket.pendingCount': {
     handler: async (_input: Record<string, unknown>, ctx: FinderContext) => {
       let count = 0;
       let page = 1;
       let fetched = 0;
       while (true) {
-        const result = await ctx.api.get(
-          `/tickets?page=${page}&pageSize=100`,
-          ticketListSchema,
-        );
+        const result = await ctx.api.get(`/tickets?page=${page}&pageSize=100`, ticketListSchema);
         count += result.tickets.filter(
-          (ticket) =>
-            ticket.status === "OPEN" || ticket.status === "IN_PROGRESS",
+          (ticket) => ticket.status === 'OPEN' || ticket.status === 'IN_PROGRESS',
         ).length;
         fetched += result.tickets.length;
         if (fetched >= result.total || result.tickets.length === 0) break;
@@ -229,11 +232,11 @@ const ticketFinders = {
       return { count };
     },
   },
-  "ticket.mySummary": {
+  'ticket.mySummary': {
     handler: async (_input: Record<string, unknown>, ctx: FinderContext) =>
-      ctx.api.get("/tickets?page=1&pageSize=5", ticketListSchema),
+      ctx.api.get('/tickets?page=1&pageSize=5', ticketListSchema),
   },
-  "ticket.myTickets": {
+  'ticket.myTickets': {
     handler: async (_input: Record<string, unknown>, ctx: FinderContext) => {
       const tickets: z.infer<typeof ticketListItemSchema>[] = [];
       let page = 1;
@@ -245,31 +248,25 @@ const ticketFinders = {
       }
     },
   },
-  "ticket.ticket": {
+  'ticket.ticket': {
     handler: async (input: Record<string, unknown>, ctx: FinderContext) => {
-      const id = typeof input.id === "string" ? input.id : "";
-      return ctx.api.get(
-        `/tickets/${encodeURIComponent(id)}`,
-        ticketDetailSchema,
-      );
+      const id = typeof input.id === 'string' ? input.id : '';
+      return ctx.api.get(`/tickets/${encodeURIComponent(id)}`, ticketDetailSchema);
     },
   },
-  "ticket.adminTickets": {
+  'ticket.adminTickets': {
     handler: async (_input: Record<string, unknown>, ctx: FinderContext) => {
       const result = await ctx.api.get(
-        "/ticket/admin/tickets?page=1&pageSize=50",
+        '/ticket/admin/tickets?page=1&pageSize=50',
         ticketListSchema,
       );
       return result.tickets;
     },
   },
-  "ticket.adminTicket": {
+  'ticket.adminTicket': {
     handler: async (input: Record<string, unknown>, ctx: FinderContext) => {
-      const id = typeof input.id === "string" ? input.id : "";
-      return ctx.api.get(
-        `/ticket/admin/tickets/${encodeURIComponent(id)}`,
-        ticketDetailSchema,
-      );
+      const id = typeof input.id === 'string' ? input.id : '';
+      return ctx.api.get(`/ticket/admin/tickets/${encodeURIComponent(id)}`, ticketDetailSchema);
     },
   },
 };
@@ -280,36 +277,36 @@ const ticketFinders = {
 
 const ticketActions: PluginActionDefinition[] = [
   {
-    id: "ticket.create",
-    method: "POST",
-    path: "/tickets",
-    permission: "ticket.create",
-    redirect: { responsePath: "redirectUrl" },
+    id: 'ticket.create',
+    method: 'POST',
+    path: '/tickets',
+    permission: 'ticket.create',
+    redirect: { responsePath: 'redirectUrl' },
     input: [
-      { name: "subject", type: "string", required: true, maxLength: 191 },
-      { name: "body", type: "string", required: true, maxLength: 10000 },
+      { name: 'subject', type: 'string', required: true, maxLength: 191 },
+      { name: 'body', type: 'string', required: true, maxLength: 10000 },
     ],
   },
   {
-    id: "ticket.reply",
-    method: "POST",
-    path: "/tickets/:id/messages",
-    permission: "ticket.create",
+    id: 'ticket.reply',
+    method: 'POST',
+    path: '/tickets/:id/messages',
+    permission: 'ticket.create',
     input: [
-      { name: "id", type: "string", required: true, maxLength: 191 },
-      { name: "body", type: "string", required: true, maxLength: 10000 },
+      { name: 'id', type: 'string', required: true, maxLength: 191 },
+      { name: 'body', type: 'string', required: true, maxLength: 10000 },
     ],
   },
   {
-    id: "ticket.update",
-    method: "PATCH",
-    path: "/ticket/admin/tickets/:id",
-    permission: "ticket.admin",
+    id: 'ticket.update',
+    method: 'PATCH',
+    path: '/ticket/admin/tickets/:id',
+    permission: 'ticket.admin',
     input: [
-      { name: "id", type: "string", required: true, maxLength: 191 },
-      { name: "status", type: "string", maxLength: 32 },
-      { name: "priority", type: "string", maxLength: 32 },
-      { name: "assigneeId", type: "string", maxLength: 191 },
+      { name: 'id', type: 'string', required: true, maxLength: 191 },
+      { name: 'status', type: 'string', maxLength: 32 },
+      { name: 'priority', type: 'string', maxLength: 32 },
+      { name: 'assigneeId', type: 'string', maxLength: 191 },
     ],
   },
 ];
@@ -318,72 +315,68 @@ export const frontend: FrontendPackage = {
   finders: ticketFinders,
   ui: {
     actions: ticketActions,
-    adminWidgets: { "ticket-summary": TicketAdminWidget },
+    adminWidgets: { 'ticket-summary': TicketAdminWidget },
     accountRoutes: [
       {
-        path: "/support",
-        component: "account/support-overview",
-        permission: "ticket.view",
-        nav: { label: "概览", group: "支持", order: 0 },
-        data: [{ finder: "ticket.mySummary", as: "summary" }],
+        path: '/support',
+        component: 'account/support-overview',
+        permission: 'ticket.view',
+        nav: { label: '概览', group: '支持', order: 0 },
+        data: [{ finder: 'ticket.mySummary', as: 'summary' }],
       },
       {
-        path: "/tickets",
-        component: "account/tickets",
-        permission: "ticket.view",
-        nav: { label: "我的工单", group: "支持", order: 10 },
-        data: [{ finder: "ticket.myTickets", as: "tickets" }],
+        path: '/tickets',
+        component: 'account/tickets',
+        permission: 'ticket.view',
+        nav: { label: '我的工单', group: '支持', order: 10 },
+        data: [{ finder: 'ticket.myTickets', as: 'tickets' }],
       },
       {
-        path: "/tickets/new",
-        component: "account/tickets/new",
-        permission: "ticket.create",
-        data: [{ finder: "ticket.myTickets", as: "tickets" }],
+        path: '/tickets/new',
+        component: 'account/tickets/new',
+        permission: 'ticket.create',
+        data: [{ finder: 'ticket.myTickets', as: 'tickets' }],
       },
       {
-        path: "/tickets/:id",
-        component: "account/tickets/detail",
-        permission: "ticket.view",
+        path: '/tickets/:id',
+        component: 'account/tickets/detail',
+        permission: 'ticket.view',
         data: [
-          { finder: "ticket.myTickets", as: "tickets" },
-          { finder: "ticket.ticket", as: "ticket", input: { id: ":id" } },
+          { finder: 'ticket.myTickets', as: 'tickets' },
+          { finder: 'ticket.ticket', as: 'ticket', input: { id: ':id' } },
         ],
       },
     ],
     adminRoutes: [
       {
-        path: "/overview",
-        component: "admin/summary",
-        permission: "ticket.admin",
-        nav: { label: "概览", group: "支持", order: 0 },
-        data: [{ finder: "ticket.adminSummary", as: "summary" }],
+        path: '/overview',
+        component: 'admin/summary',
+        permission: 'ticket.admin',
+        nav: { label: '概览', group: '支持', order: 0 },
+        data: [{ finder: 'ticket.adminSummary', as: 'summary' }],
       },
       {
-        path: "/tickets",
-        component: "admin/tickets",
-        permission: "ticket.admin",
-        nav: { label: "工单", group: "支持", order: 10 },
-        data: [{ finder: "ticket.adminTickets", as: "tickets" }],
+        path: '/tickets',
+        component: 'admin/tickets',
+        permission: 'ticket.admin',
+        nav: { label: '工单', group: '支持', order: 10 },
+        data: [{ finder: 'ticket.adminTickets', as: 'tickets' }],
       },
       {
-        path: "/tickets/:id",
-        component: "admin/tickets/detail",
-        permission: "ticket.admin",
-        data: [
-          { finder: "ticket.adminTicket", as: "ticket", input: { id: ":id" } },
-        ],
+        path: '/tickets/:id',
+        component: 'admin/tickets/detail',
+        permission: 'ticket.admin',
+        data: [{ finder: 'ticket.adminTicket', as: 'ticket', input: { id: ':id' } }],
       },
     ],
-    accountWidgets: [
-      { id: "tickets", title: "服务工单", component: "account/tickets" },
-    ],
+    accountWidgets: [{ id: 'tickets', title: '服务工单', component: 'account/tickets' }],
     accountPages: {
-      "account/support-overview": SupportOverview,
-      "account/tickets": TicketAccountListPage,
-      "account/tickets/new": TicketNewPage,
-      "account/tickets/detail": TicketAccountDetailPage,
+      'account/support-overview': SupportOverview,
+      'account/tickets': TicketAccountListPage,
+      'account/tickets/new': TicketNewPage,
+      'account/tickets/detail': TicketAccountDetailPage,
     },
-    accountWidgetComponents: { "account/tickets": TicketAccountWidget },
+    accountWidgetComponents: { 'account/tickets': TicketAccountWidget },
   },
 };
 

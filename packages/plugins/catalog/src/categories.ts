@@ -49,10 +49,7 @@ function categoryJson(row: CategoryRow): unknown {
   };
 }
 
-async function findCategoryBySlug(
-  slug: string,
-  excludeId?: string,
-): Promise<CategoryRow | null> {
+async function findCategoryBySlug(slug: string, excludeId?: string): Promise<CategoryRow | null> {
   const categories = await loadCategories();
   return categories.find((category) => category.slug === slug && category.id !== excludeId) ?? null;
 }
@@ -118,7 +115,8 @@ export async function updateCategory(req: HttpRequest): Promise<unknown> {
     parentId: newParentId,
     name: input.name ?? current.name,
     slug: newSlug === undefined ? current.slug : newSlug,
-    description: input.description === undefined ? current.description : (input.description ?? null),
+    description:
+      input.description === undefined ? current.description : (input.description ?? null),
     icon: input.icon === undefined ? current.icon : (input.icon ?? null),
     sortOrder: input.sortOrder ?? current.sortOrder,
   };

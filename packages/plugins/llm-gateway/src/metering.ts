@@ -43,10 +43,7 @@ export function estimatePromptTokens(body: string | Uint8Array): number {
  * @param outputText 上游输出原文（流式时是 SSE 原文，会被 stripSse 还原）
  * @param requestBodyText 请求体原文 —— **必须传**，否则 prompt 会记成 0（目标四 12）
  */
-export function estimateUsage(
-  outputText: string,
-  requestBodyText: string,
-): TokenUsage {
+export function estimateUsage(outputText: string, requestBodyText: string): TokenUsage {
   const prompt = estimateTokens(requestBodyText);
   const completion = estimateTokens(stripSse(outputText));
   return {

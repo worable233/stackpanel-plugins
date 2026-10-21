@@ -35,7 +35,7 @@ const idSchema = z.object({ id: z.string().min(1).max(191) });
 /** Stable codes for notice errors (ADR-0012). */
 const NOTICE_ERROR_CODES: Record<string, string> = {
   '缺少公告 ID': 'notice.id_required',
-  '公告参数无效': 'notice.params_invalid',
+  公告参数无效: 'notice.params_invalid',
   公告不存在: 'notice.not_found',
   公告插件未就绪: 'notice.not_ready',
 };

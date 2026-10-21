@@ -4,16 +4,16 @@ import {
   agentProviderConfig,
   configureAgentProvider,
   clearAgentProvider,
-} from "./agent-provider.js";
-import { definePlugin, PluginError, EXTENSION_POINTS } from "@stackpanel/sdk";
-import type { HttpReply, HttpRequest, PluginContext } from "@stackpanel/sdk";
-import { z } from "zod";
-import { isAllowedUpstreamUrl } from "./guard.js";
-import { GATEWAY_SCOPE, newId, toStringArray } from "./keys.js";
-import { createRelayHandler, type GatewayRuntime } from "./relay.js";
-import { runCompensation } from "./billing.js";
-import { readAllMetrics, type MetricName } from "./observability.js";
-import { PROTOCOLS } from "./protocol.js";
+} from './agent-provider.js';
+import { definePlugin, PluginError, EXTENSION_POINTS } from '@stackpanel/sdk';
+import type { HttpReply, HttpRequest, PluginContext } from '@stackpanel/sdk';
+import { z } from 'zod';
+import { isAllowedUpstreamUrl } from './guard.js';
+import { GATEWAY_SCOPE, newId, toStringArray } from './keys.js';
+import { createRelayHandler, type GatewayRuntime } from './relay.js';
+import { runCompensation } from './billing.js';
+import { readAllMetrics, type MetricName } from './observability.js';
+import { PROTOCOLS } from './protocol.js';
 import {
   gatewayAccountModel,
   gatewayBillingEntryModel,
@@ -24,7 +24,7 @@ import {
   gatewayTaskModel,
   gatewayUsageLogModel,
   gatewayUserSettingModel,
-} from "./data.js";
+} from './data.js';
 import {
   auth,
   bindContext,
@@ -33,7 +33,7 @@ import {
   secrets,
   state,
   wallet,
-} from "./context.js";
+} from './context.js';
 import {
   countAccounts,
   createAccount,
@@ -63,7 +63,7 @@ import {
   updateAccount,
   updatePrice,
   upsertPolicy,
-} from "./repository.js";
+} from './repository.js';
 
 /**
  * 模型服务网关（预授权 + 按量结算）。
@@ -82,19 +82,19 @@ const COMPENSATION_INTERVAL_MS = 30_000;
 
 /** Exact messages that map to a stable code (ADR-0012). */
 const GATEWAY_ERROR_CODES: Record<string, string> = {
-  参数无效: "llm_gateway.params_invalid",
-  "缺少 Base URL 或上游 API Key": "llm_gateway.upstream_credentials_required",
-  "密钥数量已达上限（50）": "llm_gateway.key_limit_reached",
-  未登录: "auth.unauthenticated",
-  密钥不存在: "llm_gateway.key_not_found",
-  账号不存在: "llm_gateway.account_not_found",
-  模型服务插件未就绪: "llm_gateway.not_ready",
+  参数无效: 'llm_gateway.params_invalid',
+  '缺少 Base URL 或上游 API Key': 'llm_gateway.upstream_credentials_required',
+  '密钥数量已达上限（50）': 'llm_gateway.key_limit_reached',
+  未登录: 'auth.unauthenticated',
+  密钥不存在: 'llm_gateway.key_not_found',
+  账号不存在: 'llm_gateway.account_not_found',
+  模型服务插件未就绪: 'llm_gateway.not_ready',
 };
 
 /** Messages that carry a variable suffix; matched on the stable prefix. */
 const GATEWAY_ERROR_PREFIX_CODES: Record<string, string> = {
-  上游返回: "llm_gateway.upstream_failed",
-  拉取模型失败: "llm_gateway.models_fetch_failed",
+  上游返回: 'llm_gateway.upstream_failed',
+  拉取模型失败: 'llm_gateway.models_fetch_failed',
 };
 
 function gatewayErrorCode(message: string): string {
@@ -103,7 +103,7 @@ function gatewayErrorCode(message: string): string {
   for (const [prefix, code] of Object.entries(GATEWAY_ERROR_PREFIX_CODES)) {
     if (message.startsWith(prefix)) return code;
   }
-  return "llm_gateway.error";
+  return 'llm_gateway.error';
 }
 
 class GatewayError extends Error {
@@ -115,13 +115,13 @@ class GatewayError extends Error {
     message: string,
   ) {
     super(message);
-    this.name = "GatewayError";
+    this.name = 'GatewayError';
     this.code = gatewayErrorCode(message);
   }
 }
 
 function getRuntime(): GatewayRuntime {
-  if (!runtime) throw new GatewayError(503, "模型服务插件未就绪");
+  if (!runtime) throw new GatewayError(503, '模型服务插件未就绪');
   return runtime;
 }
 
@@ -129,11 +129,11 @@ function getRuntime(): GatewayRuntime {
 
 /** 表单里空字符串/空值统一视为「未提供」。 */
 const blankToUndefined = (value: unknown): unknown =>
-  value === "" || value === null ? undefined : value;
+  value === '' || value === null ? undefined : value;
 
 /** 模型清单：接受数组或逗号/换行分隔的字符串。 */
 function parseModels(raw: unknown): string[] {
-  if (typeof raw !== "string") return [];
+  if (typeof raw !== 'string') return [];
   return raw
     .split(/[\s,;，；]+/)
     .map((item) => item.trim())
@@ -152,18 +152,15 @@ function defined<T extends object>(value: T): Defined<T> {
 const modelsField = z.preprocess(
   (value) => {
     if (Array.isArray(value))
-      return value.filter((item): item is string => typeof item === "string");
-    if (typeof value === "string") return parseModels(value);
+      return value.filter((item): item is string => typeof item === 'string');
+    if (typeof value === 'string') return parseModels(value);
     return undefined;
   },
   z.array(z.string().min(1).max(128)).max(500).optional(),
 );
 
 const optionalInt = (min: number, max: number) =>
-  z.preprocess(
-    blankToUndefined,
-    z.coerce.number().int().min(min).max(max).optional(),
-  );
+  z.preprocess(blankToUndefined, z.coerce.number().int().min(min).max(max).optional());
 
 const optionalString = (max: number) =>
   z.preprocess(blankToUndefined, z.string().min(1).max(max).optional());
@@ -185,7 +182,7 @@ const createKeySchema = z.object({
 
 const updateKeySchema = z.object({
   name: optionalString(64),
-  status: optionalEnum(["ACTIVE", "DISABLED"]),
+  status: optionalEnum(['ACTIVE', 'DISABLED']),
   models: modelsField,
   rpmLimit: optionalInt(0, 1_000_000),
   concurrencyLimit: optionalInt(0, 10_000),
@@ -197,18 +194,14 @@ const updateKeySchema = z.object({
 
 const accountSchema = z.object({
   name: z.string().min(1).max(64),
-  baseUrl: z
-    .string()
-    .url()
-    .max(500)
-    .refine(isAllowedUpstreamUrl, "上游地址必须为公网地址"),
+  baseUrl: z.string().url().max(500).refine(isAllowedUpstreamUrl, '上游地址必须为公网地址'),
   apiKey: z.string().min(1).max(500),
   provider: z.preprocess(blankToUndefined, z.enum(PROTOCOLS).optional()),
   models: modelsField,
   priority: optionalInt(-1_000_000, 1_000_000),
   weight: optionalInt(1, 100_000),
   maxConcurrency: optionalInt(0, 100_000),
-  status: optionalEnum(["ACTIVE", "DISABLED"]),
+  status: optionalEnum(['ACTIVE', 'DISABLED']),
   /** adaptor 特有参数（如 vertex 的 project / accessToken、azure 的 apiVersion）。 */
   options: z.record(z.string(), z.unknown()).optional(),
   /** 账号级 RPM；0 = 不限。 */
@@ -225,12 +218,7 @@ const fetchModelsSchema = z.object({
   id: optionalString(191),
   baseUrl: z.preprocess(
     blankToUndefined,
-    z
-      .string()
-      .url()
-      .max(500)
-      .refine(isAllowedUpstreamUrl, "上游地址必须为公网地址")
-      .optional(),
+    z.string().url().max(500).refine(isAllowedUpstreamUrl, '上游地址必须为公网地址').optional(),
   ),
   apiKey: optionalString(500),
   provider: z.preprocess(blankToUndefined, z.enum(PROTOCOLS).optional()),
@@ -242,17 +230,17 @@ function upstreamModelsRequest(
   baseUrl: string,
   apiKey: string,
 ): { url: string; headers: Record<string, string> } {
-  const base = baseUrl.replace(/\/+$/, "");
-  if (provider === "anthropic") {
+  const base = baseUrl.replace(/\/+$/, '');
+  if (provider === 'anthropic') {
     return {
       url: `${base}/v1/models`,
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     };
   }
-  if (provider === "gemini") {
+  if (provider === 'gemini') {
     return {
       url: `${base}/v1beta/models`,
-      headers: { "x-goog-api-key": apiKey },
+      headers: { 'x-goog-api-key': apiKey },
     };
   }
   // openai-chat / openai-responses
@@ -272,20 +260,20 @@ function extractModelIds(payload: unknown): string[] {
         : [];
   const ids = new Set<string>();
   for (const item of list) {
-    if (typeof item === "string") {
+    if (typeof item === 'string') {
       // Gemini: "models/gemini-2.5-pro" → "gemini-2.5-pro"
-      ids.add(item.replace(/^models\//, ""));
+      ids.add(item.replace(/^models\//, ''));
       continue;
     }
-    if (item && typeof item === "object") {
+    if (item && typeof item === 'object') {
       const id =
-        typeof (item as { id?: unknown }).id === "string"
+        typeof (item as { id?: unknown }).id === 'string'
           ? (item as { id: string }).id
-          : typeof (item as { name?: unknown }).name === "string"
+          : typeof (item as { name?: unknown }).name === 'string'
             ? (item as { name: string }).name
             : null;
       // Gemini: "models/gemini-2.5-pro" → 去掉前缀。
-      if (id) ids.add(id.replace(/^models\//, ""));
+      if (id) ids.add(id.replace(/^models\//, ''));
     }
   }
   return [...ids].sort();
@@ -325,22 +313,22 @@ const configUpdateSchema = z.object({
 
 /** 管理端指标面板展示的指标集合（与 `observability.MetricName` 对应）。 */
 const METRIC_NAMES: readonly MetricName[] = [
-  "request.total",
-  "request.error",
-  "request.retry",
-  "request.client_abort",
-  "upstream.error",
-  "upstream.429",
-  "upstream.5xx",
-  "upstream.timeout",
-  "breaker.open",
-  "account.failover",
-  "billing.settle_failed",
-  "billing.compensation_settled",
-  "billing.compensation_failed",
-  "stream.total",
-  "stream.lease_lost",
-  "stream.slow_client",
+  'request.total',
+  'request.error',
+  'request.retry',
+  'request.client_abort',
+  'upstream.error',
+  'upstream.429',
+  'upstream.5xx',
+  'upstream.timeout',
+  'breaker.open',
+  'account.failover',
+  'billing.settle_failed',
+  'billing.compensation_settled',
+  'billing.compensation_failed',
+  'stream.total',
+  'stream.lease_lost',
+  'stream.slow_client',
 ];
 
 /** 基准价 × 倍率（百分数）→ 实际单价（minor / 百万 token）。 */
@@ -353,12 +341,12 @@ async function listGatewayModels(headers: unknown): Promise<string[]> {
   // 若携带网关 key，则按其白名单过滤（空 = 全部）。
   let allowed: string[] = [];
   const authHeader =
-    headers && typeof headers === "object"
-      ? (headers as Record<string, unknown>)["authorization"]
+    headers && typeof headers === 'object'
+      ? (headers as Record<string, unknown>)['authorization']
       : undefined;
   const token =
-    typeof authHeader === "string" && authHeader.startsWith("Bearer ")
-      ? authHeader.slice("Bearer ".length)
+    typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+      ? authHeader.slice('Bearer '.length)
       : null;
   if (token) {
     const inspection = await auth()
@@ -369,32 +357,24 @@ async function listGatewayModels(headers: unknown): Promise<string[]> {
       allowed = toStringArray(policy?.models);
     }
   }
-  const [accounts, prices] = await Promise.all([
-    listActiveAccounts(),
-    listEnabledPrices(),
-  ]);
+  const [accounts, prices] = await Promise.all([listActiveAccounts(), listEnabledPrices()]);
   // 对外可售模型 = 已启用的定价行（去掉兜底 `*`）。用户调用与展示都用这个自定义名，
   // 实际转发到哪个上游模型由定价行的 `upstreamModel` 决定。
   // 尚未配置任何定价时，退回「上游账号的模型名」以保证可发现（旧行为）。
   const ids = new Set<string>();
-  for (const price of prices) if (price.model !== "*") ids.add(price.model);
+  for (const price of prices) if (price.model !== '*') ids.add(price.model);
   if (ids.size === 0) {
     for (const account of accounts) {
       for (const model of toStringArray(account.models)) ids.add(model);
     }
   }
 
-  const list =
-    allowed.length > 0
-      ? [...ids].filter((id) => allowed.includes(id))
-      : [...ids];
+  const list = allowed.length > 0 ? [...ids].filter((id) => allowed.includes(id)) : [...ids];
   return list.sort();
 }
 
 /** 统一的 handler 错误包装。 */
-function handle(
-  handler: (req: HttpRequest, reply: HttpReply) => Promise<unknown>,
-) {
+function handle(handler: (req: HttpRequest, reply: HttpReply) => Promise<unknown>) {
   return async (req: HttpRequest, reply: HttpReply): Promise<unknown> => {
     try {
       return await handler(req, reply);
@@ -415,21 +395,21 @@ function daysAgo(days: number): Date {
 
 export const llmGatewayPlugin = definePlugin({
   manifest: {
-    id: "llm-gateway",
-    name: "模型服务",
-    version: "0.1.0",
+    id: 'llm-gateway',
+    name: '模型服务',
+    version: '0.1.0',
     description:
-      "OpenAI 兼容模型服务：用户级 API 计费开关、可建多把 key、统一入口调用所有模型、按 token 预授权冻结用量后结算。",
+      'OpenAI 兼容模型服务：用户级 API 计费开关、可建多把 key、统一入口调用所有模型、按 token 预授权冻结用量后结算。',
     // ADR-0021: the `gateway` refined-scope resource is declared here, by the
     // plugin that owns the permission — the kernel no longer hardcodes
     // `llm-gateway.use/admin`. Holding either permission governs `gateway:read|write`.
     permissions: [
-      { key: "llm-gateway.use", scope: "gateway" },
-      { key: "llm-gateway.admin", scope: "gateway" },
+      { key: 'llm-gateway.use', scope: 'gateway' },
+      { key: 'llm-gateway.admin', scope: 'gateway' },
     ],
     roleTemplates: [
-      { role: "USER", permissions: ["llm-gateway.use"] },
-      { role: "ADMIN", permissions: ["llm-gateway.admin"] },
+      { role: 'USER', permissions: ['llm-gateway.use'] },
+      { role: 'ADMIN', permissions: ['llm-gateway.admin'] },
     ],
     // Open-platform surface (P1 slice four). Every entry mirrors one internal
     // route below and dispatches to the *same* handler; the refined
@@ -437,80 +417,80 @@ export const llmGatewayPlugin = definePlugin({
     // a read token can never perform a write. Read vs write is the whole point.
     capabilities: [
       {
-        id: "gateway.billing.read",
-        method: "GET",
-        route: "/llm-gateway/billing",
-        path: "/api/v1/gateway/billing",
+        id: 'gateway.billing.read',
+        method: 'GET',
+        route: '/llm-gateway/billing',
+        path: '/api/v1/gateway/billing',
         summary: "The caller's API billing status",
-        scope: "gateway:read",
+        scope: 'gateway:read',
       },
       {
-        id: "gateway.billing.write",
-        method: "POST",
-        route: "/llm-gateway/billing",
-        path: "/api/v1/gateway/billing",
+        id: 'gateway.billing.write',
+        method: 'POST',
+        route: '/llm-gateway/billing',
+        path: '/api/v1/gateway/billing',
         summary: "Toggle the caller's API billing switch",
         mutating: true,
-        scope: "gateway:write",
+        scope: 'gateway:write',
       },
       {
-        id: "gateway.prices.read",
-        method: "GET",
-        route: "/llm-gateway/prices",
-        path: "/api/v1/gateway/prices",
-        summary: "Model pricing visible to the caller",
-        scope: "gateway:read",
+        id: 'gateway.prices.read',
+        method: 'GET',
+        route: '/llm-gateway/prices',
+        path: '/api/v1/gateway/prices',
+        summary: 'Model pricing visible to the caller',
+        scope: 'gateway:read',
       },
       {
-        id: "gateway.models.read",
-        method: "GET",
-        route: "/llm-gateway/models",
-        path: "/api/v1/gateway/models",
-        summary: "Models available to the caller",
-        scope: "gateway:read",
+        id: 'gateway.models.read',
+        method: 'GET',
+        route: '/llm-gateway/models',
+        path: '/api/v1/gateway/models',
+        summary: 'Models available to the caller',
+        scope: 'gateway:read',
       },
       {
-        id: "gateway.usage.read",
-        method: "GET",
-        route: "/llm-gateway/usage",
-        path: "/api/v1/gateway/usage",
+        id: 'gateway.usage.read',
+        method: 'GET',
+        route: '/llm-gateway/usage',
+        path: '/api/v1/gateway/usage',
         summary: "The caller's API usage",
-        scope: "gateway:read",
+        scope: 'gateway:read',
       },
       {
-        id: "gateway.keys.read",
-        method: "GET",
-        route: "/llm-gateway/keys",
-        path: "/api/v1/gateway/keys",
+        id: 'gateway.keys.read',
+        method: 'GET',
+        route: '/llm-gateway/keys',
+        path: '/api/v1/gateway/keys',
         summary: "The caller's gateway keys",
-        scope: "gateway:read",
+        scope: 'gateway:read',
       },
       {
-        id: "gateway.keys.create",
-        method: "POST",
-        route: "/llm-gateway/keys",
-        path: "/api/v1/gateway/keys",
-        summary: "Create a gateway key",
+        id: 'gateway.keys.create',
+        method: 'POST',
+        route: '/llm-gateway/keys',
+        path: '/api/v1/gateway/keys',
+        summary: 'Create a gateway key',
         mutating: true,
-        scope: "gateway:write",
+        scope: 'gateway:write',
       },
       {
-        id: "gateway.keys.update",
-        method: "PATCH",
-        route: "/llm-gateway/keys/:id",
-        path: "/api/v1/gateway/keys/:id",
-        summary: "Update a gateway key",
+        id: 'gateway.keys.update',
+        method: 'PATCH',
+        route: '/llm-gateway/keys/:id',
+        path: '/api/v1/gateway/keys/:id',
+        summary: 'Update a gateway key',
         mutating: true,
-        scope: "gateway:write",
+        scope: 'gateway:write',
       },
       {
-        id: "gateway.keys.delete",
-        method: "DELETE",
-        route: "/llm-gateway/keys/:id",
-        path: "/api/v1/gateway/keys/:id",
-        summary: "Delete a gateway key",
+        id: 'gateway.keys.delete',
+        method: 'DELETE',
+        route: '/llm-gateway/keys/:id',
+        path: '/api/v1/gateway/keys/:id',
+        summary: 'Delete a gateway key',
         mutating: true,
-        scope: "gateway:write",
+        scope: 'gateway:write',
       },
     ],
   },
@@ -530,60 +510,60 @@ export const llmGatewayPlugin = definePlugin({
 
   routes: [
     {
-      method: "GET",
-      path: "/llm-gateway/admin/agent-provider",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'GET',
+      path: '/llm-gateway/admin/agent-provider',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: async () => agentProviderConfig(),
     },
     {
-      method: "PUT",
-      path: "/llm-gateway/admin/agent-provider",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'PUT',
+      path: '/llm-gateway/admin/agent-provider',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: configureAgentProvider,
     },
     {
-      method: "DELETE",
-      path: "/llm-gateway/admin/agent-provider",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'DELETE',
+      path: '/llm-gateway/admin/agent-provider',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: async () => clearAgentProvider(),
     },
     /* ------------------------------ 透传路由 ------------------------------ */
     {
-      kind: "raw",
-      method: "POST",
-      path: "/llm-gateway/*",
-      auth: "public",
+      kind: 'raw',
+      method: 'POST',
+      path: '/llm-gateway/*',
+      auth: 'public',
       handler: createRelayHandler(getRuntime),
     },
     // 内核 dispatcher 按精确 method 匹配，GET/DELETE 的 endpoint
     // （GET /v1/models、GET /v1/files、DELETE /v1/files/:id、GET /v1/batches/:id、
     // GET /v1/fine_tuning/jobs/:id）必须各自登记，否则到不了 relay。
     {
-      kind: "raw",
-      method: "GET",
-      path: "/llm-gateway/*",
-      auth: "public",
+      kind: 'raw',
+      method: 'GET',
+      path: '/llm-gateway/*',
+      auth: 'public',
       handler: createRelayHandler(getRuntime),
     },
     {
-      kind: "raw",
-      method: "DELETE",
-      path: "/llm-gateway/*",
-      auth: "public",
+      kind: 'raw',
+      method: 'DELETE',
+      path: '/llm-gateway/*',
+      auth: 'public',
       handler: createRelayHandler(getRuntime),
     },
 
     /* ------------------------------ 计费开关 ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/billing",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'GET',
+      path: '/llm-gateway/billing',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest) => {
-        const userId = req.user?.id ?? "";
+        const userId = req.user?.id ?? '';
         const [setting, walletAccount] = await Promise.all([
           getSetting(userId),
           wallet()
@@ -593,20 +573,20 @@ export const llmGatewayPlugin = definePlugin({
         return {
           enabled: setting?.billingEnabled ?? false,
           balance: walletAccount?.balance ?? 0,
-          currency: walletAccount?.currency ?? "CNY",
+          currency: walletAccount?.currency ?? 'CNY',
         };
       }),
     },
     {
-      method: "POST",
-      path: "/llm-gateway/billing",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'POST',
+      path: '/llm-gateway/billing',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest) => {
         const parsed = billingSchema.safeParse(req.body);
-        if (!parsed.success) throw new GatewayError(400, "参数无效");
+        if (!parsed.success) throw new GatewayError(400, '参数无效');
         const userId = req.user?.id;
-        if (!userId) throw new GatewayError(401, "未登录");
+        if (!userId) throw new GatewayError(401, '未登录');
         const setting = await setSetting(userId, parsed.data.enabled);
         return { enabled: setting.billingEnabled };
       }),
@@ -614,22 +594,20 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 模型定价（用户） ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/prices",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'GET',
+      path: '/llm-gateway/prices',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest) => {
-        const userId = req.user?.id ?? "";
+        const userId = req.user?.id ?? '';
         const [prices, walletAccount] = await Promise.all([
-          listEnabledPrices().then((rows) =>
-            rows.sort((a, b) => a.model.localeCompare(b.model)),
-          ),
+          listEnabledPrices().then((rows) => rows.sort((a, b) => a.model.localeCompare(b.model))),
           wallet()
             .getAccount(userId)
             .catch(() => null),
         ]);
         return {
-          currency: walletAccount?.currency ?? "CNY",
+          currency: walletAccount?.currency ?? 'CNY',
           unitTokens: 1_000_000,
           prices: prices.map((price) => ({
             model: price.model,
@@ -638,14 +616,8 @@ export const llmGatewayPlugin = definePlugin({
             // 实际单价 = 基准价 × 倍率（minor / 百万 token）。
             inputPrice: scale(price.inputPrice, price.multiplier),
             outputPrice: scale(price.outputPrice, price.multiplier),
-            cacheReadPrice: scale(
-              price.cacheReadPrice || price.inputPrice,
-              price.multiplier,
-            ),
-            cacheWritePrice: scale(
-              price.cacheWritePrice || price.inputPrice,
-              price.multiplier,
-            ),
+            cacheReadPrice: scale(price.cacheReadPrice || price.inputPrice, price.multiplier),
+            cacheWritePrice: scale(price.cacheWritePrice || price.inputPrice, price.multiplier),
           })),
         };
       }),
@@ -653,40 +625,40 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 模型发现 ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/v1/models",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'GET',
+      path: '/llm-gateway/v1/models',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest) => {
         // 允许携带网关 key（Bearer）或登录会话；普通路由鉴权走会话，这里额外兼容 key。
         const models = await listGatewayModels(req.headers);
         const created = Math.floor(Date.now() / 1000);
         return {
-          object: "list",
+          object: 'list',
           data: models.map((id) => ({
             id,
-            object: "model",
+            object: 'model',
             created,
-            owned_by: "stackpanel",
+            owned_by: 'stackpanel',
           })),
         };
       }),
     },
     {
-      method: "GET",
-      path: "/llm-gateway/models",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'GET',
+      path: '/llm-gateway/models',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest) => {
         const models = await listGatewayModels(req.headers);
         const created = Math.floor(Date.now() / 1000);
         return {
-          object: "list",
+          object: 'list',
           data: models.map((id) => ({
             id,
-            object: "model",
+            object: 'model',
             created,
-            owned_by: "stackpanel",
+            owned_by: 'stackpanel',
           })),
         };
       }),
@@ -694,22 +666,18 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 用户密钥 ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/keys",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'GET',
+      path: '/llm-gateway/keys',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest) => {
-        const userId = req.user?.id ?? "";
+        const userId = req.user?.id ?? '';
         // 网关密钥 = 持有 llm-gateway.use scope 的平台凭证；策略在 key-policy。
-        const tokens = (await auth().listPlatformTokens(userId)).filter(
-          (token) => token.scopes.includes(GATEWAY_SCOPE),
+        const tokens = (await auth().listPlatformTokens(userId)).filter((token) =>
+          token.scopes.includes(GATEWAY_SCOPE),
         );
-        const policies = await listPoliciesByTokens(
-          tokens.map((token) => token.id),
-        );
-        const policyById = new Map(
-          policies.map((policy) => [policy.apiTokenId, policy]),
-        );
+        const policies = await listPoliciesByTokens(tokens.map((token) => token.id));
+        const policyById = new Map(policies.map((policy) => [policy.apiTokenId, policy]));
         const revealKey = `gw:reveal:${userId}`;
         const revealedKey = await state()
           .get(revealKey)
@@ -741,18 +709,17 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
     {
-      method: "POST",
-      path: "/llm-gateway/keys",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'POST',
+      path: '/llm-gateway/keys',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest, reply: HttpReply) => {
         const parsed = createKeySchema.safeParse(req.body);
-        if (!parsed.success) throw new GatewayError(400, "参数无效");
+        if (!parsed.success) throw new GatewayError(400, '参数无效');
         const userId = req.user?.id;
-        if (!userId) throw new GatewayError(401, "未登录");
+        if (!userId) throw new GatewayError(401, '未登录');
         const existing = (await auth().listPlatformTokens(userId)).length;
-        if (existing >= 50)
-          throw new GatewayError(400, "密钥数量已达上限（50）");
+        if (existing >= 50) throw new GatewayError(400, '密钥数量已达上限（50）');
         // 凭证写内核 ApiToken（含 scope），业务策略写 key-policy。
         const created = await auth().createPlatformToken({
           userId,
@@ -782,23 +749,20 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
     {
-      method: "PATCH",
-      path: "/llm-gateway/keys/:id",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'PATCH',
+      path: '/llm-gateway/keys/:id',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest) => {
         const params = idSchema.safeParse(req.params);
         const body = updateKeySchema.safeParse(req.body);
-        if (!params.success || !body.success)
-          throw new GatewayError(400, "参数无效");
-        const userId = req.user?.id ?? "";
+        if (!params.success || !body.success) throw new GatewayError(400, '参数无效');
+        const userId = req.user?.id ?? '';
         const token = (await auth().listPlatformTokens(userId)).find(
-          (item) =>
-            item.id === params.data.id && item.scopes.includes(GATEWAY_SCOPE),
+          (item) => item.id === params.data.id && item.scopes.includes(GATEWAY_SCOPE),
         );
-        if (!token) throw new GatewayError(404, "密钥不存在");
-        const { name, status, models, rpmLimit, concurrencyLimit, quotaLimit } =
-          body.data;
+        if (!token) throw new GatewayError(404, '密钥不存在');
+        const { name, status, models, rpmLimit, concurrencyLimit, quotaLimit } = body.data;
         const tokenPatch = defined({ name, status });
         if (Object.keys(tokenPatch).length > 0) {
           await auth().updatePlatformToken(token.id, tokenPatch);
@@ -828,19 +792,18 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
     {
-      method: "DELETE",
-      path: "/llm-gateway/keys/:id",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'DELETE',
+      path: '/llm-gateway/keys/:id',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest, reply: HttpReply) => {
         const params = idSchema.safeParse(req.params);
-        if (!params.success) throw new GatewayError(400, "参数无效");
-        const userId = req.user?.id ?? "";
+        if (!params.success) throw new GatewayError(400, '参数无效');
+        const userId = req.user?.id ?? '';
         const token = (await auth().listPlatformTokens(userId)).find(
-          (item) =>
-            item.id === params.data.id && item.scopes.includes(GATEWAY_SCOPE),
+          (item) => item.id === params.data.id && item.scopes.includes(GATEWAY_SCOPE),
         );
-        if (!token) throw new GatewayError(404, "密钥不存在");
+        if (!token) throw new GatewayError(404, '密钥不存在');
         await removePolicy(token.id);
         await auth().deletePlatformToken(token.id);
         return reply.code(204).send();
@@ -849,12 +812,12 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 用户用量 ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/usage",
-      auth: "user",
-      permission: "llm-gateway.use",
+      method: 'GET',
+      path: '/llm-gateway/usage',
+      auth: 'user',
+      permission: 'llm-gateway.use',
       handler: handle(async (req: HttpRequest) => {
-        const userId = req.user?.id ?? "";
+        const userId = req.user?.id ?? '';
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
         const startOfWeek = new Date();
@@ -871,8 +834,7 @@ export const llmGatewayPlugin = definePlugin({
           listUserLogsSince(userId, since30),
         ]);
 
-        const dayKey = (date: Date): string =>
-          `${date.getMonth() + 1}/${date.getDate()}`;
+        const dayKey = (date: Date): string => `${date.getMonth() + 1}/${date.getDate()}`;
 
         const bucketBy = (
           rows: Array<{
@@ -891,8 +853,7 @@ export const llmGatewayPlugin = definePlugin({
             tokens: 0,
           }));
           for (const row of rows) {
-            const target =
-              points[index.get(keyOf(new Date(row.createdAt))) ?? -1];
+            const target = points[index.get(keyOf(new Date(row.createdAt))) ?? -1];
             if (!target) continue;
             target.amount += row.amount;
             target.tokens += row.totalTokens;
@@ -933,9 +894,7 @@ export const llmGatewayPlugin = definePlugin({
           (k) => k,
         );
 
-        const summarize = (
-          rows: Array<{ amount: number; totalTokens: number }>,
-        ) =>
+        const summarize = (rows: Array<{ amount: number; totalTokens: number }>) =>
           rows.reduce<{
             requests: number;
             amount: number;
@@ -987,12 +946,12 @@ export const llmGatewayPlugin = definePlugin({
               series: todaySeries,
               byModel: modelBreakdown(todayLogs),
             },
-            "7d": {
+            '7d': {
               summary: summarize(weekLogs),
               series: weekSeries,
               byModel: modelBreakdown(weekLogs),
             },
-            "30d": {
+            '30d': {
               summary: summarize(monthLogs),
               series: monthSeries,
               byModel: modelBreakdown(monthLogs),
@@ -1017,10 +976,10 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 管理端账号池 ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/admin/accounts",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'GET',
+      path: '/llm-gateway/admin/accounts',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async () => {
         const accounts = await listAllAccounts();
         return {
@@ -1045,54 +1004,51 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
     {
-      method: "POST",
-      path: "/llm-gateway/admin/accounts",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'POST',
+      path: '/llm-gateway/admin/accounts',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async (req: HttpRequest, reply: HttpReply) => {
         const parsed = accountSchema.safeParse(req.body);
-        if (!parsed.success) throw new GatewayError(400, "参数无效");
+        if (!parsed.success) throw new GatewayError(400, '参数无效');
         const { apiKey, ...rest } = parsed.data;
         const id = newId();
         const apiKeyRef = `account.${id}`;
         await secrets().set(apiKeyRef, apiKey);
         const created = await createAccount({
           name: rest.name,
-          provider: rest.provider ?? "openai-chat",
+          provider: rest.provider ?? 'openai-chat',
           baseUrl: rest.baseUrl,
           apiKeyRef,
           models: rest.models ?? [],
-          status: rest.status ?? "ACTIVE",
+          status: rest.status ?? 'ACTIVE',
           priority: rest.priority ?? 0,
           weight: rest.weight ?? 100,
           maxConcurrency: rest.maxConcurrency ?? 0,
           options: rest.options ?? {},
           rpmLimit: rest.rpmLimit ?? 0,
           enabled: rest.enabled ?? true,
-          affinity: rest.affinity ?? "",
+          affinity: rest.affinity ?? '',
           lastUsedAt: null,
         });
-        return reply
-          .code(201)
-          .send({ account: { id: created.id, name: created.name } });
+        return reply.code(201).send({ account: { id: created.id, name: created.name } });
       }),
     },
     {
-      method: "PATCH",
-      path: "/llm-gateway/admin/accounts/:id",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'PATCH',
+      path: '/llm-gateway/admin/accounts/:id',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async (req: HttpRequest) => {
         const params = idSchema.safeParse(req.params);
         const body = accountUpdateSchema.safeParse(req.body);
-        if (!params.success || !body.success)
-          throw new GatewayError(400, "参数无效");
+        if (!params.success || !body.success) throw new GatewayError(400, '参数无效');
         const existing = await getAccount(params.data.id);
-        if (!existing) throw new GatewayError(404, "账号不存在");
+        if (!existing) throw new GatewayError(404, '账号不存在');
         const { apiKey, ...rest } = body.data;
         if (apiKey) await secrets().set(existing.apiKeyRef, apiKey);
         const updated = await updateAccount(params.data.id, defined(rest));
-        if (!updated) throw new GatewayError(404, "账号不存在");
+        if (!updated) throw new GatewayError(404, '账号不存在');
         return {
           account: {
             id: updated.id,
@@ -1103,15 +1059,15 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
     {
-      method: "DELETE",
-      path: "/llm-gateway/admin/accounts/:id",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'DELETE',
+      path: '/llm-gateway/admin/accounts/:id',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async (req: HttpRequest, reply: HttpReply) => {
         const params = idSchema.safeParse(req.params);
-        if (!params.success) throw new GatewayError(400, "参数无效");
+        if (!params.success) throw new GatewayError(400, '参数无效');
         const existing = await getAccount(params.data.id);
-        if (!existing) throw new GatewayError(404, "账号不存在");
+        if (!existing) throw new GatewayError(404, '账号不存在');
         await secrets()
           .remove(existing.apiKeyRef)
           .catch(() => null);
@@ -1120,13 +1076,13 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
     {
-      method: "POST",
-      path: "/llm-gateway/admin/upstream-models",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'POST',
+      path: '/llm-gateway/admin/upstream-models',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async (req: HttpRequest) => {
         const parsed = fetchModelsSchema.safeParse(req.body);
-        if (!parsed.success) throw new GatewayError(400, "参数无效");
+        if (!parsed.success) throw new GatewayError(400, '参数无效');
         let baseUrl = parsed.data.baseUrl;
         let apiKey = parsed.data.apiKey;
         let account: {
@@ -1136,7 +1092,7 @@ export const llmGatewayPlugin = definePlugin({
         } | null = null;
         if (parsed.data.id) {
           const found = await getAccount(parsed.data.id);
-          if (!found) throw new GatewayError(404, "账号不存在");
+          if (!found) throw new GatewayError(404, '账号不存在');
           account = found;
           baseUrl = baseUrl ?? found.baseUrl;
           apiKey =
@@ -1146,22 +1102,20 @@ export const llmGatewayPlugin = definePlugin({
               .catch(() => null)) ??
             undefined;
         }
-        if (!baseUrl || !apiKey)
-          throw new GatewayError(400, "缺少 Base URL 或上游 API Key");
-        const provider =
-          parsed.data.provider ?? account?.provider ?? "openai-chat";
+        if (!baseUrl || !apiKey) throw new GatewayError(400, '缺少 Base URL 或上游 API Key');
+        const provider = parsed.data.provider ?? account?.provider ?? 'openai-chat';
         const request = upstreamModelsRequest(provider, baseUrl, apiKey);
         if (!isAllowedUpstreamUrl(request.url)) {
-          throw new GatewayError(400, "上游地址必须为公网地址");
+          throw new GatewayError(400, '上游地址必须为公网地址');
         }
         let upstream: Response;
         try {
           upstream = await fetch(request.url, {
-            headers: { ...request.headers, accept: "application/json" },
+            headers: { ...request.headers, accept: 'application/json' },
             signal: AbortSignal.timeout(20_000),
           });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "上游不可达";
+          const message = error instanceof Error ? error.message : '上游不可达';
           throw new GatewayError(502, `拉取模型失败：${message}`);
         }
         if (!upstream.ok) {
@@ -1172,10 +1126,10 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
     {
-      method: "GET",
-      path: "/llm-gateway/admin/upstream-model-catalog",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'GET',
+      path: '/llm-gateway/admin/upstream-model-catalog',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async () => {
         // 汇总「上游真实存在的模型名」，供定价绑定选择。账号显式配置了模型清单直接采用；
         // 配置为「不限」的账号则临时拉取其 /models（best-effort，单个失败不影响整体）。
@@ -1192,21 +1146,15 @@ export const llmGatewayPlugin = definePlugin({
               .get(account.apiKeyRef)
               .catch(() => null);
             if (!apiKey) return;
-            const request = upstreamModelsRequest(
-              account.provider,
-              account.baseUrl,
-              apiKey,
-            );
+            const request = upstreamModelsRequest(account.provider, account.baseUrl, apiKey);
             if (!isAllowedUpstreamUrl(request.url)) return;
             try {
               const upstream = await fetch(request.url, {
-                headers: { ...request.headers, accept: "application/json" },
+                headers: { ...request.headers, accept: 'application/json' },
                 signal: AbortSignal.timeout(15_000),
               });
               if (!upstream.ok) return;
-              const payload = (await upstream
-                .json()
-                .catch(() => null)) as unknown;
+              const payload = (await upstream.json().catch(() => null)) as unknown;
               for (const model of extractModelIds(payload)) ids.add(model);
             } catch {
               // 单个账号不可达时忽略，返回已知并集。
@@ -1219,28 +1167,28 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 管理端定价 ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/admin/prices",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'GET',
+      path: '/llm-gateway/admin/prices',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async () => {
         const prices = await listAllPrices();
         return { prices };
       }),
     },
     {
-      method: "POST",
-      path: "/llm-gateway/admin/prices",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'POST',
+      path: '/llm-gateway/admin/prices',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async (req: HttpRequest, reply: HttpReply) => {
         const parsed = priceSchema.safeParse(req.body);
-        if (!parsed.success) throw new GatewayError(400, "参数无效");
+        if (!parsed.success) throw new GatewayError(400, '参数无效');
         const data = {
           ...parsed.data,
           multiplier: parsed.data.multiplier ?? 100,
         };
-        const upstreamModel = data.upstreamModel ?? "";
+        const upstreamModel = data.upstreamModel ?? '';
         const existing = await getPrice(data.model);
         const saved = existing
           ? await updatePrice(existing.id, defined({ ...data, upstreamModel }))
@@ -1262,28 +1210,27 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
     {
-      method: "PATCH",
-      path: "/llm-gateway/admin/prices/:id",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'PATCH',
+      path: '/llm-gateway/admin/prices/:id',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async (req: HttpRequest) => {
         const params = idSchema.safeParse(req.params);
         const body = priceUpdateSchema.safeParse(req.body);
-        if (!params.success || !body.success)
-          throw new GatewayError(400, "参数无效");
+        if (!params.success || !body.success) throw new GatewayError(400, '参数无效');
         const updated = await updatePrice(params.data.id, defined(body.data));
-        if (!updated) throw new GatewayError(404, "定价不存在");
+        if (!updated) throw new GatewayError(404, '定价不存在');
         return { price: updated };
       }),
     },
     {
-      method: "DELETE",
-      path: "/llm-gateway/admin/prices/:id",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'DELETE',
+      path: '/llm-gateway/admin/prices/:id',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async (req: HttpRequest, reply: HttpReply) => {
         const params = idSchema.safeParse(req.params);
-        if (!params.success) throw new GatewayError(400, "参数无效");
+        if (!params.success) throw new GatewayError(400, '参数无效');
         await removePrice(params.data.id);
         return reply.code(204).send();
       }),
@@ -1291,20 +1238,20 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 管理端配置（目标七） ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/admin/config",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'GET',
+      path: '/llm-gateway/admin/config',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async () => ({ config: await getConfig() })),
     },
     {
-      method: "PATCH",
-      path: "/llm-gateway/admin/config",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'PATCH',
+      path: '/llm-gateway/admin/config',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async (req: HttpRequest) => {
         const parsed = configUpdateSchema.safeParse(req.body);
-        if (!parsed.success) throw new GatewayError(400, "参数无效");
+        if (!parsed.success) throw new GatewayError(400, '参数无效');
         const config = await setConfig(defined(parsed.data));
         return { config };
       }),
@@ -1312,10 +1259,10 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 管理端补偿队列（目标五/七） ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/admin/compensations",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'GET',
+      path: '/llm-gateway/admin/compensations',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async () => {
         const [recent, pending] = await Promise.all([
           listCompensationEntries(100),
@@ -1328,10 +1275,10 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
     {
-      method: "POST",
-      path: "/llm-gateway/admin/compensations/run",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'POST',
+      path: '/llm-gateway/admin/compensations/run',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async () => {
         const result = await runCompensation(wallet(), runtime!.logger);
         return { result };
@@ -1340,15 +1287,13 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 管理端任务（目标七） ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/admin/tasks",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'GET',
+      path: '/llm-gateway/admin/tasks',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async (req: HttpRequest) => {
         const status =
-          typeof req.query?.["status"] === "string"
-            ? (req.query["status"] as string)
-            : undefined;
+          typeof req.query?.['status'] === 'string' ? (req.query['status'] as string) : undefined;
         const tasks = await listTasks(100, status);
         return { tasks };
       }),
@@ -1356,10 +1301,10 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 管理端指标（目标七/九） ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/admin/metrics",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'GET',
+      path: '/llm-gateway/admin/metrics',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async () => {
         const metrics = await readAllMetrics(state(), METRIC_NAMES);
         return { metrics };
@@ -1368,24 +1313,22 @@ export const llmGatewayPlugin = definePlugin({
 
     /* ------------------------------ 管理端概览 ------------------------------ */
     {
-      method: "GET",
-      path: "/llm-gateway/admin/overview",
-      auth: "admin",
-      permission: "llm-gateway.admin",
+      method: 'GET',
+      path: '/llm-gateway/admin/overview',
+      auth: 'admin',
+      permission: 'llm-gateway.admin',
       handler: handle(async () => {
         const since = daysAgo(30);
-        const [keys, accounts, logs, topModels, recentLogs] = await Promise.all(
-          [
-            auth()
-              .listPlatformTokensByScope(GATEWAY_SCOPE)
-              .then((rows) => rows.length)
-              .catch(() => 0),
-            countAccounts(),
-            listLogsSince(since, 20_000),
-            listLogsSince(since, 20_000),
-            listRecentAllLogs(50),
-          ],
-        );
+        const [keys, accounts, logs, topModels, recentLogs] = await Promise.all([
+          auth()
+            .listPlatformTokensByScope(GATEWAY_SCOPE)
+            .then((rows) => rows.length)
+            .catch(() => 0),
+          countAccounts(),
+          listLogsSince(since, 20_000),
+          listLogsSince(since, 20_000),
+          listRecentAllLogs(50),
+        ]);
         const summary = logs.reduce(
           (acc, log) => {
             acc.requests += 1;
@@ -1416,9 +1359,7 @@ export const llmGatewayPlugin = definePlugin({
           summary,
           topModels: [...byModel.entries()]
             .map(([model, stats]) => ({ model, ...stats }))
-            .sort(
-              (a, b) => b.amount - a.amount || b.totalTokens - a.totalTokens,
-            )
+            .sort((a, b) => b.amount - a.amount || b.totalTokens - a.totalTokens)
             .slice(0, 10),
           logs: recentLogs.map((log) => ({
             id: log.id,
@@ -1439,10 +1380,7 @@ export const llmGatewayPlugin = definePlugin({
     for (const definition of GATEWAY_NOTIFICATION_TYPES) {
       ctx.registerExtension(EXTENSION_POINTS.notificationType, definition);
     }
-    ctx.registerExtension(
-      EXTENSION_POINTS.llmProvider,
-      createAgentProvider(getRuntime),
-    );
+    ctx.registerExtension(EXTENSION_POINTS.llmProvider, createAgentProvider(getRuntime));
     runtime = {
       wallet: ctx.wallet,
       auth: ctx.auth,
@@ -1451,7 +1389,7 @@ export const llmGatewayPlugin = definePlugin({
       logger: ctx.logger,
     };
     // 补偿队列（ADR-0013）：插件不能自建定时器，交给内核 worker 池，多副本下只跑一次。
-    ctx.jobs.handle("compensation", async () => {
+    ctx.jobs.handle('compensation', async () => {
       await runCompensation(ctx.wallet, ctx.logger).catch((error: unknown) => {
         ctx.logger.warn(
           `llm-gateway: compensation cycle failed: ${
@@ -1461,15 +1399,15 @@ export const llmGatewayPlugin = definePlugin({
       });
     });
     void ctx.jobs
-      .schedule("compensation", { everyMs: COMPENSATION_INTERVAL_MS })
+      .schedule('compensation', { everyMs: COMPENSATION_INTERVAL_MS })
       .catch(() => undefined);
-    ctx.logger.info("llm-gateway: activated");
+    ctx.logger.info('llm-gateway: activated');
   },
 
   onDeactivate(ctx: PluginContext) {
     runtime = null;
     resetContext();
-    ctx.logger.info("llm-gateway: deactivated");
+    ctx.logger.info('llm-gateway: deactivated');
   },
 });
 

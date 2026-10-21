@@ -79,9 +79,10 @@ export interface ReserveEstimateInput {
 export function estimateReserve(input: ReserveEstimateInput): number {
   const promptRough = estimateTokens(input.bodyText);
   const promptBound = Math.ceil(promptRough * 1.5);
-  const completion = input.maxTokens && input.maxTokens > 0
-    ? Math.floor(input.maxTokens)
-    : DEFAULT_RESERVE_MAX_TOKENS;
+  const completion =
+    input.maxTokens && input.maxTokens > 0
+      ? Math.floor(input.maxTokens)
+      : DEFAULT_RESERVE_MAX_TOKENS;
   // 图片/音频是非 token 计价单位，必须显式进预留，否则 images/audio 请求会少冻。
   const imageCount = input.imageCount && input.imageCount > 0 ? Math.floor(input.imageCount) : 0;
   const audioSeconds =
@@ -286,9 +287,7 @@ export async function settle(input: SettleInput): Promise<SettleResult> {
     reasoningTokens: input.usage.reasoningTokens ?? 0,
     imageCount: input.usage.imageCount ?? 0,
     audioSeconds: input.usage.audioSeconds ?? 0,
-    totalTokens:
-      input.usage.totalTokens ??
-      (input.usage.promptTokens + input.usage.completionTokens),
+    totalTokens: input.usage.totalTokens ?? input.usage.promptTokens + input.usage.completionTokens,
     amount,
     currency: context.currency,
     status: input.status,
@@ -491,16 +490,14 @@ export async function release(
   context: BillingContext,
 ): Promise<void> {
   if (context.hold) {
-    await wallet
-      .releaseHold(context.hold.id)
-      .catch((error: unknown) => {
-        // 释放失败不阻塞错误响应：hold 会由内核过期清扫（15 分钟）归还。
-        logger.warn(
-          `llm-gateway: release hold ${context.hold?.id ?? ''} failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      });
+    await wallet.releaseHold(context.hold.id).catch((error: unknown) => {
+      // 释放失败不阻塞错误响应：hold 会由内核过期清扫（15 分钟）归还。
+      logger.warn(
+        `llm-gateway: release hold ${context.hold?.id ?? ''} failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
   }
   await closeEntry(context, { status: 'RELEASED', settledAmount: 0, amount: 0 });
 }
@@ -555,12 +552,7 @@ export async function reserveFree(input: {
 
 /** 台账状态（给管理端筛选用）。 */
 export type BillingStatus =
-  | 'RESERVED'
-  | 'SETTLED'
-  | 'RELEASED'
-  | 'COMPENSATING'
-  | 'COMPENSATED'
-  | 'FAILED';
+  'RESERVED' | 'SETTLED' | 'RELEASED' | 'COMPENSATING' | 'COMPENSATED' | 'FAILED';
 
 export { getBillingEntry, getBillingByReference };
 export type { BillingEntryRow, GatewayUsageLogData };

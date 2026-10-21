@@ -132,7 +132,9 @@ export function defaultTypeFor(status: number): GatewayErrorType {
 export function errorBody(
   shape: GatewayErrorShape,
   status: number,
-): { error: { message: string; type: string; code: string; param: string | null; status: number } } {
+): {
+  error: { message: string; type: string; code: string; param: string | null; status: number };
+} {
   return {
     error: {
       message: shape.message,
@@ -167,7 +169,11 @@ export function sendGatewayError(reply: RawHttpReply, error: unknown): void {
   if (gw.retryAfterSeconds !== null) {
     reply.header('retry-after', String(Math.max(1, Math.ceil(gw.retryAfterSeconds))));
   }
-  reply.end(JSON.stringify(errorBody({ message: gw.message, type: gw.type, code: gw.code, param: gw.param }, gw.status)));
+  reply.end(
+    JSON.stringify(
+      errorBody({ message: gw.message, type: gw.type, code: gw.code, param: gw.param }, gw.status),
+    ),
+  );
 }
 
 /** 兼容旧调用点的极简错误写出（无 type 细节时用）。 */

@@ -105,7 +105,9 @@ export async function listPublicProducts(req: HttpRequest): Promise<unknown> {
       const firstRoot = roots[0]!;
       const firstChild = sorted
         .filter((category) => category.parentId === firstRoot.id)
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.getTime() - b.createdAt.getTime())[0];
+        .sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.createdAt.getTime() - b.createdAt.getTime(),
+        )[0];
       categoryId = firstChild?.id ?? firstRoot.id;
     }
   }

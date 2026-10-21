@@ -15,7 +15,9 @@ if (!wiki || !existsSync(source)) {
   process.exit(1);
 }
 
-const pages = readdirSync(source).filter((name) => name.endsWith('.md')).sort();
+const pages = readdirSync(source)
+  .filter((name) => name.endsWith('.md'))
+  .sort();
 const changed = [];
 for (const page of pages) {
   const from = resolve(source, page);

@@ -151,7 +151,7 @@ export function renderMarkdown(source: string): ReactElement {
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       const level = heading[1]?.length ?? 1;
-      const Tag = (`h${level}` as 'h1');
+      const Tag = `h${level}` as 'h1';
       blocks.push(
         <Tag key={`b${key++}`} className={HEADING_CLASS[level]}>
           {renderInline(heading[2] ?? '', `b${key}`)}

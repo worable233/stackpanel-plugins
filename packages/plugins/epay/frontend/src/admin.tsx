@@ -1,15 +1,10 @@
-"use client";
+'use client';
 
-import type { AdminPageComponentProps } from "@stackpanel/sdk";
-import { FeatureOverview, PageHeader } from "@stackpanel/ui";
-import { useRouter } from "next/navigation";
-import {
-  useState,
-  useTransition,
-  type ChangeEvent,
-  type ReactElement,
-} from "react";
-import { toast } from "sonner";
+import type { AdminPageComponentProps } from '@stackpanel/sdk';
+import { FeatureOverview, PageHeader } from '@stackpanel/ui';
+import { useRouter } from 'next/navigation';
+import { useState, useTransition, type ChangeEvent, type ReactElement } from 'react';
+import { toast } from 'sonner';
 
 interface EpayStatus {
   configured: boolean;
@@ -19,7 +14,7 @@ interface EpayStatus {
   methods?: Array<{ id: string; label: string }>;
 }
 
-const DEFAULT_METHODS = "alipay,wxpay,qqpay";
+const DEFAULT_METHODS = 'alipay,wxpay,qqpay';
 
 /** RFC 7807 problem-details body emitted by the kernel (ADR-0012). */
 interface ProblemDetails {
@@ -39,12 +34,12 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
   const status = props.data.status as EpayStatus | undefined;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [baseUrl, setBaseUrl] = useState(status?.baseUrl ?? "");
-  const [pid, setPid] = useState(status?.pid ?? "");
-  const [privateKey, setPrivateKey] = useState("");
-  const [platformPublicKey, setPlatformPublicKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState(status?.baseUrl ?? '');
+  const [pid, setPid] = useState(status?.pid ?? '');
+  const [privateKey, setPrivateKey] = useState('');
+  const [platformPublicKey, setPlatformPublicKey] = useState('');
   const [methods, setMethods] = useState(
-    status?.methods?.map((method) => method.id).join(",") || DEFAULT_METHODS,
+    status?.methods?.map((method) => method.id).join(',') || DEFAULT_METHODS,
   );
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
@@ -58,28 +53,26 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
     };
     startTransition(async () => {
       try {
-        const response = await fetch("/api/plugins/epay/admin/config", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
+        const response = await fetch('/api/plugins/epay/admin/config', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
         });
         if (!response.ok) {
           toast.error(await readErrorMessage(response));
           return;
         }
-        toast.success("易支付配置已保存。");
+        toast.success('易支付配置已保存。');
         router.refresh();
       } catch {
-        toast.error("保存失败，请稍后重试。");
+        toast.error('保存失败，请稍后重试。');
       }
     });
   }
 
   return (
     <main className="w-full space-y-8">
-      <PageHeader
-        title="配置"
-      />
+      <PageHeader title="配置" />
       {status?.secretsEnabled === false ? (
         <p className="rounded-lg border border-destructive/35 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           未配置平台加密密钥，无法保存商户私钥。
@@ -98,9 +91,7 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
             </div>
             <div>
               <dt className="text-muted-foreground">支付方式</dt>
-              <dd className="mt-1">
-                {status.methods?.map((method) => method.label).join("、")}
-              </dd>
+              <dd className="mt-1">{status.methods?.map((method) => method.label).join('、')}</dd>
             </div>
           </dl>
         </section>
@@ -117,13 +108,7 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
           onChange={setBaseUrl}
           required
         />
-        <Field
-          label="商户 PID"
-          name="pid"
-          value={pid}
-          onChange={setPid}
-          required
-        />
+        <Field label="商户 PID" name="pid" value={pid} onChange={setPid} required />
         <Field
           label="商户 RSA 私钥"
           name="privateKey"
@@ -153,7 +138,7 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
           disabled={pending}
           className="h-9 w-fit rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60 sm:col-span-2"
         >
-          {pending ? "保存中…" : "保存配置"}
+          {pending ? '保存中…' : '保存配置'}
         </button>
       </form>
     </main>
@@ -177,15 +162,10 @@ function Field({
   value: string;
   onChange: (value: string) => void;
 }): ReactElement {
-  const handleChange = (
-    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ): void => onChange(event.target.value);
+  const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void =>
+    onChange(event.target.value);
   return (
-    <label
-      className={
-        textarea ? "grid gap-1 text-sm sm:col-span-2" : "grid gap-1 text-sm"
-      }
-    >
+    <label className={textarea ? 'grid gap-1 text-sm sm:col-span-2' : 'grid gap-1 text-sm'}>
       <span>{label}</span>
       {textarea ? (
         <textarea
@@ -211,16 +191,15 @@ function Field({
 
 /** Render a kernel problem-details response into a single user-facing message. */
 async function readErrorMessage(response: Response): Promise<string> {
-  if (response.status === 401) return "登录状态已失效，请重新登录。";
-  if (response.status === 403) return "无权执行此操作。";
+  if (response.status === 401) return '登录状态已失效，请重新登录。';
+  if (response.status === 403) return '无权执行此操作。';
   try {
     const body = (await response.json()) as ProblemDetails;
-    const detail = typeof body.detail === "string" ? body.detail.trim() : "";
+    const detail = typeof body.detail === 'string' ? body.detail.trim() : '';
     if (detail) return detail;
-    const title = typeof body.title === "string" ? body.title.trim() : "";
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
     if (title) return title;
-    if (typeof body.code === "string" && body.code.trim())
-      return `保存失败（${body.code}）。`;
+    if (typeof body.code === 'string' && body.code.trim()) return `保存失败（${body.code}）。`;
   } catch {
     // Non-JSON error body; fall through to a generic message.
   }
@@ -235,22 +214,22 @@ function EpayOverview(props: AdminPageComponentProps) {
       description="查看支付网关的配置状态与支持的支付方式。"
       unavailable={!status}
       metrics={[
-        { label: "网关状态", value: status?.configured ? "已配置" : "未配置" },
-        { label: "支付方式", value: status?.methods?.length ?? 0 },
+        { label: '网关状态', value: status?.configured ? '已配置' : '未配置' },
+        { label: '支付方式', value: status?.methods?.length ?? 0 },
         {
-          label: "密钥存储",
-          value: status?.secretsEnabled ? "可用" : "未启用",
+          label: '密钥存储',
+          value: status?.secretsEnabled ? '可用' : '未启用',
         },
       ]}
       links={[
         {
-          label: "配置",
-          description: "设置网关地址、商户信息与密钥。",
-          href: "/admin/plugin/epay/settings",
+          label: '配置',
+          description: '设置网关地址、商户信息与密钥。',
+          href: '/admin/plugin/epay/settings',
         },
       ]}
       activity={{
-        title: "支付方式",
+        title: '支付方式',
         items: (status?.methods ?? []).map((method) => ({
           label: method.label,
           detail: method.id,
@@ -261,6 +240,6 @@ function EpayOverview(props: AdminPageComponentProps) {
 }
 
 export const adminPages = {
-  "admin/summary": EpayOverview,
-  "admin/overview": EpayAdminPage,
+  'admin/summary': EpayOverview,
+  'admin/overview': EpayAdminPage,
 } as const;

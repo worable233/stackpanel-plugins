@@ -97,9 +97,15 @@ export const gatewayConfigModel = defineModel({
     /** 上游失败最大尝试次数（含首次）。 */
     retryAttempts: z.number().int().default(3),
     /** 非流式响应体大小上限（字节）。 */
-    maxResponseBytes: z.number().int().default(32 * 1024 * 1024),
+    maxResponseBytes: z
+      .number()
+      .int()
+      .default(32 * 1024 * 1024),
     /** 预留 hold 的 TTL（毫秒）。 */
-    holdTtlMs: z.number().int().default(15 * 60 * 1000),
+    holdTtlMs: z
+      .number()
+      .int()
+      .default(15 * 60 * 1000),
   }),
   indexes: [],
   cacheTtlMs: 30_000,

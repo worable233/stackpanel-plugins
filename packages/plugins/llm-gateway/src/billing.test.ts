@@ -95,9 +95,7 @@ class FakeExtensions {
     for (const [field, condition] of Object.entries(where)) {
       if (condition && 'eq' in condition) {
         const wanted = condition.eq;
-        items = items.filter(
-          (item) => (item.spec as Record<string, unknown>)[field] === wanted,
-        );
+        items = items.filter((item) => (item.spec as Record<string, unknown>)[field] === wanted);
       }
     }
     return { items, total: items.length, page: 1, pageSize: items.length || 1 };

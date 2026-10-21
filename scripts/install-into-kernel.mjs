@@ -10,7 +10,15 @@
  * Usage (from the plugin package dir):
  *   node ../../../scripts/install-into-kernel.mjs [--kernel /path/to/StackPanel]
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -82,7 +90,9 @@ const manifest = {
   version: pkg.version ?? '0.0.0',
   ...(pkg.description ? { description: pkg.description } : {}),
   ...(definition.manifest.permissions ? { permissions: definition.manifest.permissions } : {}),
-  ...(definition.manifest.roleTemplates ? { roleTemplates: definition.manifest.roleTemplates } : {}),
+  ...(definition.manifest.roleTemplates
+    ? { roleTemplates: definition.manifest.roleTemplates }
+    : {}),
   builtin: true,
   apiVersion: '>=0.4.0',
 };

@@ -119,10 +119,19 @@ export const bedrockAnthropicAdaptor: ProviderAdaptor = createAdaptor({
 /** 对 Bedrock 调用做 SigV4 签名；未注册签名器时抛明确错误而不是发未签名请求。 */
 export async function signBedrockCall(
   account: AdaptorAccount,
-  call: { url: string; method: string; headers: Record<string, string>; body?: string | Uint8Array },
+  call: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body?: string | Uint8Array;
+  },
 ): Promise<Record<string, string>> {
   if (!bedrockSigner) {
-    throw new GatewayError(502, 'upstream_credential_missing', 'Bedrock 签名器未就绪（账号配置缺失）');
+    throw new GatewayError(
+      502,
+      'upstream_credential_missing',
+      'Bedrock 签名器未就绪（账号配置缺失）',
+    );
   }
   return bedrockSigner(account, {
     url: call.url,

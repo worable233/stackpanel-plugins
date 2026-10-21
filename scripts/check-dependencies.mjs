@@ -53,7 +53,9 @@ export function checkDependencies(beforeInstall = false) {
       const localRequire = createRequire(manifest);
       for (const name of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })) {
         try {
-          const entry = localRequire.resolve(name.startsWith('@types/') ? `${name}/package.json` : name);
+          const entry = localRequire.resolve(
+            name.startsWith('@types/') ? `${name}/package.json` : name,
+          );
           if (name.startsWith('@stackpanel/')) {
             const expected = resolve(kernelRoot, 'packages', name.slice('@stackpanel/'.length));
             if (!realpathSync(entry).startsWith(realpathSync(expected) + '/')) {

@@ -6,21 +6,31 @@ export const provisioningJournalModel = defineModel({
   kind: 'zjmf-upstream/provisioning-journal',
   label: '上游开通请求记录',
   schema: z.object({
-    upstreamId: z.string(), reference: z.string(), fingerprint: z.string(),
+    upstreamId: z.string(),
+    reference: z.string(),
+    fingerprint: z.string(),
     sourceFingerprint: z.string().optional(),
-    state: z.string(), providerServiceId: z.string().nullable(), invoiceId: z.string().nullable(),
+    state: z.string(),
+    providerServiceId: z.string().nullable(),
+    invoiceId: z.string().nullable(),
     runtime: z.record(z.string(), z.unknown()),
   }),
   indexes: [{ fields: ['upstreamId'], types: { upstreamId: 'string' } }],
 });
 export const provisioningCartLockModel = defineModel({
-  kind: 'zjmf-upstream/provisioning-cart-lock', label: '上游购物车排他锁',
+  kind: 'zjmf-upstream/provisioning-cart-lock',
+  label: '上游购物车排他锁',
   schema: z.object({ reference: z.string() }),
 });
 export interface ProvisioningJournalData {
   sourceFingerprint?: string;
-  upstreamId: string; reference: string; fingerprint: string; state: string;
-  providerServiceId: string | null; invoiceId: string | null; runtime: Record<string, unknown>;
+  upstreamId: string;
+  reference: string;
+  fingerprint: string;
+  state: string;
+  providerServiceId: string | null;
+  invoiceId: string | null;
+  runtime: Record<string, unknown>;
 }
 
 /** 魔方上游实例。 */

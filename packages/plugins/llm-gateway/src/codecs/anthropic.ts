@@ -104,7 +104,10 @@ export const anthropicCodec: ProtocolCodec = {
       messages.push(encodeMessage(message));
     }
     // Anthropic 要求 system 在顶层：把 IR 的 system 与 messages 里的 system 合并。
-    const systemText = [request.system, ...request.messages.filter((m) => m.role === 'system').map((m) => textOf(m.parts))]
+    const systemText = [
+      request.system,
+      ...request.messages.filter((m) => m.role === 'system').map((m) => textOf(m.parts)),
+    ]
       .filter((item): item is string => typeof item === 'string' && item.length > 0)
       .join('\n\n');
     const body: Record<string, unknown> = {
@@ -123,7 +126,8 @@ export const anthropicCodec: ProtocolCodec = {
         ...(tool.description !== undefined ? { description: tool.description } : {}),
         input_schema: tool.parameters,
       }));
-      if (request.toolChoice !== undefined) body['tool_choice'] = encodeToolChoice(request.toolChoice);
+      if (request.toolChoice !== undefined)
+        body['tool_choice'] = encodeToolChoice(request.toolChoice);
     }
     return body;
   },
@@ -277,7 +281,12 @@ export const anthropicCodec: ProtocolCodec = {
       if (part.type === 'text') content.push({ type: 'text', text: part.text });
       else if (part.type === 'thinking') content.push({ type: 'thinking', thinking: part.text });
       else if (part.type === 'tool-call') {
-        content.push({ type: 'tool_use', id: part.id, name: part.name, input: safeParse(part.arguments) });
+        content.push({
+          type: 'tool_use',
+          id: part.id,
+          name: part.name,
+          input: safeParse(part.arguments),
+        });
       }
     }
     return {
@@ -288,7 +297,10 @@ export const anthropicCodec: ProtocolCodec = {
       content,
       stop_reason: encodeStopReason(response.stopReason),
       stop_sequence: null,
-      usage: { input_tokens: response.usage.inputTokens, output_tokens: response.usage.outputTokens },
+      usage: {
+        input_tokens: response.usage.inputTokens,
+        output_tokens: response.usage.outputTokens,
+      },
     };
   },
 
@@ -321,7 +333,8 @@ export const anthropicCodec: ProtocolCodec = {
           frame('content_block_start', {
             type: 'content_block_start',
             index,
-            content_block: kind === 'text' ? { type: 'text', text: '' } : { type: 'thinking', thinking: '' },
+            content_block:
+              kind === 'text' ? { type: 'text', text: '' } : { type: 'thinking', thinking: '' },
           }) +
           frame('content_block_delta', { type: 'content_block_delta', index, delta })
         );
@@ -481,7 +494,12 @@ function encodeMessage(message: IRMessage): Record<string, unknown> {
           : { type: 'base64', media_type: part.mediaType ?? 'image/png', data: part.data ?? '' },
       });
     } else if (part.type === 'tool-call') {
-      content.push({ type: 'tool_use', id: part.id, name: part.name, input: safeParse(part.arguments) });
+      content.push({
+        type: 'tool_use',
+        id: part.id,
+        name: part.name,
+        input: safeParse(part.arguments),
+      });
     } else if (part.type === 'tool-result') {
       toolResults.push({
         type: 'tool_result',

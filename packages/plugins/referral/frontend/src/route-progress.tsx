@@ -36,10 +36,13 @@ export function CopyLinkButton({
       window.setTimeout(() => setCopied(false), 1600);
     };
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(link).then(done).catch(() => {
-        // 剪贴板被拒（非安全上下文 / 权限）时退回 execCommand。
-        fallbackCopy(link, done);
-      });
+      navigator.clipboard
+        .writeText(link)
+        .then(done)
+        .catch(() => {
+          // 剪贴板被拒（非安全上下文 / 权限）时退回 execCommand。
+          fallbackCopy(link, done);
+        });
       return;
     }
     fallbackCopy(link, done);

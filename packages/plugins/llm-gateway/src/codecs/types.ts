@@ -1,10 +1,4 @@
-import type {
-  IRRequest,
-  IRResponse,
-  IRStreamEvent,
-  IRUsage,
-  Protocol,
-} from '../protocol.js';
+import type { IRRequest, IRResponse, IRStreamEvent, IRUsage, Protocol } from '../protocol.js';
 
 /** 增量式 SSE 解析器（按空行分帧，兼容 \r\n）。 */
 export class SseParser {

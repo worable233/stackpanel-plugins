@@ -167,7 +167,10 @@ describe('metering fallbacks', () => {
   });
 
   it('estimates usage including the prompt (never zero prompt)', () => {
-    const usage = estimateUsage('data: {"choices":[{"delta":{"content":"hello world"}}]}', 'tell me a story');
+    const usage = estimateUsage(
+      'data: {"choices":[{"delta":{"content":"hello world"}}]}',
+      'tell me a story',
+    );
     expect(usage.promptTokens).toBeGreaterThan(0);
     expect(usage.completionTokens).toBeGreaterThan(0);
   });

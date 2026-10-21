@@ -44,7 +44,10 @@ function openaiClassify(input: AdaptorErrorInput): GatewayError | null {
       retryable: false,
     });
   }
-  if (input.status === 429 && /insufficient_quota|billing/i.test(`${code} ${parsed.message ?? ''}`)) {
+  if (
+    input.status === 429 &&
+    /insufficient_quota|billing/i.test(`${code} ${parsed.message ?? ''}`)
+  ) {
     // 账号欠费与单纯限流不同：重试无用，必须熔断该账号并告警。
     return new GatewayError(429, 'insufficient_quota', '上游账号额度耗尽', {
       retryable: false,
@@ -83,7 +86,14 @@ export const openaiAdaptor: ProviderAdaptor = createAdaptor({
   },
   extractUsage: openaiExtractUsage,
   classifyError: openaiClassify,
-  preservedFields: ['service_tier', 'store', 'metadata', 'user', 'reasoning_effort', 'parallel_tool_calls'],
+  preservedFields: [
+    'service_tier',
+    'store',
+    'metadata',
+    'user',
+    'reasoning_effort',
+    'parallel_tool_calls',
+  ],
 });
 
 /**

@@ -30,14 +30,19 @@ export const openaiChatCodec: ProtocolCodec = {
       if (!isRecord(raw)) continue;
       const role = asString(raw['role']) ?? 'user';
       if (role === 'system') {
-        messages.push({ role: 'system', parts: [{ type: 'text', text: textFromContent(raw['content']) }] });
+        messages.push({
+          role: 'system',
+          parts: [{ type: 'text', text: textFromContent(raw['content']) }],
+        });
         continue;
       }
       if (role === 'tool') {
         const toolCallId = asString(raw['tool_call_id']) ?? '';
         messages.push({
           role: 'tool',
-          parts: [{ type: 'tool-result', id: toolCallId, content: textFromContent(raw['content']) }],
+          parts: [
+            { type: 'tool-result', id: toolCallId, content: textFromContent(raw['content']) },
+          ],
           toolCallId,
         });
         continue;
@@ -75,7 +80,11 @@ export const openaiChatCodec: ProtocolCodec = {
 
   encodeRequest(request) {
     const messages = request.messages.map((message) => encodeMessage(message));
-    const body: Record<string, unknown> = { model: request.model, messages, stream: request.stream };
+    const body: Record<string, unknown> = {
+      model: request.model,
+      messages,
+      stream: request.stream,
+    };
     if (request.maxTokens !== undefined) body['max_tokens'] = request.maxTokens;
     if (request.temperature !== undefined) body['temperature'] = request.temperature;
     if (request.topP !== undefined) body['top_p'] = request.topP;
@@ -89,7 +98,8 @@ export const openaiChatCodec: ProtocolCodec = {
           parameters: tool.parameters,
         },
       }));
-      if (request.toolChoice !== undefined) body['tool_choice'] = encodeToolChoice(request.toolChoice);
+      if (request.toolChoice !== undefined)
+        body['tool_choice'] = encodeToolChoice(request.toolChoice);
     }
     if (request.stream) body['stream_options'] = { include_usage: true };
     return body;
@@ -306,7 +316,10 @@ export const openaiChatCodec: ProtocolCodec = {
   extractUsage(body) {
     if (!isRecord(body)) return null;
     const usage = body['usage'];
-    if (isRecord(usage) && (usage['total_tokens'] !== undefined || usage['prompt_tokens'] !== undefined)) {
+    if (
+      isRecord(usage) &&
+      (usage['total_tokens'] !== undefined || usage['prompt_tokens'] !== undefined)
+    ) {
       return decodeUsage(usage);
     }
     return null;
@@ -338,7 +351,8 @@ function imagesFromContent(content: unknown): IRPart[] {
     if (!url) continue;
     if (url.startsWith('data:')) {
       const match = /^data:([^;]+);base64,(.*)$/.exec(url);
-      if (match && match[1] && match[2]) parts.push({ type: 'image', data: match[2], mediaType: match[1] });
+      if (match && match[1] && match[2])
+        parts.push({ type: 'image', data: match[2], mediaType: match[1] });
     } else {
       parts.push({ type: 'image', url });
     }
@@ -392,7 +406,8 @@ function encodeMessage(message: IRMessage): Record<string, unknown> {
     const result = message.parts.find((part) => part.type === 'tool-result');
     return {
       role: 'tool',
-      tool_call_id: result && result.type === 'tool-result' ? result.id : (message.toolCallId ?? ''),
+      tool_call_id:
+        result && result.type === 'tool-result' ? result.id : (message.toolCallId ?? ''),
       content: result && result.type === 'tool-result' ? result.content : '',
     };
   }
@@ -402,7 +417,8 @@ function encodeMessage(message: IRMessage): Record<string, unknown> {
     if (part.type === 'text') {
       content.push({ type: 'text', text: part.text });
     } else if (part.type === 'image') {
-      const url = part.url ?? (part.data ? `data:${part.mediaType ?? 'image/png'};base64,${part.data}` : '');
+      const url =
+        part.url ?? (part.data ? `data:${part.mediaType ?? 'image/png'};base64,${part.data}` : '');
       if (url) content.push({ type: 'image_url', image_url: { url } });
     } else if (part.type === 'tool-call') {
       toolCalls.push({

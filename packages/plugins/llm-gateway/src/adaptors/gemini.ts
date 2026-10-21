@@ -13,7 +13,13 @@
 
 import { createAdaptor } from './base.js';
 import type { IRUsage } from '../protocol.js';
-import type { AdaptorAccount, AdaptorErrorInput, AdaptorRequestInput, ProviderAdaptor, UpstreamCall } from './types.js';
+import type {
+  AdaptorAccount,
+  AdaptorErrorInput,
+  AdaptorRequestInput,
+  ProviderAdaptor,
+  UpstreamCall,
+} from './types.js';
 import { GatewayError } from '../errors.js';
 import { parseUpstreamError } from './types.js';
 
@@ -59,7 +65,10 @@ function geminiClassify(input: AdaptorErrorInput): GatewayError | null {
       });
     }
   }
-  if (input.status === 403 && /permission|PERMISSION_DENIED/i.test(`${parsed.type ?? ''} ${parsed.message ?? ''}`)) {
+  if (
+    input.status === 403 &&
+    /permission|PERMISSION_DENIED/i.test(`${parsed.type ?? ''} ${parsed.message ?? ''}`)
+  ) {
     return new GatewayError(502, 'upstream_credential_missing', '上游账号无权限或已停用', {
       retryable: false,
     });
@@ -69,8 +78,7 @@ function geminiClassify(input: AdaptorErrorInput): GatewayError | null {
 
 /** 从账号 options 读项目 / 区域（Vertex）。 */
 function vertexOptions(account: AdaptorAccount): { project: string; region: string } {
-  const project =
-    typeof account.options['project'] === 'string' ? account.options['project'] : '';
+  const project = typeof account.options['project'] === 'string' ? account.options['project'] : '';
   const region =
     typeof account.options['region'] === 'string' && account.options['region'].length > 0
       ? account.options['region']
@@ -150,7 +158,12 @@ export const vertexAdaptor: ProviderAdaptor = createAdaptor({
 });
 
 /** 供测试断言用：拼 URL 时 version 段去重的行为。 */
-export function vertexUrl(baseUrl: string, subPath: string, project: string, region: string): string {
+export function vertexUrl(
+  baseUrl: string,
+  subPath: string,
+  project: string,
+  region: string,
+): string {
   const tail = subPath
     .replace(/^\/+/, '')
     .replace(/^v1beta\//, '')

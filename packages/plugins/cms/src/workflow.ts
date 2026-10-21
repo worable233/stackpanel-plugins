@@ -320,10 +320,7 @@ export class ContentWorkflow {
   }
 
   /** One revision by its number within an item. */
-  async findRevision(
-    id: string,
-    revisionNumber: number,
-  ): Promise<ContentInstance | null> {
+  async findRevision(id: string, revisionNumber: number): Promise<ContentInstance | null> {
     const pageSize = 20;
     let page = 1;
     for (;;) {
@@ -343,11 +340,7 @@ export class ContentWorkflow {
    * the live snapshot, so previewing a draft that renames the slug cannot break
    * the published page.
    */
-  async preview(
-    kind: string,
-    slug: string,
-    revisionNumber?: number,
-  ): Promise<LiveContent | null> {
+  async preview(kind: string, slug: string, revisionNumber?: number): Promise<LiveContent | null> {
     const model = this.modelFor(kind);
     const working = await this.extensions.listAll<Record<string, unknown>>(model, {
       where: { slug: { eq: slug } },
@@ -517,7 +510,9 @@ export class ContentWorkflow {
     const matches = await this.extensions.listAll<Record<string, unknown>>(model, {
       where: { publishedSlug: { eq: slug } },
     });
-    const instance = matches.find((entry) => (entry.spec as Record<string, unknown>)['published'] === true);
+    const instance = matches.find(
+      (entry) => (entry.spec as Record<string, unknown>)['published'] === true,
+    );
     return instance ? toLive(kind, instance) : null;
   }
 
@@ -589,7 +584,10 @@ export class ContentWorkflow {
     if (!Number.isFinite(publishAt) || publishAt <= 0) return;
     const delayMs = Math.max(0, publishAt - Date.now());
     // Per-item job id so a rescheduled item replaces its pending publish.
-    await this.jobs.enqueue('publish-due', undefined, { delayMs, jobId: `publish:${instance.name}` });
+    await this.jobs.enqueue('publish-due', undefined, {
+      delayMs,
+      jobId: `publish:${instance.name}`,
+    });
     void kind;
   }
 }

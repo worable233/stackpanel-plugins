@@ -154,7 +154,13 @@ export const siliconflowAdaptor: ProviderAdaptor = createAdaptor({
   label: 'SiliconFlow',
   protocol: 'openai-chat',
   capabilities: {
-    operations: ['embeddings', 'images.generations', 'audio.speech', 'audio.transcriptions', 'rerank'],
+    operations: [
+      'embeddings',
+      'images.generations',
+      'audio.speech',
+      'audio.transcriptions',
+      'rerank',
+    ],
     streaming: true,
     websocket: false,
     customSigning: false,

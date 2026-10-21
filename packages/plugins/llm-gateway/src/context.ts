@@ -7,12 +7,11 @@ import type {
   PluginSecrets,
   StateService,
   WalletService,
-} from "@stackpanel/sdk";
+} from '@stackpanel/sdk';
 
 let ctx: PluginContext | null = null;
 let extensionClient: ExtensionClient | null = null;
-let transactionRunner:
-  (<T>(fn: (tx: ExtensionTransaction) => Promise<T>) => Promise<T>) | null =
+let transactionRunner: (<T>(fn: (tx: ExtensionTransaction) => Promise<T>) => Promise<T>) | null =
   null;
 let authService: AuthService | null = null;
 let walletService: WalletService | null = null;
@@ -44,54 +43,52 @@ export function resetContext(): void {
 
 /** The plugin's own extension client. */
 export function extensions(): ExtensionClient {
-  if (!extensionClient) throw new Error("llm-gateway.not_ready");
+  if (!extensionClient) throw new Error('llm-gateway.not_ready');
   return extensionClient;
 }
 
 /** Run a set of writes atomically through `ctx.tx`. */
-export function runTransaction<T>(
-  fn: (tx: ExtensionTransaction) => Promise<T>,
-): Promise<T> {
-  if (!transactionRunner) throw new Error("llm-gateway.not_ready");
+export function runTransaction<T>(fn: (tx: ExtensionTransaction) => Promise<T>): Promise<T> {
+  if (!transactionRunner) throw new Error('llm-gateway.not_ready');
   return transactionRunner(fn);
 }
 
 export function auth(): AuthService {
-  if (!authService) throw new Error("llm-gateway.not_ready");
+  if (!authService) throw new Error('llm-gateway.not_ready');
   return authService;
 }
 
 export function wallet(): WalletService {
-  if (!walletService) throw new Error("llm-gateway.not_ready");
+  if (!walletService) throw new Error('llm-gateway.not_ready');
   return walletService;
 }
 
 export function state(): StateService {
-  if (!stateService) throw new Error("llm-gateway.not_ready");
+  if (!stateService) throw new Error('llm-gateway.not_ready');
   return stateService;
 }
 
 export function secrets(): PluginSecrets {
-  if (!secretsService) throw new Error("llm-gateway.not_ready");
+  if (!secretsService) throw new Error('llm-gateway.not_ready');
   return secretsService;
 }
 
 export function logger(): PluginLogger {
-  if (!loggerService) throw new Error("llm-gateway.not_ready");
+  if (!loggerService) throw new Error('llm-gateway.not_ready');
   return loggerService;
 }
 
 export function pluginContext(): PluginContext {
-  if (!ctx) throw new Error("llm-gateway.not_ready");
+  if (!ctx) throw new Error('llm-gateway.not_ready');
   return ctx;
 }
 
 /** 声明本插件发出的通知类型（内核偏好目录据此生成配置项）。 */
 export const GATEWAY_NOTIFICATION_TYPES = [
   {
-    type: "gateway.quota.exhausted",
-    category: "wallet" as const,
-    label: "API 额度用尽",
+    type: 'gateway.quota.exhausted',
+    category: 'wallet' as const,
+    label: 'API 额度用尽',
     order: 60,
   },
 ];
@@ -113,19 +110,19 @@ export async function notifyQuotaExhausted(input: {
     const ctx = pluginContext();
     const sentinel = `llm:quota-notified:${input.userId}:${input.keyName}`;
     if (await state().get(sentinel)) return;
-    await state().set(sentinel, "1", 24 * 60 * 60 * 1000);
+    await state().set(sentinel, '1', 24 * 60 * 60 * 1000);
     await ctx.notifications.create({
       userId: input.userId,
-      type: "gateway.quota.exhausted",
-      title: "API 额度已用尽",
+      type: 'gateway.quota.exhausted',
+      title: 'API 额度已用尽',
       body: `API 凭证「${input.keyName}」的额度已用尽（${input.quotaUsed}/${input.quotaLimit}），在调整额度前调用会被拒绝。`,
-      link: "/account/api-keys",
+      link: '/account/api-keys',
       data: {
         keyName: input.keyName,
         quotaLimit: input.quotaLimit,
         quotaUsed: input.quotaUsed,
       },
-      status: "error",
+      status: 'error',
     });
   } catch (error) {
     try {

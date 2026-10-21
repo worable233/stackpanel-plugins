@@ -50,7 +50,9 @@ function AdminTicketDetailPage(props: AdminPageComponentProps): ReactElement {
         <div className="flex flex-col items-center gap-3">
           <Inbox className="size-6 opacity-50" />
           <p>找不到这张工单</p>
-          <Link href="/admin/plugin/ticket/tickets" className="text-primary hover:underline">返回工单列表</Link>
+          <Link href="/admin/plugin/ticket/tickets" className="text-primary hover:underline">
+            返回工单列表
+          </Link>
         </div>
       </div>
     );
@@ -76,7 +78,13 @@ function SupportAdminOverview(props: AdminPageComponentProps): ReactElement {
       description="查看用户工单与最近处理状态。"
       unavailable={!summary}
       metrics={[{ label: '工单总数', value: summary?.total ?? '—' }]}
-      links={[{ label: '工单', description: '查看并回复用户提交的问题。', href: '/admin/plugin/ticket/tickets' }]}
+      links={[
+        {
+          label: '工单',
+          description: '查看并回复用户提交的问题。',
+          href: '/admin/plugin/ticket/tickets',
+        },
+      ]}
       activity={{
         title: '最近工单',
         items: (summary?.tickets ?? []).map((ticket) => ({

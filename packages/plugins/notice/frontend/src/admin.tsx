@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import type { AdminPageComponentProps } from "@stackpanel/sdk";
-import { PageHeader } from "@stackpanel/ui";
-import type { ReactElement } from "react";
-import { Megaphone } from "lucide-react";
+import type { AdminPageComponentProps } from '@stackpanel/sdk';
+import { PageHeader } from '@stackpanel/ui';
+import type { ReactElement } from 'react';
+import { Megaphone } from 'lucide-react';
 
 interface Announcement {
   id: string;
@@ -23,20 +23,15 @@ interface AnnouncementList {
 function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
   const result = props.data.announcements as AnnouncementList | undefined;
   const announcements = result?.announcements ?? [];
-  const create = props.actions["notice.create"];
-  const toggle = props.actions["notice.toggle"];
-  const del = props.actions["notice.delete"];
+  const create = props.actions['notice.create'];
+  const toggle = props.actions['notice.toggle'];
+  const del = props.actions['notice.delete'];
   return (
     <main className="w-full space-y-8">
-      <PageHeader
-        title="站点公告"
-      />
+      <PageHeader title="站点公告" />
 
       {create ? (
-        <form
-          action={create}
-          className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-2"
-        >
+        <form action={create} className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-2">
           <Field label="标题" name="title" required />
           <label className="grid gap-1 text-sm sm:col-span-2">
             <span>内容</span>
@@ -47,13 +42,7 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
               className="h-auto rounded-lg border bg-background px-3 py-2"
             />
           </label>
-          <Field
-            label="排序（小值在前）"
-            name="sortOrder"
-            type="number"
-            min="0"
-            defaultValue="0"
-          />
+          <Field label="排序（小值在前）" name="sortOrder" type="number" min="0" defaultValue="0" />
           <label className="grid gap-1 text-sm">
             <span>状态</span>
             <select
@@ -80,9 +69,7 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
             <li key={announcement.id} className="rounded-lg border bg-card p-4">
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {announcement.title}
-                  </p>
+                  <p className="truncate text-sm font-medium">{announcement.title}</p>
                   <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                     {announcement.content}
                   </p>
@@ -94,23 +81,20 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
                       <input
                         type="hidden"
                         name="published"
-                        value={announcement.published ? "false" : "true"}
+                        value={announcement.published ? 'false' : 'true'}
                       />
                       <button
                         type="submit"
                         className="h-8 rounded-lg border bg-background px-2.5 text-xs hover:bg-muted"
                       >
-                        {announcement.published ? "下架" : "发布"}
+                        {announcement.published ? '下架' : '发布'}
                       </button>
                     </form>
                   ) : null}
                   {del ? (
                     <form action={del}>
                       <input type="hidden" name="id" value={announcement.id} />
-                      <button
-                        type="submit"
-                        className="text-xs text-destructive hover:underline"
-                      >
+                      <button type="submit" className="text-xs text-destructive hover:underline">
                         删除
                       </button>
                     </form>
@@ -120,12 +104,12 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
               <span
                 className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                   announcement.published
-                    ? "bg-success/10 text-success"
-                    : "bg-muted text-muted-foreground"
+                    ? 'bg-success/10 text-success'
+                    : 'bg-muted text-muted-foreground'
                 }`}
               >
                 <span className="size-1.5 rounded-full bg-current" />
-                {announcement.published ? "已发布" : "草稿"}
+                {announcement.published ? '已发布' : '草稿'}
               </span>
             </li>
           ))}
@@ -135,9 +119,7 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
           <span className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
             <Megaphone className="size-5" />
           </span>
-          <p className="mt-4 text-sm text-muted-foreground">
-            还没有公告，先发布第一条。
-          </p>
+          <p className="mt-4 text-sm text-muted-foreground">还没有公告，先发布第一条。</p>
         </div>
       )}
     </main>
@@ -147,7 +129,7 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
 function Field({
   label,
   name,
-  type = "text",
+  type = 'text',
   min,
   defaultValue,
   required = false,
@@ -175,5 +157,5 @@ function Field({
 }
 
 export const adminPages = {
-  "admin/overview": NoticeAdminPage,
+  'admin/overview': NoticeAdminPage,
 } as const;

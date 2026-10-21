@@ -88,14 +88,18 @@ export function signAwsRequest(
 ): Record<string, string> {
   const url = new URL(input.url);
   const now = input.now ?? new Date();
-  const amzDate = `${now.toISOString().replace(/[:-]|\.\d{3}/g, '').slice(0, 15)}Z`;
+  const amzDate = `${now
+    .toISOString()
+    .replace(/[:-]|\.\d{3}/g, '')
+    .slice(0, 15)}Z`;
   const dateStamp = amzDate.slice(0, 8);
 
   const payloadHash = sha256Hex(input.body);
-  const canonicalUri = url.pathname
-    .split('/')
-    .map((segment) => uriEncode(segment, false))
-    .join('/') || '/';
+  const canonicalUri =
+    url.pathname
+      .split('/')
+      .map((segment) => uriEncode(segment, false))
+      .join('/') || '/';
 
   // 查询串按 key 排序后重新编码。
   const queryPairs: Array<[string, string]> = [];
@@ -120,7 +124,10 @@ export function signAwsRequest(
     .sort();
   const canonicalHeaders = headerNames
     .map((name) => {
-      const value = signedHeaders[name] ?? signedHeaders[Object.keys(signedHeaders).find((k) => k.toLowerCase() === name) ?? ''] ?? '';
+      const value =
+        signedHeaders[name] ??
+        signedHeaders[Object.keys(signedHeaders).find((k) => k.toLowerCase() === name) ?? ''] ??
+        '';
       return `${name}:${String(value).trim().replace(/\s+/g, ' ')}\n`;
     })
     .join('');
@@ -137,12 +144,9 @@ export function signAwsRequest(
 
   const algorithm = 'AWS4-HMAC-SHA256';
   const credentialScope = `${dateStamp}/${input.region}/${input.service}/aws4_request`;
-  const stringToSign = [
-    algorithm,
-    amzDate,
-    credentialScope,
-    sha256Hex(canonicalRequest),
-  ].join('\n');
+  const stringToSign = [algorithm, amzDate, credentialScope, sha256Hex(canonicalRequest)].join(
+    '\n',
+  );
 
   const kDate = hmac(`AWS4${credentials.secretAccessKey}`, dateStamp);
   const kRegion = hmac(kDate, input.region);

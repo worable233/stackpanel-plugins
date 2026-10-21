@@ -155,11 +155,7 @@ export class Scheduler {
    * 失败开放与 `checkRpm` 一致：读不到计数就放行。
    */
   async checkProviderRpm(provider: string | null, limit: number): Promise<AdmissionResult> {
-    return this.checkNamedWindow(
-      provider ? `gw:rpm:provider:${provider}` : null,
-      limit,
-      '该渠道',
-    );
+    return this.checkNamedWindow(provider ? `gw:rpm:provider:${provider}` : null, limit, '该渠道');
   }
 
   /**
@@ -288,7 +284,9 @@ export class Scheduler {
     health: AccountHealth,
     ttlMs = 24 * 60 * 60 * 1000,
   ): Promise<void> {
-    await this.state.set(this.healthKey(accountId), JSON.stringify(health), ttlMs).catch(() => undefined);
+    await this.state
+      .set(this.healthKey(accountId), JSON.stringify(health), ttlMs)
+      .catch(() => undefined);
   }
 
   /** 账号当前是否可服务（冷却与熔断都在未到时不可用）。 */

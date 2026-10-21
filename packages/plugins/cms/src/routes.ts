@@ -266,7 +266,11 @@ export function createRoutes(getWorkflow: () => ContentWorkflow | null): PluginR
       auth: 'admin',
       handler: async (request, reply) => {
         const kind = kindFromShort(request.params['kind']);
-        const created = await workflow().createDraft(kind, asRecord(request.body), request.user?.id);
+        const created = await workflow().createDraft(
+          kind,
+          asRecord(request.body),
+          request.user?.id,
+        );
         reply.code(201);
         return toContentDto(kind, created);
       },
@@ -351,11 +355,7 @@ export function createRoutes(getWorkflow: () => ContentWorkflow | null): PluginR
       handler: async (request) => {
         const kind = kindFromShort(request.params['kind']);
         const { page, pageSize } = pageParams(request.query);
-        const result = await workflow().listRevisions(
-          request.params['id'] ?? '',
-          page,
-          pageSize,
-        );
+        const result = await workflow().listRevisions(request.params['id'] ?? '', page, pageSize);
         return {
           items: result.items.map((instance) => toRevisionDto(kind, instance)),
           total: result.total,

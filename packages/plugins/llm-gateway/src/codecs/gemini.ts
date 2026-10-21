@@ -46,11 +46,14 @@ export const geminiCodec: ProtocolCodec = {
             parts.push({
               type: 'image',
               data: asString(inline['data']) ?? '',
-              mediaType: asString(inline['mimeType']) ?? asString(inline['mime_type']) ?? 'image/png',
+              mediaType:
+                asString(inline['mimeType']) ?? asString(inline['mime_type']) ?? 'image/png',
             });
           }
         } else if (isRecord(part['functionCall']) || isRecord(part['function_call'])) {
-          const call = isRecord(part['functionCall']) ? part['functionCall'] : part['function_call'];
+          const call = isRecord(part['functionCall'])
+            ? part['functionCall']
+            : part['function_call'];
           if (isRecord(call)) {
             const name = asString(call['name']) ?? '';
             parts.push({
@@ -61,10 +64,16 @@ export const geminiCodec: ProtocolCodec = {
             });
           }
         } else if (isRecord(part['functionResponse']) || isRecord(part['function_response'])) {
-          const resp = isRecord(part['functionResponse']) ? part['functionResponse'] : part['function_response'];
+          const resp = isRecord(part['functionResponse'])
+            ? part['functionResponse']
+            : part['function_response'];
           if (isRecord(resp)) {
             const name = asString(resp['name']) ?? '';
-            parts.push({ type: 'tool-result', id: name, content: JSON.stringify(resp['response'] ?? {}) });
+            parts.push({
+              type: 'tool-result',
+              id: name,
+              content: JSON.stringify(resp['response'] ?? {}),
+            });
           }
         }
       }
@@ -83,7 +92,9 @@ export const geminiCodec: ProtocolCodec = {
       ...(system !== undefined ? { system } : {}),
       tools,
       toolChoice: undefined,
-      maxTokens: asNumber(generationConfig['maxOutputTokens']) ?? asNumber(generationConfig['max_output_tokens']),
+      maxTokens:
+        asNumber(generationConfig['maxOutputTokens']) ??
+        asNumber(generationConfig['max_output_tokens']),
       temperature: asNumber(generationConfig['temperature']),
       topP: asNumber(generationConfig['topP']) ?? asNumber(generationConfig['top_p']),
       stop: stopSequences(generationConfig),
@@ -276,7 +287,10 @@ export const geminiCodec: ProtocolCodec = {
           case 'thinking':
             return frame({
               candidates: [
-                { content: { role: 'model', parts: [{ text: event.text, thought: true }] }, index: 0 },
+                {
+                  content: { role: 'model', parts: [{ text: event.text, thought: true }] },
+                  index: 0,
+                },
               ],
             });
           case 'tool-start': {
@@ -356,7 +370,12 @@ function decodeCandidate(obj: Record<string, unknown>): IRPart[] {
       const call = isRecord(part['functionCall']) ? part['functionCall'] : part['function_call'];
       if (isRecord(call)) {
         const name = asString(call['name']) ?? '';
-        parts.push({ type: 'tool-call', id: name, name, arguments: JSON.stringify(call['args'] ?? {}) });
+        parts.push({
+          type: 'tool-call',
+          id: name,
+          name,
+          arguments: JSON.stringify(call['args'] ?? {}),
+        });
       }
     }
   }

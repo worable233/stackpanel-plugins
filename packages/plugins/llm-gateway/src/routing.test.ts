@@ -45,9 +45,7 @@ describe('accountProtocol', () => {
     expect(accountProtocol(account({ id: 'a', provider: 'legacy-openai-chat' }))).toBe(
       'openai-chat',
     );
-    expect(accountProtocol(account({ id: 'a', provider: 'totally-made-up' }))).toBe(
-      'openai-chat',
-    );
+    expect(accountProtocol(account({ id: 'a', provider: 'totally-made-up' }))).toBe('openai-chat');
   });
 });
 

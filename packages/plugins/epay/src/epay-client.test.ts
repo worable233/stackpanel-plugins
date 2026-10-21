@@ -147,9 +147,7 @@ describe('EpayClient response handling', () => {
       config,
       stub({ code: -1, msg: '当前商户未完成实名认证，无法收款' }),
     );
-    await expect(client.createPayment(payment)).rejects.toThrow(
-      '当前商户未完成实名认证，无法收款',
-    );
+    await expect(client.createPayment(payment)).rejects.toThrow('当前商户未完成实名认证，无法收款');
   });
 
   it('still rejects an unsigned success response', async () => {

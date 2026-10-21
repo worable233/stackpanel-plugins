@@ -85,11 +85,7 @@ export interface UpstreamTimeouts {
 export const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
 
 /** 上游调用失败的原因分类（决定能否重试/降级）。 */
-export type UpstreamFailureKind =
-  | 'timeout'
-  | 'client_aborted'
-  | 'network'
-  | 'http';
+export type UpstreamFailureKind = 'timeout' | 'client_aborted' | 'network' | 'http';
 
 export class UpstreamFailure extends Error {
   readonly kind: UpstreamFailureKind;
@@ -190,10 +186,7 @@ export async function fetchUpstream(
       }
       throw new UpstreamFailure('timeout', `上游超时：${reasonText}`, { status: 408 });
     }
-    throw new UpstreamFailure(
-      'network',
-      error instanceof Error ? error.message : '上游网络错误',
-    );
+    throw new UpstreamFailure('network', error instanceof Error ? error.message : '上游网络错误');
   } finally {
     if (deadlineTimer) clearTimeout(deadlineTimer);
     options.clientSignal?.removeEventListener('abort', onClientAbort);
@@ -225,10 +218,7 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
  * - HTTP 429 / 408 / 5xx：重试。
  * - 其它 4xx：不重试（参数错，换账号也一样错，重试只是浪费上游配额）。
  */
-export function isRetryableFailure(
-  kind: UpstreamFailureKind,
-  status: number | null,
-): boolean {
+export function isRetryableFailure(kind: UpstreamFailureKind, status: number | null): boolean {
   if (kind === 'client_aborted') return false;
   if (kind === 'network' || kind === 'timeout') return true;
   if (status === null) return false;

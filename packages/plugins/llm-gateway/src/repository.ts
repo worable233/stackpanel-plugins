@@ -186,7 +186,11 @@ export async function removePolicy(apiTokenId: string): Promise<void> {
 /** Charge `amount` minor units against the token's policy, creating it if absent. */
 export async function addPolicyUsage(apiTokenId: string, amount: number): Promise<void> {
   const updated = await extensions()
-    .updateWhere(gatewayKeyPolicyModel, { apiTokenId: { eq: apiTokenId } }, { quotaUsed: { inc: amount } })
+    .updateWhere(
+      gatewayKeyPolicyModel,
+      { apiTokenId: { eq: apiTokenId } },
+      { quotaUsed: { inc: amount } },
+    )
     .then((result) => result.updated)
     .catch(() => 0);
   if (updated > 0) return;
@@ -234,7 +238,11 @@ export async function setSetting(
   const current = await extensions().get<GatewayUserSettingData>(gatewayUserSettingModel, userId);
   const instance = current
     ? await extensions().update(gatewayUserSettingModel, userId, { userId, billingEnabled })
-    : await extensions().create(gatewayUserSettingModel, { userId, billingEnabled }, { name: userId });
+    : await extensions().create(
+        gatewayUserSettingModel,
+        { userId, billingEnabled },
+        { name: userId },
+      );
   return instance.spec;
 }
 
@@ -334,10 +342,7 @@ export async function updateBillingEntry(
 }
 
 /** 待补偿队列：COMPENSATING 且已到重试时间的台账，按到期时间升序。 */
-export async function listPendingCompensations(
-  now: number,
-  take = 50,
-): Promise<BillingEntryRow[]> {
+export async function listPendingCompensations(now: number, take = 50): Promise<BillingEntryRow[]> {
   const rows = await extensions().list<GatewayBillingEntryData>(gatewayBillingEntryModel, {
     where: { status: { eq: 'COMPENSATING' } },
     orderBy: { field: 'nextAttemptAt', desc: false },
@@ -484,11 +489,7 @@ export async function getLegacyByHash(keyHash: string): Promise<LegacyKeyRow | n
   return row ? toRow(row) : null;
 }
 
-export async function addLegacyUsage(
-  id: string,
-  amount: number,
-  lastUsedAt: Date,
-): Promise<void> {
+export async function addLegacyUsage(id: string, amount: number, lastUsedAt: Date): Promise<void> {
   await extensions().updateWhere(
     gatewayLegacyKeyModel,
     { name: { eq: id } },

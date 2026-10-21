@@ -1,23 +1,19 @@
-import { definePlugin, EXTENSION_POINTS, PluginError } from "@stackpanel/sdk";
-import type {
-  AdminDashboardWidgetMeta,
-  HttpReply,
-  HttpRequest,
-} from "@stackpanel/sdk";
-import { invoiceModel } from "./data.js";
+import { definePlugin, EXTENSION_POINTS, PluginError } from '@stackpanel/sdk';
+import type { AdminDashboardWidgetMeta, HttpReply, HttpRequest } from '@stackpanel/sdk';
+import { invoiceModel } from './data.js';
 import {
   createInvoice,
   deleteInvoice,
   getInvoice,
   listInvoices,
   updateInvoice,
-} from "./invoices.js";
+} from './invoices.js';
 import {
   bindExtensions,
   clearExtensions,
   InvoiceError,
   INVOICE_NOTIFICATION_TYPES,
-} from "./context.js";
+} from './context.js';
 
 /**
  * 发票插件。
@@ -29,9 +25,7 @@ import {
  * 经内核 `commerce` 出口或 store 管理接口读取订单，插件不直读商店表。
  */
 
-function handle(
-  handler: (req: HttpRequest, reply: HttpReply) => Promise<unknown>,
-) {
+function handle(handler: (req: HttpRequest, reply: HttpReply) => Promise<unknown>) {
   return async (req: HttpRequest, reply: HttpReply): Promise<unknown> => {
     try {
       return await handler(req, reply);
@@ -46,63 +40,63 @@ function handle(
 
 export const invoicePlugin = definePlugin({
   manifest: {
-    id: "invoice",
-    name: "发票插件",
-    version: "0.1.0",
-    description: "按订单/客户开具发票，支持税费、折扣与打印导出。",
-    requires: ["store"],
+    id: 'invoice',
+    name: '发票插件',
+    version: '0.1.0',
+    description: '按订单/客户开具发票，支持税费、折扣与打印导出。',
+    requires: ['store'],
     permissions: [
       {
-        key: "invoice.admin",
-        name: "管理发票",
-        description: "创建、编辑与删除发票。",
+        key: 'invoice.admin',
+        name: '管理发票',
+        description: '创建、编辑与删除发票。',
       },
       {
-        key: "invoice.view",
-        name: "查看发票",
-        description: "查看与自己相关的发票。",
+        key: 'invoice.view',
+        name: '查看发票',
+        description: '查看与自己相关的发票。',
       },
     ],
     roleTemplates: [
-      { role: "USER", permissions: ["invoice.view"] },
-      { role: "ADMIN", permissions: ["invoice.admin", "invoice.view"] },
+      { role: 'USER', permissions: ['invoice.view'] },
+      { role: 'ADMIN', permissions: ['invoice.admin', 'invoice.view'] },
     ],
   },
   customModels: [invoiceModel],
   routes: [
     {
-      method: "GET",
-      path: "/invoice/admin/invoices",
-      auth: "admin",
-      permission: "invoice.admin",
+      method: 'GET',
+      path: '/invoice/admin/invoices',
+      auth: 'admin',
+      permission: 'invoice.admin',
       handler: handle(listInvoices),
     },
     {
-      method: "POST",
-      path: "/invoice/admin/invoices",
-      auth: "admin",
-      permission: "invoice.admin",
+      method: 'POST',
+      path: '/invoice/admin/invoices',
+      auth: 'admin',
+      permission: 'invoice.admin',
       handler: handle(createInvoice),
     },
     {
-      method: "GET",
-      path: "/invoice/admin/invoices/:id",
-      auth: "admin",
-      permission: "invoice.admin",
+      method: 'GET',
+      path: '/invoice/admin/invoices/:id',
+      auth: 'admin',
+      permission: 'invoice.admin',
       handler: handle(getInvoice),
     },
     {
-      method: "PATCH",
-      path: "/invoice/admin/invoices/:id",
-      auth: "admin",
-      permission: "invoice.admin",
+      method: 'PATCH',
+      path: '/invoice/admin/invoices/:id',
+      auth: 'admin',
+      permission: 'invoice.admin',
       handler: handle(updateInvoice),
     },
     {
-      method: "DELETE",
-      path: "/invoice/admin/invoices/:id",
-      auth: "admin",
-      permission: "invoice.admin",
+      method: 'DELETE',
+      path: '/invoice/admin/invoices/:id',
+      auth: 'admin',
+      permission: 'invoice.admin',
       handler: handle(deleteInvoice),
     },
   ],
@@ -112,21 +106,18 @@ export const invoicePlugin = definePlugin({
     for (const definition of INVOICE_NOTIFICATION_TYPES) {
       ctx.registerExtension(EXTENSION_POINTS.notificationType, definition);
     }
-    ctx.registerExtension<AdminDashboardWidgetMeta>(
-      EXTENSION_POINTS.adminDashboard,
-      {
-        id: "invoice-summary",
-        title: "发票",
-        description: "按订单或客户开具发票，支持打印导出。",
-      },
-    );
-    ctx.logger.info("invoice: activated (v0.1.0 extension engine)");
+    ctx.registerExtension<AdminDashboardWidgetMeta>(EXTENSION_POINTS.adminDashboard, {
+      id: 'invoice-summary',
+      title: '发票',
+      description: '按订单或客户开具发票，支持打印导出。',
+    });
+    ctx.logger.info('invoice: activated (v0.1.0 extension engine)');
   },
   onDeactivate: (ctx) => {
     clearExtensions();
-    ctx.logger.info("invoice: deactivated");
+    ctx.logger.info('invoice: deactivated');
   },
 });
 
-export { INVOICE_KIND, invoiceModel } from "./data.js";
+export { INVOICE_KIND, invoiceModel } from './data.js';
 export default invoicePlugin;

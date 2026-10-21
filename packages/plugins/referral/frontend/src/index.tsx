@@ -129,10 +129,7 @@ function ReferralAccountPage(props: AccountPageComponentProps): ReactElement {
           value={money(stats.earnedAmount, currency, props.locale)}
           hint={tr('stat.earnedHint')}
         />
-        <StatCard
-          label={tr('stat.balance')}
-          value={money(stats.balance, currency, props.locale)}
-        />
+        <StatCard label={tr('stat.balance')} value={money(stats.balance, currency, props.locale)} />
       </section>
 
       <Card>

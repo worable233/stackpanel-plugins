@@ -8,7 +8,10 @@ export function toNullable(value: string | null | undefined): string | null | un
   return value === '' || value === NONE ? null : value;
 }
 
-export function parsePagination(query: Record<string, unknown>): { page: number; pageSize: number } {
+export function parsePagination(query: Record<string, unknown>): {
+  page: number;
+  pageSize: number;
+} {
   const parsed = z
     .object({
       page: z.coerce.number().int().positive().default(1),

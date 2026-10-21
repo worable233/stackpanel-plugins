@@ -18,7 +18,7 @@ export interface MailContent {
 export function encodeHeader(value: string): string {
   // eslint-disable-next-line no-control-regex
   if (/^[\x20-\x7e]*$/.test(value)) return value;
-  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+  return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
 }
 
 /** 折叠长头字段：按 78 字符软换行（仅 ASCII 安全处）。 */
@@ -35,7 +35,7 @@ function foldHeader(name: string, value: string): string {
   return `${prefix}${chunks[0]}\n${chunks
     .slice(1)
     .map((chunk) => ` ${chunk}`)
-    .join("\n")}`;
+    .join('\n')}`;
 }
 
 function formatAddress(address: string, name?: string): string {
@@ -49,40 +49,38 @@ function boundary(): string {
 /** 构造一封可直接交给 SMTP DATA 的完整报文。 */
 export function buildMessage(content: MailContent): string {
   const headers: string[] = [];
-  headers.push(
-    foldHeader("From", formatAddress(content.from, content.fromName)),
-  );
-  headers.push(foldHeader("To", formatAddress(content.to)));
-  headers.push(foldHeader("Subject", encodeHeader(content.subject)));
+  headers.push(foldHeader('From', formatAddress(content.from, content.fromName)));
+  headers.push(foldHeader('To', formatAddress(content.to)));
+  headers.push(foldHeader('Subject', encodeHeader(content.subject)));
   headers.push(`Date: ${new Date().toUTCString()}`);
   headers.push(`Message-ID: <${boundary()}@stackpanel>`);
-  headers.push("MIME-Version: 1.0");
+  headers.push('MIME-Version: 1.0');
   if (content.html) {
     const mixed = boundary();
     headers.push(`Content-Type: multipart/alternative; boundary="${mixed}"`);
     const parts = [
       `--${mixed}`,
-      "Content-Type: text/plain; charset=UTF-8",
-      "Content-Transfer-Encoding: base64",
-      "",
-      wrapBase64(Buffer.from(content.text, "utf8").toString("base64")),
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      wrapBase64(Buffer.from(content.text, 'utf8').toString('base64')),
       `--${mixed}`,
-      "Content-Type: text/html; charset=UTF-8",
-      "Content-Transfer-Encoding: base64",
-      "",
-      wrapBase64(Buffer.from(content.html, "utf8").toString("base64")),
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      wrapBase64(Buffer.from(content.html, 'utf8').toString('base64')),
       `--${mixed}--`,
     ];
-    return `${headers.join("\n")}\n\n${parts.join("\n")}`;
+    return `${headers.join('\n')}\n\n${parts.join('\n')}`;
   }
-  headers.push("Content-Type: text/plain; charset=UTF-8");
-  headers.push("Content-Transfer-Encoding: base64");
-  return `${headers.join("\n")}\n\n${wrapBase64(Buffer.from(content.text, "utf8").toString("base64"))}`;
+  headers.push('Content-Type: text/plain; charset=UTF-8');
+  headers.push('Content-Transfer-Encoding: base64');
+  return `${headers.join('\n')}\n\n${wrapBase64(Buffer.from(content.text, 'utf8').toString('base64'))}`;
 }
 
 /** base64 每 76 字符换行，满足 SMTP 行长限制。 */
 function wrapBase64(value: string): string {
-  return value.replace(/(.{76})/g, "$1\n");
+  return value.replace(/(.{76})/g, '$1\n');
 }
 
 export interface CodeTemplateInput {
@@ -99,8 +97,8 @@ export function renderCodeEmail(input: CodeTemplateInput): {
   text: string;
   html: string;
 } {
-  const brand = input.brand ?? "StackPanel";
-  const isEnglish = (input.locale ?? "").toLowerCase().startsWith("en");
+  const brand = input.brand ?? 'StackPanel';
+  const isEnglish = (input.locale ?? '').toLowerCase().startsWith('en');
   if (isEnglish) {
     const subject = `${brand} verification code`;
     const text = `Your ${brand} verification code is ${input.code}.\n\nIt expires in ${input.expiresInMinutes} minutes. If you did not request this, you can ignore this email.\n`;
@@ -136,22 +134,19 @@ export function renderNoticeEmail(input: NoticeTemplateInput): {
   text: string;
   html: string;
 } {
-  const brand = input.brand ?? "StackPanel";
-  const lines = [
-    input.body,
-    input.link ? `\n查看详情：${input.link}` : "",
-  ].filter(Boolean);
-  const text = `${input.title}\n\n${lines.join("\n")}\n`;
+  const brand = input.brand ?? 'StackPanel';
+  const lines = [input.body, input.link ? `\n查看详情：${input.link}` : ''].filter(Boolean);
+  const text = `${input.title}\n\n${lines.join('\n')}\n`;
   const html = htmlShell(
     input.title,
     `<h2 style="margin:0 0 12px">${escapeHtml(input.title)}</h2>
-<p>${escapeHtml(input.body)}</p>${input.link ? `\n<p><a href="${escapeHtml(input.link)}">查看详情</a></p>` : ""}`,
+<p>${escapeHtml(input.body)}</p>${input.link ? `\n<p><a href="${escapeHtml(input.link)}">查看详情</a></p>` : ''}`,
     brand,
   );
   return { subject: `[${brand}] ${input.title}`, text, html };
 }
 
-function htmlShell(title: string, inner: string, brand = "StackPanel"): string {
+function htmlShell(title: string, inner: string, brand = 'StackPanel'): string {
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head>
 <body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;line-height:1.6">
@@ -164,8 +159,8 @@ ${inner}
 
 export function escapeHtml(value: string): string {
   return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

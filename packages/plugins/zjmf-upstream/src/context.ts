@@ -1,8 +1,4 @@
-import type {
-  ExtensionClient,
-  ExtensionTransaction,
-  PluginContext,
-} from '@stackpanel/sdk';
+import type { ExtensionClient, ExtensionTransaction, PluginContext } from '@stackpanel/sdk';
 import type { StoreProductRead, StoreProductUpdate } from './store-capabilities.js';
 
 const STORE_PRODUCT_READ = 'store.product.read';
@@ -10,7 +6,8 @@ const STORE_PRODUCT_UPDATE = 'store.product.update';
 
 let ctx: PluginContext | null = null;
 let extensionClient: ExtensionClient | null = null;
-let transactionRunner: (<T>(fn: (tx: ExtensionTransaction) => Promise<T>) => Promise<T>) | null = null;
+let transactionRunner: (<T>(fn: (tx: ExtensionTransaction) => Promise<T>) => Promise<T>) | null =
+  null;
 let productRead: StoreProductRead | null = null;
 let productUpdate: StoreProductUpdate | null = null;
 

@@ -46,9 +46,6 @@ export type StoreProductPatch = Partial<StoreProductMutation>;
 export interface StoreProductUpdate {
   updateStock(productId: string, stock: number): Promise<boolean>;
   create(input: StoreProductMutation): Promise<StoreProductSummary>;
-  update(
-    productId: string,
-    patch: StoreProductPatch,
-  ): Promise<StoreProductSummary | null>;
+  update(productId: string, patch: StoreProductPatch): Promise<StoreProductSummary | null>;
   remove(productId: string): Promise<boolean>;
 }

@@ -236,7 +236,10 @@ export class ZjmfCompatService {
     const before = new Set((await client.listServices()).map((service) => service.id));
     const orders: string[] = [];
     for (const item of cart) {
-      const order = await client.createOrder({ productId: item.productId, quantity: item.quantity });
+      const order = await client.createOrder({
+        productId: item.productId,
+        quantity: item.quantity,
+      });
       orders.push(order.id);
     }
     await this.ctx.state.del(`${CART_PREFIX}${token}`);
@@ -343,11 +346,7 @@ export class ZjmfCompatService {
       ...(change.productIds !== undefined ? { productIds: change.productIds } : {}),
       ...(change.password ? hashCredential(change.password) : {}),
     };
-    const updated = await this.ctx.extensions.update<ConnectionData>(
-      zjmfConnectionModel,
-      id,
-      spec,
-    );
+    const updated = await this.ctx.extensions.update<ConnectionData>(zjmfConnectionModel, id, spec);
     return redactConnection(updated);
   }
 

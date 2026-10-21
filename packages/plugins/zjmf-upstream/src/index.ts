@@ -99,10 +99,8 @@ const protocolSchema = z.enum(['finance', 'v10']);
 const coerceBoolean = z.preprocess((value) => {
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase();
-    if (normalized === 'true' || normalized === '1' || normalized === 'on')
-      return true;
-    if (normalized === 'false' || normalized === '0' || normalized === '')
-      return false;
+    if (normalized === 'true' || normalized === '1' || normalized === 'on') return true;
+    if (normalized === 'false' || normalized === '0' || normalized === '') return false;
   }
   return value;
 }, z.boolean());
@@ -110,7 +108,15 @@ const coerceBoolean = z.preprocess((value) => {
 const createUpstreamSchema = z.object({
   name: z.string().trim().min(1).max(191),
   baseUrl: z.string().trim().min(1).max(191),
-  downstreamUrl: z.string().trim().max(191).refine(value => !value || /^https:\/\/[^/?#]+\/?$/.test(value), '下游站点必须为 HTTPS 站点根地址').optional(),
+  downstreamUrl: z
+    .string()
+    .trim()
+    .max(191)
+    .refine(
+      (value) => !value || /^https:\/\/[^/?#]+\/?$/.test(value),
+      '下游站点必须为 HTTPS 站点根地址',
+    )
+    .optional(),
   protocol: protocolSchema,
   username: z.string().trim().min(1).max(191),
   password: z.string().min(1).max(191),
@@ -169,9 +175,7 @@ export class ZJMFUpstreamService {
       sources.map(async (source) => ({
         ...publicSource(source),
         productCount: await countBoundProducts(source.id),
-        credentialsConfigured: await this.ctx.secrets
-          .get(credentialsKey(source.id))
-          .then(Boolean),
+        credentialsConfigured: await this.ctx.secrets.get(credentialsKey(source.id)).then(Boolean),
       })),
     );
     return { upstreams: rows, secretsEnabled: this.ctx.secrets.isAvailable() };
@@ -184,23 +188,20 @@ export class ZJMFUpstreamService {
     const parsed = createUpstreamSchema.safeParse(input);
     if (!parsed.success) throw new UpstreamError(400, '上游配置参数无效');
     const data = parsed.data;
-    const instance = await extensions().create<ZjmfUpstreamData>(
-      zjmfUpstreamModel,
-      {
-        name: data.name,
-        baseUrl: normalizeBaseUrl(data.baseUrl),
-        ...(data.downstreamUrl ? { downstreamUrl: normalizeBaseUrl(data.downstreamUrl) } : {}),
-        protocol: data.protocol,
-        currency: data.currency.toUpperCase(),
-        markupBps: data.markupBps,
-        defaultStock: data.defaultStock,
-        syncIntervalMinutes: data.syncIntervalMinutes,
-        enabled: true,
-        syncState: 'IDLE',
-        allowUnverifiedV10Routes: data.allowUnverifiedV10Routes,
-        v10Module: data.v10Module,
-      },
-    );
+    const instance = await extensions().create<ZjmfUpstreamData>(zjmfUpstreamModel, {
+      name: data.name,
+      baseUrl: normalizeBaseUrl(data.baseUrl),
+      ...(data.downstreamUrl ? { downstreamUrl: normalizeBaseUrl(data.downstreamUrl) } : {}),
+      protocol: data.protocol,
+      currency: data.currency.toUpperCase(),
+      markupBps: data.markupBps,
+      defaultStock: data.defaultStock,
+      syncIntervalMinutes: data.syncIntervalMinutes,
+      enabled: true,
+      syncState: 'IDLE',
+      allowUnverifiedV10Routes: data.allowUnverifiedV10Routes,
+      v10Module: data.v10Module,
+    });
     try {
       await this.setCredentials(instance.name, {
         username: data.username,
@@ -220,33 +221,24 @@ export class ZJMFUpstreamService {
   async updateUpstream(id: string, input: unknown): Promise<unknown> {
     const parsed = updateUpstreamSchema.safeParse(input);
     if (!parsed.success)
-      throw new UpstreamError(
-        400,
-        parsed.error.issues[0]?.message ?? '请求参数无效',
-      );
+      throw new UpstreamError(400, parsed.error.issues[0]?.message ?? '请求参数无效');
     const current = await getUpstream(id);
     if (!current) throw new UpstreamError(404, '上游不存在');
     const data = parsed.data;
     const next: ZjmfUpstreamData = { ...stripMeta(current) };
     if (data.name !== undefined) next.name = data.name;
-    if (data.baseUrl !== undefined)
-      next.baseUrl = normalizeBaseUrl(data.baseUrl);
+    if (data.baseUrl !== undefined) next.baseUrl = normalizeBaseUrl(data.baseUrl);
     if (data.protocol !== undefined) next.protocol = data.protocol;
-    if (data.downstreamUrl !== undefined) next.downstreamUrl = data.downstreamUrl ? normalizeBaseUrl(data.downstreamUrl) : '';
-    if (data.currency !== undefined)
-      next.currency = data.currency.toUpperCase();
+    if (data.downstreamUrl !== undefined)
+      next.downstreamUrl = data.downstreamUrl ? normalizeBaseUrl(data.downstreamUrl) : '';
+    if (data.currency !== undefined) next.currency = data.currency.toUpperCase();
     if (data.markupBps !== undefined) next.markupBps = data.markupBps;
     if (data.defaultStock !== undefined) next.defaultStock = data.defaultStock;
-    if (data.syncIntervalMinutes !== undefined)
-      next.syncIntervalMinutes = data.syncIntervalMinutes;
+    if (data.syncIntervalMinutes !== undefined) next.syncIntervalMinutes = data.syncIntervalMinutes;
     if (data.allowUnverifiedV10Routes !== undefined)
       next.allowUnverifiedV10Routes = data.allowUnverifiedV10Routes;
     if (data.v10Module !== undefined) next.v10Module = data.v10Module;
-    const updated = await extensions().update<ZjmfUpstreamData>(
-      zjmfUpstreamModel,
-      id,
-      next,
-    );
+    const updated = await extensions().update<ZjmfUpstreamData>(zjmfUpstreamModel, id, next);
     if (data.username !== undefined && data.password !== undefined) {
       await this.setCredentials(id, {
         username: data.username,
@@ -264,14 +256,10 @@ export class ZJMFUpstreamService {
   async setEnabled(id: string, enabled: boolean): Promise<unknown> {
     const current = await getUpstream(id);
     if (!current) throw new UpstreamError(404, '上游不存在');
-    const updated = await extensions().update<ZjmfUpstreamData>(
-      zjmfUpstreamModel,
-      id,
-      {
-        ...stripMeta(current),
-        enabled,
-      },
-    );
+    const updated = await extensions().update<ZjmfUpstreamData>(zjmfUpstreamModel, id, {
+      ...stripMeta(current),
+      enabled,
+    });
     return { upstream: publicSource(toUpstream(updated)) };
   }
 
@@ -306,9 +294,7 @@ export class ZJMFUpstreamService {
   async listMappings(id: string): Promise<unknown> {
     const source = await getUpstream(id);
     if (!source) throw new UpstreamError(404, '上游不存在');
-    const bound = (await listBoundProducts()).filter(
-      (entry) => entry.binding.sourceRef === id,
-    );
+    const bound = (await listBoundProducts()).filter((entry) => entry.binding.sourceRef === id);
     return {
       mappings: bound.map(({ product, binding }) => ({
         upstreamId: id,
@@ -365,17 +351,12 @@ export class ZJMFUpstreamService {
     const sources = await listEnabledUpstreams();
     const now = Date.now();
     for (const source of sources) {
-      const dueAt =
-        source.lastAttemptAtMs ??
-        parseDate(source.lastSyncedAt)?.getTime() ??
-        0;
+      const dueAt = source.lastAttemptAtMs ?? parseDate(source.lastSyncedAt)?.getTime() ?? 0;
       if (now - dueAt < source.syncIntervalMinutes * 60_000) continue;
       try {
         await this.syncSource(source.id);
       } catch (error) {
-        this.ctx.logger.warn(
-          `zjmf-upstream: ${source.id} sync failed: ${messageOf(error)}`,
-        );
+        this.ctx.logger.warn(`zjmf-upstream: ${source.id} sync failed: ${messageOf(error)}`);
       }
     }
   }
@@ -435,9 +416,7 @@ export class ZJMFUpstreamService {
     try {
       const client = new ZJMFClient(await this.connectionFor(source));
       const listed = await client.listProducts();
-      const listedById = new Map(
-        listed.products.map((product) => [product.id, product]),
-      );
+      const listedById = new Map(listed.products.map((product) => [product.id, product]));
       // 只更新已绑定商品；绝不创建商店商品（商品由管理员显式创建后绑定）。
       const bound = (await listBoundProducts()).filter(
         (entry) => entry.binding.sourceRef === source.id,
@@ -459,16 +438,8 @@ export class ZJMFUpstreamService {
           return;
         }
         try {
-          const detail = await client
-            .getProduct(upstreamProductId)
-            .catch(() => summary);
-          await this.refreshBoundProduct(
-            client,
-            source,
-            entry.product,
-            detail,
-            listed.currency,
-          );
+          const detail = await client.getProduct(upstreamProductId).catch(() => summary);
+          await this.refreshBoundProduct(client, source, entry.product, detail, listed.currency);
           aggregate.updated += 1;
         } catch (error) {
           this.ctx.logger.warn(
@@ -522,11 +493,7 @@ export class ZJMFUpstreamService {
     listedCurrency: string | null,
   ): Promise<void> {
     const sourcePrice = decimalToMinor(product.price);
-    const currency = (
-      product.currency ??
-      listedCurrency ??
-      source.currency
-    ).toUpperCase();
+    const currency = (product.currency ?? listedCurrency ?? source.currency).toUpperCase();
     const stock = upstreamStock(product, source.defaultStock);
     const snapshot = compactSnapshot(product);
     const specs = (snapshot as { specs?: Record<string, unknown> }).specs;
@@ -617,10 +584,7 @@ export class ZJMFUpstreamService {
     };
   }
 
-  private async setCredentials(
-    id: string,
-    credentials: Credentials,
-  ): Promise<void> {
+  private async setCredentials(id: string, credentials: Credentials): Promise<void> {
     if (!this.ctx.secrets.isAvailable()) {
       throw new UpstreamError(503, '密钥存储未配置');
     }
@@ -629,7 +593,9 @@ export class ZJMFUpstreamService {
 
   /* ---------- 上游商品关联（upstream.product.source）---------- */
 
-  private async clients(strict = false): Promise<
+  private async clients(
+    strict = false,
+  ): Promise<
     Array<{ upstreamId: string; client: ZJMFClient; currency: string; defaultStock: number }>
   > {
     const sources = await listEnabledUpstreams();
@@ -674,14 +640,13 @@ export class ZJMFUpstreamService {
       id: product.id,
       name: product.name,
       price: decimalToMinor(product.price),
-      currency: (
-        product.currency ??
-        listedCurrency ??
-        sourceCurrency
-      ).toUpperCase(),
+      currency: (product.currency ?? listedCurrency ?? sourceCurrency).toUpperCase(),
       description: product.description,
       stock: upstreamStock(product, defaultStock),
-      ...(specs && typeof specs === 'object' && !Array.isArray(specs) && Object.keys(specs).length > 0
+      ...(specs &&
+      typeof specs === 'object' &&
+      !Array.isArray(specs) &&
+      Object.keys(specs).length > 0
         ? { specs: specs as Record<string, unknown> }
         : {}),
       sourceRef: upstreamId,
@@ -690,17 +655,14 @@ export class ZJMFUpstreamService {
   }
 
   /** 搜索所有已启用上游的商品（商品表单「关联上游商品」选择器）。 */
-  async searchUpstreamProducts(
-    query: string,
-    limit = 50,
-  ): Promise<UpstreamProductItem[]> {
+  async searchUpstreamProducts(query: string, limit = 50): Promise<UpstreamProductItem[]> {
     const normalized = query.trim().toLowerCase();
     const results: UpstreamProductItem[] = [];
     for (const { upstreamId, client, currency, defaultStock } of await this.clients()) {
       try {
         const listed = await client.listProducts();
-        const matched = listed.products.filter((product) =>
-          !normalized || product.name.toLowerCase().includes(normalized),
+        const matched = listed.products.filter(
+          (product) => !normalized || product.name.toLowerCase().includes(normalized),
         );
         // 魔方的列表接口通常只返回名称和价格。商品选择器需要让管理员能
         // 比较规格，因此对本次结果补齐详情；限制并发以避免压垮上游。
@@ -779,13 +741,9 @@ export class ZJMFUpstreamService {
    * 绑定信息（实例标识/上游商品 id/源价）由 store 写入商品 metadata，zjmf 不再持有
    * 本地映射表，因此这里只需校验上游商品带实例标识；无其它持久化动作。
    */
-  async associateUpstreamProduct(input: {
-    item: UpstreamProductItem;
-  }): Promise<void> {
-    if (!input.item.sourceRef)
-      throw new UpstreamError(400, '上游商品缺少实例标识');
-    if (input.item.price == null)
-      throw new UpstreamError(400, '上游商品缺少价格');
+  async associateUpstreamProduct(input: { item: UpstreamProductItem }): Promise<void> {
+    if (!input.item.sourceRef) throw new UpstreamError(400, '上游商品缺少实例标识');
+    if (input.item.price == null) throw new UpstreamError(400, '上游商品缺少价格');
   }
 
   /** 解除本地商品的上游关联（绑定在商品 metadata，无需服务端清理）。 */
@@ -801,29 +759,68 @@ export class ZJMFUpstreamService {
       try {
         const client = new ZJMFClient(await this.connectionFor(account));
         const instances = await client.listHosts();
-        await mapWithConcurrency(instances.filter(host => !host.expiresAt || !host.openedAt), 4, async host => {
-          try {
-            const detail = await client.getService(host.id);
-            if (typeof detail['expiresAt'] === 'string') host.expiresAt = detail['expiresAt'];
-            if (typeof detail['openedAt'] === 'string') host.openedAt = detail['openedAt'];
-          } catch { errors.push({ sourceName: account.name, message: `实例 #${host.id} 的时间详情读取失败，请重试` }); }
-        });
-        for (const host of instances) hosts.push({ id: host.id, name: host.name, productId: host.productId, productName: host.productName, status: normalizeStatus(host.status ?? ''), statusLabel: host.statusLabel, host: host.host, expiresAt: host.expiresAt, openedAt: host.openedAt ?? null, sourceRef: account.id });
-      } catch { errors.push({ sourceName: account.name, message: '实例读取失败，请检查连接及凭据后重试' }); }
+        await mapWithConcurrency(
+          instances.filter((host) => !host.expiresAt || !host.openedAt),
+          4,
+          async (host) => {
+            try {
+              const detail = await client.getService(host.id);
+              if (typeof detail['expiresAt'] === 'string') host.expiresAt = detail['expiresAt'];
+              if (typeof detail['openedAt'] === 'string') host.openedAt = detail['openedAt'];
+            } catch {
+              errors.push({
+                sourceName: account.name,
+                message: `实例 #${host.id} 的时间详情读取失败，请重试`,
+              });
+            }
+          },
+        );
+        for (const host of instances)
+          hosts.push({
+            id: host.id,
+            name: host.name,
+            productId: host.productId,
+            productName: host.productName,
+            status: normalizeStatus(host.status ?? ''),
+            statusLabel: host.statusLabel,
+            host: host.host,
+            expiresAt: host.expiresAt,
+            openedAt: host.openedAt ?? null,
+            sourceRef: account.id,
+          });
+      } catch {
+        errors.push({ sourceName: account.name, message: '实例读取失败，请检查连接及凭据后重试' });
+      }
     }
     const products = await listBoundProducts();
     const commerce = this.ctx.getExtensions<CommerceOperations>(EXTENSION_POINTS.commerce)[0];
     const bound = commerce ? await commerce.listBoundServices('zjmf') : null;
     return {
       errors,
-      instances: hosts.map(host => {
+      instances: hosts.map((host) => {
         const mapped = products.filter(({ binding }) => {
           return binding?.sourceRef === host.sourceRef && binding?.productId === host.productId;
         });
-        const service = bound?.find(item => item.providerServiceId === host.id && (item.runtime as { upstreamId?: string } | null)?.upstreamId === host.sourceRef);
-        return { ...host, sourceName: accounts.find(account => account.id === host.sourceRef)?.name ?? host.sourceRef ?? '', products: mapped.map(({ product }) => ({ id: product.id, name: product.name })), boundUserId: service?.userId ?? null, boundServiceId: service?.id ?? null, bindingKnown: bound !== null };
+        const service = bound?.find(
+          (item) =>
+            item.providerServiceId === host.id &&
+            (item.runtime as { upstreamId?: string } | null)?.upstreamId === host.sourceRef,
+        );
+        return {
+          ...host,
+          sourceName:
+            accounts.find((account) => account.id === host.sourceRef)?.name ?? host.sourceRef ?? '',
+          products: mapped.map(({ product }) => ({ id: product.id, name: product.name })),
+          boundUserId: service?.userId ?? null,
+          boundServiceId: service?.id ?? null,
+          bindingKnown: bound !== null,
+        };
       }),
-      accounts: accounts.map(account => ({ id: account.id, name: account.name, enabled: account.enabled })),
+      accounts: accounts.map((account) => ({
+        id: account.id,
+        name: account.name,
+        enabled: account.enabled,
+      })),
     };
   }
 
@@ -877,12 +874,7 @@ function credentialsKey(id: string): string {
 
 /** 去掉引擎注入的 id/时间字段，得到可写回的纯载荷。 */
 function stripMeta(source: UpstreamRecord): ZjmfUpstreamData {
-  const {
-    id: _id,
-    createdAt: _createdAt,
-    updatedAt: _updatedAt,
-    ...rest
-  } = source;
+  const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = source;
   return rest;
 }
 
@@ -901,15 +893,11 @@ function mergeBinding(
   },
 ): Record<string, unknown> {
   const base =
-    metadata !== null &&
-    typeof metadata === 'object' &&
-    !Array.isArray(metadata)
+    metadata !== null && typeof metadata === 'object' && !Array.isArray(metadata)
       ? { ...(metadata as Record<string, unknown>) }
       : {};
   const existing =
-    base.upstream !== null &&
-    typeof base.upstream === 'object' &&
-    !Array.isArray(base.upstream)
+    base.upstream !== null && typeof base.upstream === 'object' && !Array.isArray(base.upstream)
       ? (base.upstream as Record<string, unknown>)
       : {};
   base.upstream = {
@@ -917,18 +905,10 @@ function mergeBinding(
     ...existing,
     sourceRef: patch.sourceRef,
     productId: patch.productId,
-    ...(patch.sourcePrice !== undefined
-      ? { sourcePrice: patch.sourcePrice }
-      : {}),
-    ...(patch.sourceCurrency !== undefined
-      ? { sourceCurrency: patch.sourceCurrency }
-      : {}),
-    ...(patch.lastSyncedAt !== undefined
-      ? { lastSyncedAt: patch.lastSyncedAt }
-      : {}),
-    ...(patch.specs && Object.keys(patch.specs).length
-      ? { specs: patch.specs }
-      : {}),
+    ...(patch.sourcePrice !== undefined ? { sourcePrice: patch.sourcePrice } : {}),
+    ...(patch.sourceCurrency !== undefined ? { sourceCurrency: patch.sourceCurrency } : {}),
+    ...(patch.lastSyncedAt !== undefined ? { lastSyncedAt: patch.lastSyncedAt } : {}),
+    ...(patch.specs && Object.keys(patch.specs).length ? { specs: patch.specs } : {}),
   };
   return base;
 }
@@ -946,19 +926,9 @@ function readLastSyncedAt(metadata: unknown): string | null {
 }
 
 function upstreamOf(metadata: unknown): Record<string, unknown> | null {
-  if (
-    metadata === null ||
-    typeof metadata !== 'object' ||
-    Array.isArray(metadata)
-  )
-    return null;
+  if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
   const upstream = (metadata as Record<string, unknown>)['upstream'];
-  if (
-    upstream === null ||
-    typeof upstream !== 'object' ||
-    Array.isArray(upstream)
-  )
-    return null;
+  if (upstream === null || typeof upstream !== 'object' || Array.isArray(upstream)) return null;
   return upstream as Record<string, unknown>;
 }
 
@@ -1038,17 +1008,13 @@ function upstreamStock(product: ZJMFProduct, defaultStock: number): number {
 }
 
 /** 把上游配置（ZJMFProductConfig）归一化为平台 CheckoutConfigSchema。 */
-function normalizeCheckoutConfig(
-  config: ZJMFProductConfig,
-): CheckoutConfigSchema {
+function normalizeCheckoutConfig(config: ZJMFProductConfig): CheckoutConfigSchema {
   return {
     cycles: config.cycles.map((cycle) => ({
       id: cycle.id,
       label: cycle.label,
       price: cycle.price,
-      ...(cycle.renewPrice !== undefined
-        ? { renewPrice: cycle.renewPrice }
-        : {}),
+      ...(cycle.renewPrice !== undefined ? { renewPrice: cycle.renewPrice } : {}),
     })),
     options: config.options.map((option) => ({
       id: option.id,
@@ -1092,15 +1058,11 @@ async function mapWithConcurrency<Input, Output>(
       result[index] = await mapper(value);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, values.length) }, worker),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, worker));
   return result;
 }
 
-function handle(
-  handler: (request: HttpRequest, reply: HttpReply) => Promise<unknown>,
-) {
+function handle(handler: (request: HttpRequest, reply: HttpReply) => Promise<unknown>) {
   return async (request: HttpRequest, reply: HttpReply): Promise<unknown> => {
     try {
       return await handler(request, reply);
@@ -1189,8 +1151,7 @@ export const zjmfUpstreamPlugin = definePlugin({
         method: 'POST',
         route: '/zjmf-upstream/admin/upstreams/sync',
         path: '/api/v1/zjmf/upstreams/sync',
-        summary:
-          'Refresh cost/stock for products bound to an upstream (body id)',
+        summary: 'Refresh cost/stock for products bound to an upstream (body id)',
         mutating: true,
       },
       {
@@ -1217,9 +1178,20 @@ export const zjmfUpstreamPlugin = definePlugin({
       },
     ],
   },
-  customModels: [zjmfUpstreamModel, zjmfSyncRunModel, provisioningJournalModel, provisioningCartLockModel],
+  customModels: [
+    zjmfUpstreamModel,
+    zjmfSyncRunModel,
+    provisioningJournalModel,
+    provisioningCartLockModel,
+  ],
   routes: [
-    { method: 'GET', path: '/zjmf-upstream/admin/instances', auth: 'admin', permission: 'zjmf-upstream.admin', handler: handle(() => currentService().inventory()) },
+    {
+      method: 'GET',
+      path: '/zjmf-upstream/admin/instances',
+      auth: 'admin',
+      permission: 'zjmf-upstream.admin',
+      handler: handle(() => currentService().inventory()),
+    },
     {
       method: 'GET',
       path: '/zjmf-upstream/admin/upstreams',
@@ -1232,18 +1204,14 @@ export const zjmfUpstreamPlugin = definePlugin({
       path: '/zjmf-upstream/admin/upstreams',
       auth: 'admin',
       permission: 'zjmf-upstream.admin',
-      handler: handle((request) =>
-        currentService().createUpstream(request.body),
-      ),
+      handler: handle((request) => currentService().createUpstream(request.body)),
     },
     {
       method: 'POST',
       path: '/zjmf-upstream/admin/upstreams/sync',
       auth: 'admin',
       permission: 'zjmf-upstream.admin',
-      handler: handle((request) =>
-        currentService().sync(sourceIdFromBody(request.body)),
-      ),
+      handler: handle((request) => currentService().sync(sourceIdFromBody(request.body))),
     },
     {
       method: 'PATCH',
@@ -1260,10 +1228,7 @@ export const zjmfUpstreamPlugin = definePlugin({
       auth: 'admin',
       permission: 'zjmf-upstream.admin',
       handler: handle((request) =>
-        currentService().setEnabled(
-          requireSourceId(request),
-          enabledFromBody(request.body),
-        ),
+        currentService().setEnabled(requireSourceId(request), enabledFromBody(request.body)),
       ),
     },
     {
@@ -1271,36 +1236,28 @@ export const zjmfUpstreamPlugin = definePlugin({
       path: '/zjmf-upstream/admin/upstreams/:id/sync',
       auth: 'admin',
       permission: 'zjmf-upstream.admin',
-      handler: handle((request) =>
-        currentService().sync(requireSourceId(request)),
-      ),
+      handler: handle((request) => currentService().sync(requireSourceId(request))),
     },
     {
       method: 'DELETE',
       path: '/zjmf-upstream/admin/upstreams/:id',
       auth: 'admin',
       permission: 'zjmf-upstream.admin',
-      handler: handle((request) =>
-        currentService().deleteUpstream(requireSourceId(request)),
-      ),
+      handler: handle((request) => currentService().deleteUpstream(requireSourceId(request))),
     },
     {
       method: 'GET',
       path: '/zjmf-upstream/admin/upstreams/:id/products',
       auth: 'admin',
       permission: 'zjmf-upstream.admin',
-      handler: handle((request) =>
-        currentService().listMappings(requireSourceId(request)),
-      ),
+      handler: handle((request) => currentService().listMappings(requireSourceId(request))),
     },
     {
       method: 'GET',
       path: '/zjmf-upstream/admin/upstreams/:id/sync-runs',
       auth: 'admin',
       permission: 'zjmf-upstream.admin',
-      handler: handle((request) =>
-        currentService().listRuns(requireSourceId(request)),
-      ),
+      handler: handle((request) => currentService().listRuns(requireSourceId(request))),
     },
     {
       method: 'POST',
@@ -1320,34 +1277,23 @@ export const zjmfUpstreamPlugin = definePlugin({
     ctx.jobs.schedule('scheduled-sync', { everyMs: SCHEDULER_INTERVAL_MS });
     // 激活后立即检查一轮到期同步，避免等待整个周期。
     void instance.runScheduledSync().catch((error: unknown) => {
-      ctx.logger.warn(
-        `zjmf-upstream: initial sync check failed: ${messageOf(error)}`,
-      );
+      ctx.logger.warn(`zjmf-upstream: initial sync check failed: ${messageOf(error)}`);
     });
     ctx.registerExtension('fulfillment.provider', new ZJMFProvider(ctx));
-    ctx.registerExtension<UpstreamProductSource>(
-      EXTENSION_POINTS.upstreamProductSource,
-      {
-        id: 'zjmf',
-        name: '智简魔方',
-        search: (query, options) =>
-          currentService().searchUpstreamProducts(query, options?.limit),
-        get: (id, options) => currentService().getUpstreamProduct(id, options),
-        getConfig: (id, options) => currentService().getUpstreamProductConfig(id, options),
-        associate: (input) => currentService().associateUpstreamProduct(input),
-        dissociate: (productId) =>
-          currentService().dissociateUpstreamProduct(productId),
-      },
-    );
-    ctx.registerExtension<UpstreamServiceSource>(
-      EXTENSION_POINTS.upstreamServiceSource,
-      {
-        id: 'zjmf',
-        name: '智简魔方',
-        list: (options) =>
-          currentService().listUpstreamServices(options?.limit),
-      },
-    );
+    ctx.registerExtension<UpstreamProductSource>(EXTENSION_POINTS.upstreamProductSource, {
+      id: 'zjmf',
+      name: '智简魔方',
+      search: (query, options) => currentService().searchUpstreamProducts(query, options?.limit),
+      get: (id, options) => currentService().getUpstreamProduct(id, options),
+      getConfig: (id, options) => currentService().getUpstreamProductConfig(id, options),
+      associate: (input) => currentService().associateUpstreamProduct(input),
+      dissociate: (productId) => currentService().dissociateUpstreamProduct(productId),
+    });
+    ctx.registerExtension<UpstreamServiceSource>(EXTENSION_POINTS.upstreamServiceSource, {
+      id: 'zjmf',
+      name: '智简魔方',
+      list: (options) => currentService().listUpstreamServices(options?.limit),
+    });
     ctx.logger.info('zjmf-upstream: activated');
   },
   onDeactivate: (ctx) => {
@@ -1370,9 +1316,7 @@ function enabledFromBody(value: unknown): boolean {
 }
 
 function sourceIdFromBody(value: unknown): string {
-  const parsed = z
-    .object({ sourceId: z.string().min(1).max(191) })
-    .safeParse(value);
+  const parsed = z.object({ sourceId: z.string().min(1).max(191) }).safeParse(value);
   if (!parsed.success) throw new UpstreamError(400, '请求参数无效');
   return parsed.data.sourceId;
 }

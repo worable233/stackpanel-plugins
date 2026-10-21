@@ -15,5 +15,4 @@ import zhCN from '../messages/zh-CN.json';
  */
 export const messages = { 'zh-CN': zhCN, 'en-US': enUS } as const;
 
-export const t = (locale?: string) =>
-  createPackageTranslator(locale, messages, ['zh-CN']);
+export const t = (locale?: string) => createPackageTranslator(locale, messages, ['zh-CN']);

@@ -25,7 +25,8 @@ export const openaiResponsesCodec: ProtocolCodec = {
     const b = isRecord(body) ? body : {};
     const messages: IRMessage[] = [];
     const instructions = typeof b['instructions'] === 'string' ? b['instructions'] : undefined;
-    if (instructions) messages.push({ role: 'system', parts: [{ type: 'text', text: instructions }] });
+    if (instructions)
+      messages.push({ role: 'system', parts: [{ type: 'text', text: instructions }] });
 
     // Responses 的 input 既可以是字符串，也可以是消息数组。
     const rawInput = b['input'];
@@ -60,7 +61,12 @@ export const openaiResponsesCodec: ProtocolCodec = {
         });
         continue;
       }
-      const role = asString(raw['role']) === 'assistant' ? 'assistant' : asString(raw['role']) === 'system' ? 'system' : 'user';
+      const role =
+        asString(raw['role']) === 'assistant'
+          ? 'assistant'
+          : asString(raw['role']) === 'system'
+            ? 'system'
+            : 'user';
       const parts: IRPart[] = [];
       for (const part of asArray(raw['content'])) {
         if (!isRecord(part)) {
@@ -126,7 +132,8 @@ export const openaiResponsesCodec: ProtocolCodec = {
         if (part.type === 'text') content.push({ type: 'input_text', text: part.text });
         else if (part.type === 'image') {
           const url =
-            part.url ?? (part.data ? `data:${part.mediaType ?? 'image/png'};base64,${part.data}` : '');
+            part.url ??
+            (part.data ? `data:${part.mediaType ?? 'image/png'};base64,${part.data}` : '');
           if (url) content.push({ type: 'input_image', image_url: url });
         }
       }
@@ -152,7 +159,8 @@ export const openaiResponsesCodec: ProtocolCodec = {
         ...(tool.description !== undefined ? { description: tool.description } : {}),
         parameters: tool.parameters,
       }));
-      if (request.toolChoice !== undefined) body['tool_choice'] = encodeToolChoice(request.toolChoice);
+      if (request.toolChoice !== undefined)
+        body['tool_choice'] = encodeToolChoice(request.toolChoice);
     }
     return body;
   },
@@ -197,11 +205,7 @@ export const openaiResponsesCodec: ProtocolCodec = {
       id: asString(b['id']) ?? '',
       model: asString(b['model']) ?? '',
       parts,
-      stopReason: incomplete
-        ? 'length'
-        : hasToolCall
-          ? 'tool_calls'
-          : 'stop',
+      stopReason: incomplete ? 'length' : hasToolCall ? 'tool_calls' : 'stop',
       usage: decodeUsage(b['usage']),
       raw: body,
     };
@@ -268,10 +272,18 @@ export const openaiResponsesCodec: ProtocolCodec = {
           case 'response.function_call_arguments.delta': {
             const itemId = asString(json['item_id']) ?? '';
             const index = assignIndex(itemId, toolByItem, () => nextIndex++);
-            pendingArgs.set(index, (pendingArgs.get(index) ?? '') + (asString(json['delta']) ?? ''));
+            pendingArgs.set(
+              index,
+              (pendingArgs.get(index) ?? '') + (asString(json['delta']) ?? ''),
+            );
             if (!emitted.has(index)) {
               emitted.add(index);
-              events.push({ type: 'tool-start', index, id: asString(json['call_id']) ?? itemId, name: '' });
+              events.push({
+                type: 'tool-start',
+                index,
+                id: asString(json['call_id']) ?? itemId,
+                name: '',
+              });
             }
             events.push({ type: 'tool-args', index, delta: asString(json['delta']) ?? '' });
             break;

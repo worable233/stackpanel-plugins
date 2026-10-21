@@ -157,7 +157,12 @@ export interface ParsedUpstreamError {
 
 /** 从上游错误体里尽力挖出 message/type/code（覆盖 OpenAI/Anthropic/Gemini 三种形状）。 */
 export function parseUpstreamError(bodyText: string): ParsedUpstreamError {
-  const result: ParsedUpstreamError = { message: null, type: null, code: null, retryAfterSeconds: null };
+  const result: ParsedUpstreamError = {
+    message: null,
+    type: null,
+    code: null,
+    retryAfterSeconds: null,
+  };
   if (!bodyText) return result;
   let parsed: unknown;
   try {

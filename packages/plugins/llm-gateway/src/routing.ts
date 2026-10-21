@@ -63,14 +63,10 @@ export function orderCandidates(
   input: OrderInput,
   upstreamModel = '',
 ): AccountRow[] {
-  const eligible = accounts.filter((account) =>
-    servesModel(account, input.model, upstreamModel),
-  );
+  const eligible = accounts.filter((account) => servesModel(account, input.model, upstreamModel));
   if (eligible.length === 0) return [];
 
-  const sameProtocol = eligible.filter(
-    (account) => accountProtocol(account) === input.ingress,
-  );
+  const sameProtocol = eligible.filter((account) => accountProtocol(account) === input.ingress);
   const pool = sameProtocol.length > 0 ? sameProtocol : eligible;
 
   const affinity = input.affinity.trim();
@@ -136,9 +132,7 @@ export async function pickAccount(input: PickAccountInput): Promise<PickedAccoun
   // 逐账号查健康状态。查不到（Redis 抖动 / 从未写过）按健康处理：失败开放，
   // 否则一次 state 故障会让整个网关 502。所有账号都不可用时再返回 null。
   const health = await Promise.all(
-    ordered.map((account) =>
-      input.scheduler.isServable(account.id).catch(() => true),
-    ),
+    ordered.map((account) => input.scheduler.isServable(account.id).catch(() => true)),
   );
   const healthy = ordered.filter((_, index) => health[index] !== false);
   if (healthy.length === 0) return null;

@@ -71,7 +71,9 @@ async function settleRecord(
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
     // 钱之前已经发过（幂等命中）。这里只把记录状态补齐，绝不重复入账。
-    pluginCtx.logger.warn(`referral: 奖励已发放，跳过重复入账 ${payout?.referenceId ?? record.name}`);
+    pluginCtx.logger.warn(
+      `referral: 奖励已发放，跳过重复入账 ${payout?.referenceId ?? record.name}`,
+    );
     const latest = await pluginCtx.extensions.get<ReferralRecord>(recordModel, record.name);
     if (latest && latest.spec.inviterState !== nextSpec.inviterState) {
       await pluginCtx.extensions.update<ReferralRecord>(recordModel, record.name, nextSpec, {
