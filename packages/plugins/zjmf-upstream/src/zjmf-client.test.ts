@@ -15,7 +15,238 @@ function json(body: unknown): Response {
   });
 }
 
+describe('provisioning request safety', () => {
+  function cancelledFixture(patch: Record<string, unknown> = {}, accounts: unknown = []) {
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (path === '/get_invoices_detail') return json({ status: 200, data: {
+        detail: { id: 7001, status: 'Cancelled', paid_time: 0, credit: '0.00', use_credit_limit: 0, subtotal: '47.88', total: '47.88', ...patch },
+        accounts, invoice_items: [{ type: 'host', rel_id: 42 }],
+      } });
+      return json({ status: 200, data: { host_data: { domainstatus: 'Cancelled' } } });
+    });
+    return { client: new ZJMFClient({ id: 'up', baseUrl: 'https://billing.example/', protocol: 'finance', username: 'u', password: 'p' }, fetcher), fetcher };
+  }
+  it('verifies cancelled invoices using only account-scoped GET requests', async () => {
+    const { client, fetcher } = cancelledFixture();
+    await client.verifyCancelledInvoice('7001', ['42']);
+    expect(fetcher.mock.calls.filter(call => new URL(String(call[0])).pathname !== '/zjmf_api_login').every(call => call[1]?.method === 'GET')).toBe(true);
+  });
+  it.each([
+    { status: 'Paid' }, { status: 'Unpaid' }, { paid_time: 1800000000 }, { credit: '1.00' },
+    { use_credit_limit: 1 }, { total: '46.88' }, { id: 999 }, { credit: null }, { subtotal: undefined },
+  ])('rejects incomplete or paid original invoice evidence: %j', async patch => {
+    await expect(cancelledFixture(patch).client.verifyCancelledInvoice('7001', ['42'])).rejects.toThrow(/禁止重开/);
+  });
+  it.each([[{ amount_in: '1.00' }], null])('rejects financial history or missing transaction evidence', async accounts => {
+    await expect(cancelledFixture({}, accounts).client.verifyCancelledInvoice('7001', ['42'])).rejects.toThrow(/禁止重开/);
+  });
+  it('rejects invoices belonging to a different service', async () => {
+    await expect(cancelledFixture().client.verifyCancelledInvoice('7001', ['43'])).rejects.toThrow(/不匹配/);
+  });
+  it('reuses the invoice returned by downstream cart recovery without adding or settling again', async () => {
+    const { client, fetcher, requests } = fixture();
+    fetcher.mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      requests.push({ path, body: String(init?.body ?? '') });
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (path === '/cart/clear') return json({ status: 200, hostid: 42, invoiceid: 7001 });
+      return json({ status: 1001 });
+    });
+    await client.createService('4661', { downstream: { id: '12345', token: 'a'.repeat(32), url: 'https://panel.example/' } });
+    expect(requests.map(request => request.path)).toEqual(['/zjmf_api_login', '/cart/clear', '/apply_credit']);
+    expect(requests[1]?.body).toContain('downstream_id=12345');
+    expect(requests[2]?.body).toContain('is_api=1');
+  });
+  it('rejects batch submission before sending any upstream request', async () => {
+    const { client, requests } = fixture();
+    await expect(client.createService('4661', { quantity: 2 })).rejects.toThrow(/逐台/);
+    expect(requests).toHaveLength(0);
+  });
+  it('keeps malformed payment responses unknown rather than enabling another debit', async () => {
+    const { client } = fixture({ data: {} });
+    expect((await client.createService('4661')).runtime.paymentState).toBe('PAYMENT_UNKNOWN');
+  });
+  it('does not accept a success-shaped payload delivered with HTTP 500', async () => {
+    const { client, fetcher } = fixture();
+    fetcher.mockImplementation(async input => new URL(String(input)).pathname === '/zjmf_api_login'
+      ? json({ status: 200, jwt: 'jwt' })
+      : new Response(JSON.stringify({ status: 1001 }), { status: 500 }));
+    expect(await client.payServiceInvoice('original')).toEqual({ paid: false, paymentState: 'PAYMENT_UNKNOWN' });
+  });
+  it('preserves every unexpected host ID and never pays an unexpected batch', async () => {
+    const { client, fetcher, requests } = fixture();
+    fetcher.mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      requests.push({ path, body: String(init?.body ?? '') });
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (path === '/cart/settle') return json({ status: 200, data: { hostid: [42, 43], invoiceid: 7001 } });
+      return json({ status: 200 });
+    });
+    const checkpoint = vi.fn(async () => {});
+    await expect(client.createService('4661', { checkpoint })).rejects.toThrow(/非预期数量/);
+    expect(checkpoint).toHaveBeenLastCalledWith(expect.objectContaining({ runtime: expect.objectContaining({ providerServiceIds: [42, 43], paymentState: 'REQUIRES_RECONCILIATION' }) }));
+    expect(requests.some(request => request.path === '/apply_credit')).toBe(false);
+  });
+  it.each(['insufficient', 'timeout'])('never falls back to partial payment on renewal: %s', async failure => {
+    const { client, fetcher, requests } = fixture();
+    fetcher.mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      requests.push({ path, body: String(init?.body ?? '') });
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (path === '/host/renew') return json({ status: 200, data: { invoiceid: 7001 } });
+      if (failure === 'timeout') throw new DOMException('timeout', 'TimeoutError');
+      return json({ status: 200 });
+    });
+    await expect(client.renewService('42')).rejects.toThrow(/原上游账单/);
+    expect(requests.filter(request => request.path === '/apply_credit')).toHaveLength(1);
+    expect(requests.find(request => request.path === '/apply_credit')?.body).toContain('enough=1');
+  });
+  function fixture(payment: unknown = { status: 1001 }) {
+    const requests: Array<{ path: string; body: string }> = [];
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      requests.push({ path, body: String(init?.body ?? '') });
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'secret-jwt' });
+      if (path === '/cart/settle') return json({ status: 200, data: { hostid: 42, invoiceid: 7001 } });
+      if (path === '/apply_credit') return json(payment);
+      return json({ status: 200, data: {} });
+    });
+    const client = new ZJMFClient({ id: 'up', baseUrl: 'https://billing.example/', protocol: 'finance', username: 'secret-user', password: 'secret-password' }, fetcher);
+    return { client, fetcher, requests };
+  }
+  it('frames empty POST forms and persists the instance/invoice before payment', async () => {
+    const { client, requests } = fixture();
+    const saved: string[] = [];
+    const result = await client.createService('4661', { checkpoint: async service => {
+      expect(service.providerServiceId).toBe('42');
+      expect(service.runtime.invoiceId).toBe('7001');
+      expect(requests.some(request => request.path === '/apply_credit')).toBe(false);
+      saved.push(String(service.runtime.paymentState));
+    } });
+    expect(saved).toEqual(['ORDER_CREATED', 'PAYMENT_IN_FLIGHT']);
+    expect(requests.filter(request => ['/cart/clear', '/cart/settle'].includes(request.path)).map(request => request.body)).toEqual(['&', '&']);
+    expect(result.runtime.paid).toBe(true);
+  });
+  it('does not treat finance 200 as paid or attempt partial payment', async () => {
+    const { client, requests } = fixture({ status: 200 });
+    const result = await client.createService('4661');
+    expect(result.runtime).toMatchObject({ paid: false, paymentState: 'PAYMENT_REQUIRED', status: 'PENDING_INVOICE' });
+    expect(requests.filter(request => request.path === '/apply_credit')).toHaveLength(1);
+    expect(requests.find(request => request.path === '/apply_credit')?.body).toContain('enough=1');
+  });
+  it('does not pay when durable checkpoint storage fails', async () => {
+    const { client, requests } = fixture();
+    await expect(client.createService('4661', { checkpoint: async () => { throw new Error('disk unavailable'); } })).rejects.toThrow('disk unavailable');
+    expect(requests.some(request => request.path === '/apply_credit')).toBe(false);
+  });
+  it('stops after failed cart clear instead of adding into an unknown cart', async () => {
+    const { client, fetcher, requests } = fixture();
+    fetcher.mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      requests.push({ path, body: '' });
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      throw new TypeError('secret transport payload');
+    });
+    await expect(client.createService('4661')).rejects.toThrow(/POST \/cart\/clear TRANSPORT_ERROR/);
+    expect(requests.map(request => request.path)).toEqual(['/zjmf_api_login', '/cart/clear']);
+  });
+  it('never resends a mutating request on a business authentication error', async () => {
+    const { client, fetcher, requests } = fixture();
+    fetcher.mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      requests.push({ path, body: '' });
+      return path === '/zjmf_api_login' ? json({ status: 200, jwt: 'jwt' }) : json({ status: 401, msg: 'expired' });
+    });
+    await expect(client.createService('4661')).rejects.toThrow();
+    expect(requests.map(request => request.path)).toEqual(['/zjmf_api_login', '/cart/clear']);
+  });
+  it('retains a payment timeout as unknown and sends no fallback debit', async () => {
+    const { client, fetcher, requests } = fixture();
+    fetcher.mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      requests.push({ path, body: String(init?.body ?? '') });
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (path === '/cart/settle') return json({ status: 200, data: { hostid: 42, invoiceid: 7001 } });
+      if (path === '/apply_credit') throw new DOMException('secret-provider-message', 'TimeoutError');
+      return json({ status: 200 });
+    });
+    const result = await client.createService('4661');
+    expect(result.runtime).toMatchObject({ invoiceId: '7001', paid: false, paymentState: 'PAYMENT_UNKNOWN' });
+    expect(requests.filter(request => request.path === '/apply_credit')).toHaveLength(1);
+  });
+});
+
 describe("ZJMFClient", () => {
+  it.each(['regdate', 'create_time', 'active_time'])('reads upstream opening date from %s', async key => {
+    const fetchMock = vi.fn<typeof fetch>(async input => {
+      if (new URL(input.toString()).pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'token' });
+      return json({ status: 200, data: { count: 1, list: [{ id: 42, [key]: '1800000000' }] } });
+    });
+    const client = new ZJMFClient({ id: 'legacy', baseUrl: 'https://finance.example', protocol: 'finance', username: 'u', password: 'p' }, fetchMock);
+    expect((await client.listHosts())[0]?.openedAt).toBe('2027-01-15T08:00:00.000Z');
+  });
+  it('reads expiry from finance instance details when the list omits it', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async input => {
+      const path = new URL(input.toString()).pathname;
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'token' });
+      if (path === '/host/header') return json({ status: 200, data: { host_data: { id: 42, nextduedate: '1800000000', regdate: '1700000000' } } });
+      return json({ status: 200, data: { list: [{ id: 42 }] } });
+    });
+    const client = new ZJMFClient({ id: 'legacy', baseUrl: 'https://finance.example', protocol: 'finance', username: 'u', password: 'p' }, fetchMock);
+    expect(await client.getService('42')).toMatchObject({ expiresAt: '2027-01-15T08:00:00.000Z', openedAt: '2023-11-14T22:13:20.000Z' });
+  });
+  it.each([
+    ['nextduedate', 1800000000, '2027-01-15T08:00:00.000Z'],
+    ['nextduedate', '1800000000', '2027-01-15T08:00:00.000Z'],
+    ['due_time', 1800000000000, '2027-01-15T08:00:00.000Z'],
+    ['expire_at', '2027-01-15', '2027-01-15'],
+    ['expires_at', '2027-01-15T08:00:00Z', '2027-01-15T08:00:00Z'],
+    ['nextduedate', 'invalid', null],
+    ['nextduedate', 0, null],
+    ['nextduedate', '0000-00-00', null],
+  ])('normalizes upstream expiry %s=%s', async (key, value, expected) => {
+    const fetchMock = vi.fn<typeof fetch>(async input => {
+      if (new URL(input.toString()).pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'token' });
+      return json({ status: 200, data: { count: 1, list: [{ id: 42, [key]: value }] } });
+    });
+    const client = new ZJMFClient({ id: 'legacy', baseUrl: 'https://finance.example', protocol: 'finance', username: 'u', password: 'p' }, fetchMock);
+    expect((await client.listHosts())[0]?.expiresAt).toBe(expected);
+  });
+  it('loads all host pages and retains upstream product identity', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async input => {
+      const url = new URL(input.toString());
+      if (url.pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'token' });
+      const page = Number(url.searchParams.get('page'));
+      return json({ status: 200, data: { count: 51, list: Array.from({ length: page === 1 ? 50 : 1 }, (_, i) => ({ id: (page - 1) * 50 + i + 1, product_id: 7, name: 'Cloud', status: 'Active' })) } });
+    });
+    const client = new ZJMFClient({ id: 'legacy', baseUrl: 'https://finance.example', protocol: 'finance', username: 'u', password: 'p' }, fetchMock);
+    const hosts = await client.listHosts();
+    expect(hosts).toHaveLength(51);
+    expect(hosts[50]).toMatchObject({ id: '51', productId: '7' });
+  });
+  it("reports rejected upstream credentials as a gateway failure with a stable code", async () => {
+    const client = new ZJMFClient(
+      {
+        id: "legacy",
+        baseUrl: "https://finance.example",
+        protocol: "finance",
+        username: "u",
+        password: "p",
+      },
+      vi.fn<typeof fetch>(async () => json({ status: 401, msg: "鉴权失败" })),
+    );
+
+    const error = await client.listProducts().catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(ZJMFClientError);
+    expect(error).toMatchObject({
+      status: 502,
+      code: "zjmf.client.credentials_rejected",
+      message: "上游凭证被拒绝",
+    });
+  });
+
   it("uses the legacy V1 JWT field and product routes", async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const path = new URL(input.toString()).pathname;
@@ -271,6 +502,43 @@ describe("ZJMF failure vs empty distinction (handoff #2)", () => {
 });
 
 describe("ZJMF value normalization", () => {
+  it("quotes Finance V1 with the selected cycle and flat configoption fields", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const path = new URL(input.toString()).pathname;
+      if (path === "/zjmf_api_login") return json({ status: 200, jwt: "jwt" });
+      expect(init?.body).toBeInstanceOf(URLSearchParams);
+      const form = init?.body as URLSearchParams;
+      expect(form.get("pid")).toBe("4661");
+      expect(form.get("billingcycle")).toBe("monthly");
+      expect(form.get("configoption[3395986]")).toBe("4");
+      return json({
+        status: 200,
+        products: {
+          // This Finance V1 variant returns the config-only amount here; the
+          // selected package base is still present separately.
+          sale_total: "0.96",
+          product_sale_price: "72.00",
+          child: [{ option_name: "CPU", suboption_name: "4核", suboption_price: "0" }],
+        },
+      });
+    });
+    const quote = await new ZJMFClient(
+      {
+        id: "finance",
+        baseUrl: "https://finance.example/",
+        protocol: "finance",
+        username: "u",
+        password: "p",
+      },
+      fetchMock,
+    ).calculatePrice("4661", {
+      cycle: "monthly",
+      selections: { "3395986": "4" },
+    });
+
+    expect(quote).toMatchObject({ price: 7200, summary: "CPU:4核" });
+  });
+
   it("converts prices exactly and applies markup in integer minor units", () => {
     expect(decimalToMinor("12.3")).toBe(1230);
     expect(applyMarkup(1230, 250)).toBe(1261);
@@ -681,6 +949,7 @@ describe("ZJMF service provisioning", () => {
       if (path === "/upgrade/checkout_config_upgrade") {
         return json({ status: 200, data: { invoiceid: 9001 } });
       }
+      if (path === '/apply_credit') return json({ status: 1001 });
       return json({ status: 200, data: {} });
     });
     await clientFor(fetchMock).changePackage("42", {

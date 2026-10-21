@@ -1,0 +1,17 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "react"],
+    "typeRoots": ["../../../../../StackPanel/apps/web/node_modules/@types"],
+    "paths": {
+      "react": ["../../../../../StackPanel/apps/web/node_modules/@types/react"],
+      "react/*": ["../../../../../StackPanel/apps/web/node_modules/@types/react/*"],
+      "@stackpanel/ui": ["../../../../../StackPanel/packages/ui/dist/index.d.ts"],
+      "next/*": ["../../../../../StackPanel/apps/web/node_modules/next/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

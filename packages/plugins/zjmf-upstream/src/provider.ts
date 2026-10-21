@@ -16,7 +16,8 @@ import type {
   ServiceResourceKind,
   MetricSeries,
 } from '@stackpanel/sdk';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash, randomBytes } from 'node:crypto';
+import { provisioningJournalModel, provisioningCartLockModel, type ProvisioningJournalData } from './data.js';
 import {
   applyMarkup,
   assertPublicUpstreamUrl,
@@ -52,7 +53,9 @@ interface Credentials {
 export class ZJMFProvider implements FulfillmentProvider {
   readonly id = 'zjmf';
   readonly name = '智简魔方';
-  readonly fulfillmentTypes = ['upstream_service'];
+  // ZJMF provisions the real cloud server behind both the legacy generic
+  // upstream-service classification and the explicit cloud-server product type.
+  readonly fulfillmentTypes = ['upstream_service', 'cloud_server'];
 
   constructor(private readonly ctx: PluginContext) {}
 
@@ -109,16 +112,106 @@ export class ZJMFProvider implements FulfillmentProvider {
     const providerProductId = ctx.product.providerProductId;
     if (!providerProductId)
       throw new ZJMFProviderError(409, '商品缺少上游商品 ID');
-    const { client, upstreamId } = await this.resolveForProduct(
+    const { client, upstreamId, sourceFingerprint, downstreamUrl: configuredDownstreamUrl } = await this.resolveForProduct(
       ctx.product.metadata,
     );
     const config = ctx.config;
+    const baseId = `delivery-${ctx.orderId}-${ctx.productId}`;
+    const suffix = ctx.fulfillmentId?.slice(baseId.length);
+    if (ctx.fulfillmentId && (!ctx.fulfillmentId.startsWith(baseId) || (suffix && !/^-unit-([2-9]\d*|1\d+)$/.test(suffix))))
+      throw new ZJMFProviderError(409, '履约标识与订单商品不匹配');
+    const unit = suffix?.slice('-unit-'.length);
+    const generation = ctx.recoveryGeneration ?? 0;
+    if (!Number.isSafeInteger(generation) || generation < 0) throw new ZJMFProviderError(409, '无效的重开代次');
+    const reference = `order:${ctx.orderId}:product:${ctx.productId}${unit ? `:unit:${unit}` : ''}${generation ? `:recovery:${generation}` : ''}`;
+    // Preserve the original fence for the first unit and all legacy orders.
+    const journalId = createHash('sha256').update(JSON.stringify([upstreamId, ctx.orderId, ctx.productId, ...(unit ? [unit] : []), ...(generation ? [`recovery:${generation}`] : [])])).digest('hex');
+    const fingerprint = createHash('sha256').update(JSON.stringify([ctx.userId, providerProductId, ctx.quantity, config?.cycle ?? 'monthly', Object.entries(config?.selections ?? {}).sort(([a], [b]) => a.localeCompare(b))])).digest('hex');
+    const previous = await this.ctx.extensions.get<ProvisioningJournalData>(provisioningJournalModel, journalId);
+    if (previous) {
+      if (previous.spec.sourceFingerprint && previous.spec.sourceFingerprint !== sourceFingerprint) throw new ZJMFProviderError(409, '上游账号或地址已变更，禁止处理原账单');
+      if (previous.spec.fingerprint !== fingerprint) throw new ZJMFProviderError(409, '同一订单的上游配置已变更，禁止重新下单');
+      if (!previous.spec.providerServiceId) throw new ZJMFProviderError(409, '该订单已发送上游请求，结果未确认，禁止重复下单');
+      if (ctx.resumePayment) {
+        if (!previous.spec.invoiceId || !['ORDER_CREATED', 'PAYMENT_REQUIRED'].includes(previous.spec.state)) throw new ZJMFProviderError(409, '付款结果未确认或不可重试，请先核对原账单');
+        // CAS is committed BEFORE debit. A crash/timeout remains fenced, never auto-replayed.
+        await this.ctx.extensions.update(provisioningJournalModel, journalId, {
+          ...previous.spec, state: 'PAYMENT_IN_FLIGHT', runtime: { ...previous.spec.runtime, paymentState: 'PAYMENT_IN_FLIGHT' },
+        }, { expectedVersion: previous.version });
+        await ctx.checkpoint?.({ status: 'PENDING', providerServiceId: previous.spec.providerServiceId, runtime: { ...previous.spec.runtime, upstreamId, paid: false, paymentState: 'PAYMENT_IN_FLIGHT' } });
+        const payment = await client.payServiceInvoice(previous.spec.invoiceId);
+        const runtime = { ...previous.spec.runtime, ...payment, upstreamId, status: payment.paid ? 'PROVISIONING' : 'PENDING_INVOICE' };
+        const current = await this.ctx.extensions.get<ProvisioningJournalData>(provisioningJournalModel, journalId);
+        if (!current) throw new ZJMFProviderError(409, '上游订单记录丢失');
+        await this.ctx.extensions.update(provisioningJournalModel, journalId, { ...current.spec, state: payment.paymentState, runtime }, { expectedVersion: current.version });
+        await ctx.checkpoint?.({ status: 'PENDING', providerServiceId: previous.spec.providerServiceId, runtime });
+        return { status: 'PENDING', providerServiceId: previous.spec.providerServiceId, runtime };
+      }
+      // Replaying provision only restores the recorded identity, never creates/pays again.
+      const runtime = { ...previous.spec.runtime, upstreamId };
+      await ctx.checkpoint?.({ status: 'PENDING', providerServiceId: previous.spec.providerServiceId, runtime });
+      return { status: 'PENDING', providerServiceId: previous.spec.providerServiceId, runtime };
+    }
+    if (ctx.resumePayment) throw new ZJMFProviderError(409, '缺少原上游订单记录，禁止以付款恢复创建新订单');
+    const recoveryEvidence = generation ? await this.verifyCancelledProvision(ctx) : null;
+    const downstreamUrl = configuredDownstreamUrl ? await assertPublicUpstreamUrl(configuredDownstreamUrl) : null;
+    const downstreamSecret = `ds.${journalId.slice(0, 60)}`;
+    if (ctx.quantity !== 1) throw new ZJMFProviderError(409, '上游实例必须逐台交付；旧批量任务需要核对，禁止直接重新下单');
+    try {
+      await this.ctx.tx(async tx => {
+        if (recoveryEvidence) {
+          const lock = await tx.extensions.get<{ reference: string }>(provisioningCartLockModel, upstreamId);
+          if (lock && recoveryEvidence.requests.some(request => request.reference === lock.spec.reference)) {
+            await tx.extensions.update(provisioningCartLockModel, upstreamId, lock.spec, { expectedVersion: lock.version });
+            await tx.extensions.delete(provisioningCartLockModel, upstreamId);
+          }
+        }
+        // Persistent account-wide lock: cart operations cannot interleave across processes.
+        await tx.extensions.create(provisioningCartLockModel, { reference }, { name: upstreamId });
+        await tx.extensions.create<ProvisioningJournalData>(provisioningJournalModel, {
+          upstreamId, reference, fingerprint, state: 'SUBMITTING', providerServiceId: null, invoiceId: null, runtime: {},
+          ...(sourceFingerprint ? { sourceFingerprint } : {}),
+        }, { name: journalId });
+        if (downstreamUrl) await this.ctx.secrets.set(downstreamSecret, randomBytes(16).toString('hex'));
+      });
+    } catch {
+      // No remote request has been issued by this invocation. Do not hide an existing request.
+      if (await this.ctx.extensions.get(provisioningJournalModel, journalId)) throw new ZJMFProviderError(409, '该订单已有开通请求，禁止重复执行');
+      const error = new ZJMFProviderError(409, '上游购物车正在处理其他订单，请稍后重试');
+      Object.assign(error, { retryableBeforeSubmit: true });
+      throw error;
+    }
+    const checkpoint = async (service: { providerServiceId: string; runtime: Record<string, unknown> }) => {
+      const row = await this.ctx.extensions.get<ProvisioningJournalData>(provisioningJournalModel, journalId);
+      if (!row) throw new ZJMFProviderError(409, '上游订单记录丢失，禁止继续付款');
+      const runtime: Record<string, unknown> = { ...service.runtime, upstreamId };
+      await this.ctx.extensions.update(provisioningJournalModel, journalId, {
+        ...row.spec, state: String(runtime.paymentState ?? 'ORDER_CREATED'),
+        providerServiceId: service.providerServiceId,
+        invoiceId: typeof runtime.invoiceId === 'string' ? runtime.invoiceId : null, runtime,
+      }, { expectedVersion: row.version });
+      // Settlement finished and identity is durable. Payment does not use the cart.
+      // Release only our own lock, even when another order has since acquired it.
+      await this.ctx.tx(async tx => {
+        const lock = await tx.extensions.get<{ reference: string }>(provisioningCartLockModel, upstreamId);
+        if (lock?.spec.reference !== reference) return;
+        await tx.extensions.update(provisioningCartLockModel, upstreamId, lock.spec, { expectedVersion: lock.version });
+        await tx.extensions.delete(provisioningCartLockModel, upstreamId);
+      });
+      await ctx.checkpoint?.({ status: 'PENDING', providerServiceId: service.providerServiceId, runtime });
+    };
     const created = await client.createService(providerProductId, {
       quantity: ctx.quantity,
-      reference: `order:${ctx.orderId}`,
+      reference,
+      checkpoint,
+      ...(downstreamUrl ? { downstream: {
+        url: downstreamUrl, id: String(Number.parseInt(journalId.slice(0, 12), 16)),
+        token: (await this.ctx.secrets.get(downstreamSecret))!,
+      } } : {}),
       ...(config?.cycle ? { cycle: config.cycle } : {}),
       ...(config?.selections ? { selections: config.selections } : {}),
     });
+    await checkpoint(created);
     let credentialsRef: string | null = null;
     if (Object.keys(created.credentials).length > 0) {
       // 写入调用方（store）传入的密钥存储，确保后续 getDetail 能从同一命名空间读取。
@@ -137,10 +230,36 @@ export class ZJMFProvider implements FulfillmentProvider {
         upstreamId,
         status:
           created.runtime.status === 'PENDING_INVOICE'
-            ? 'PENDING'
+            ? 'PENDING_INVOICE'
             : 'PROVISIONING',
       },
     };
+  }
+
+  async verifyCancelledProvision(ctx: ProvisionContext) {
+    const { client, upstreamId, sourceFingerprint } = await this.resolveForProduct(ctx.product.metadata);
+    const generation = ctx.recoveryGeneration ?? 1;
+    if (!Number.isSafeInteger(generation) || generation < 1 || generation > 100)
+      throw new ZJMFProviderError(409, '无效的重开代次');
+    const baseId = `delivery-${ctx.orderId}-${ctx.productId}`;
+    const suffix = ctx.fulfillmentId?.slice(baseId.length);
+    if (ctx.fulfillmentId && (!ctx.fulfillmentId.startsWith(baseId) || (suffix && !/^-unit-([2-9]\d*|1\d+)$/.test(suffix)))) throw new ZJMFProviderError(409, '履约标识不匹配');
+    const unit = suffix?.slice('-unit-'.length);
+    const requests: Array<{ reference: string; invoiceId: string; serviceIds: string[] }> = [];
+    for (let i = 0; i < generation; i++) {
+      const key = createHash('sha256').update(JSON.stringify([upstreamId, ctx.orderId, ctx.productId, ...(unit ? [unit] : []), ...(i ? [`recovery:${i}`] : [])])).digest('hex');
+      const row = await this.ctx.extensions.get<ProvisioningJournalData>(provisioningJournalModel, key);
+      if (!row?.spec.invoiceId || !row.spec.providerServiceId || row.spec.upstreamId !== upstreamId)
+        throw new ZJMFProviderError(409, '缺少原请求的持久化账单证据，禁止通过人工声明重开');
+      if (!sourceFingerprint || row.spec.sourceFingerprint !== sourceFingerprint)
+        throw new ZJMFProviderError(409, '原上游账号身份缺少凭据或已变更，禁止核验其他账号的同号账单');
+      if (row.spec.runtime.paid === true || row.spec.state === 'PAID')
+        throw new ZJMFProviderError(409, '原请求曾确认付款，禁止按未付款订单重新开通');
+      const ids = Array.isArray(row.spec.runtime.providerServiceIds) ? row.spec.runtime.providerServiceIds.map(String) : [row.spec.providerServiceId];
+      await client.verifyCancelledInvoice(row.spec.invoiceId, ids);
+      requests.push({ reference: row.spec.reference, invoiceId: row.spec.invoiceId, serviceIds: ids });
+    }
+    return { sourceId: upstreamId, checkedAt: new Date().toISOString(), requests };
   }
 
   /** 按顾客配置试算结算价格：上游 get_total（含上游客户等级折扣）+ 我方 markup。 */
@@ -180,7 +299,7 @@ export class ZJMFProvider implements FulfillmentProvider {
    */
   private async resolveForProduct(
     metadata: unknown,
-  ): Promise<{ client: ZJMFClient; upstreamId: string; markupBps: number }> {
+  ): Promise<{ client: ZJMFClient; upstreamId: string; markupBps: number; downstreamUrl?: string; sourceFingerprint?: string }> {
     const binding = readUpstreamBinding(metadata);
     if (!binding || !binding.sourceRef)
       throw new ZJMFProviderError(409, '商品未关联智简魔方上游');
@@ -191,6 +310,8 @@ export class ZJMFProvider implements FulfillmentProvider {
       client: await this.connect(binding.sourceRef),
       upstreamId: upstream.id,
       markupBps: upstream.markupBps,
+      sourceFingerprint: createHash('sha256').update(JSON.stringify([upstream.baseUrl, upstream.protocol, await this.ctx.secrets.get(`${CREDENTIALS_PREFIX}${upstream.id}`)])).digest('hex'),
+      ...(upstream.downstreamUrl ? { downstreamUrl: upstream.downstreamUrl } : {}),
     };
   }
 
@@ -237,8 +358,14 @@ export class ZJMFProvider implements FulfillmentProvider {
     const status =
       (detail['status'] as string) ?? (runtime['status'] as string | undefined);
     const statusLabel = stringOr(detail['statusLabel']);
+    const powerState = normalizePowerState(status ?? '');
+    if (powerState !== 'UNKNOWN') {
+      fields.push({ label: '电源状态', value: powerState === 'ON' ? '已开机' : '已关机' });
+    }
     return {
       title: ctx.service.productName ?? stringOr(detail['host']) ?? '服务',
+      provisionedAt: stringOr(detail['openedAt']) ?? null,
+      expiresAt: stringOr(detail['expiresAt']) ?? null,
       status: normalizeStatus(status ?? ctx.service.status),
       ...(statusLabel ? { statusLabel } : {}),
       fields,
@@ -726,22 +853,23 @@ export function normalizeStatus(
 ): NonNullable<ServiceDetail['status']> {
   const normalized = (status ?? '').toUpperCase();
   if (normalized.includes('PROVISION')) return 'PROVISIONING';
-  if (normalized.includes('TERMINAT') || normalized.includes('DELET'))
+  if (normalized.includes('TERMINAT') || normalized.includes('DELET') || ['CANCELLED', 'CANCELED'].includes(normalized))
     return 'TERMINATED';
-  if (
-    normalized.includes('SUSPEND') ||
-    normalized.includes('OFF') ||
-    normalized.includes('SHUT')
-  )
+  if (normalized.includes('SUSPEND'))
     return 'SUSPENDED';
   if (normalized.includes('FAIL')) return 'FAILED';
-  if (
-    normalized.includes('ACTIVE') ||
-    normalized.includes('RUNNING') ||
-    normalized.includes('ON')
-  )
+  if (['OFF', 'SHUTOFF', 'SHUTDOWN', 'STOPPED', 'POWERED_OFF'].includes(normalized)) return 'ACTIVE';
+  if (['ACTIVE', 'RUNNING', 'ON', 'POWERED_ON'].includes(normalized))
     return 'ACTIVE';
   return 'PENDING_PROVISION';
+}
+
+/** Power is not a billing suspension or a provisioning lifecycle state. */
+export function normalizePowerState(status: string): 'ON' | 'OFF' | 'UNKNOWN' {
+  const value = status.trim().toUpperCase();
+  if (['ON', 'RUNNING', 'POWERED_ON'].includes(value)) return 'ON';
+  if (['OFF', 'SHUTOFF', 'SHUTDOWN', 'STOPPED', 'POWERED_OFF'].includes(value)) return 'OFF';
+  return 'UNKNOWN';
 }
 
 function stringOr(value: unknown): string | null {

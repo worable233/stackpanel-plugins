@@ -1,13 +1,27 @@
 {
   "version": "0.1.0",
-  "revision": "a8ace3e5644b",
+  "revision": "8e9cceb429e2",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
-  "finders": [
-    "zjmf-upstream.upstreams"
-  ],
+  "finders": ["zjmf-upstream.instances", "zjmf-upstream.upstreams"],
   "adminRoutes": [
+    {
+      "path": "/instances",
+      "component": "admin/instances",
+      "permission": "zjmf-upstream.admin",
+      "nav": {
+        "label": "上游实例",
+        "group": "上游",
+        "order": 20
+      },
+      "data": [
+        {
+          "finder": "zjmf-upstream.instances",
+          "as": "inventory"
+        }
+      ]
+    },
     {
       "path": "/overview",
       "component": "admin/summary",
@@ -62,6 +76,11 @@
           "maxLength": 191
         },
         {
+          "name": "downstreamUrl",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
           "name": "protocol",
           "type": "string",
           "required": true,
@@ -113,12 +132,104 @@
       "method": "POST",
       "path": "/zjmf-upstream/admin/upstreams/sync",
       "permission": "zjmf-upstream.admin",
+      "successFeedback": {
+        "message": "同步完成：已更新 {updated} 个商品，跳过 {skipped} 个。",
+        "params": {
+          "updated": "updated",
+          "skipped": "skipped"
+        }
+      },
       "input": [
         {
           "name": "sourceId",
           "type": "string",
           "required": true,
           "maxLength": 191
+        }
+      ]
+    },
+    {
+      "id": "zjmf-upstream.update",
+      "method": "PATCH",
+      "path": "/zjmf-upstream/admin/upstreams/:id",
+      "permission": "zjmf-upstream.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "baseUrl",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "downstreamUrl",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "protocol",
+          "type": "string",
+          "required": true,
+          "maxLength": 8
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "maxLength": 191
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "required": true,
+          "maxLength": 8
+        },
+        {
+          "name": "markupBps",
+          "type": "integer",
+          "required": true,
+          "min": 0,
+          "max": 100000
+        },
+        {
+          "name": "defaultStock",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "max": 1000000
+        },
+        {
+          "name": "syncIntervalMinutes",
+          "type": "integer",
+          "required": true,
+          "min": 15,
+          "max": 1440
+        },
+        {
+          "name": "allowUnverifiedV10Routes",
+          "type": "boolean",
+          "required": true
+        },
+        {
+          "name": "v10Module",
+          "type": "string",
+          "required": true,
+          "maxLength": 32
         }
       ]
     },
@@ -142,6 +253,8 @@
   "files": [
     "frontend/dist/admin.js",
     "frontend/dist/admin.js.map",
+    "frontend/dist/admin.runtime.js",
+    "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ]

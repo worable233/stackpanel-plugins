@@ -52,6 +52,7 @@ export interface ZJMFProduct {
 
 /** 上游已购服务（主机）条目（财务：`/host/list`；V10：`console/v1/host`）。 */
 export interface ZJMFHost {
+  productId: string | null;
   id: string;
   name: string;
   productName: string | null;
@@ -59,6 +60,7 @@ export interface ZJMFHost {
   statusLabel: string | null;
   host: string | null;
   expiresAt: string | null;
+  openedAt: string | null;
   amount: number | null;
   currency: string | null;
   raw: Record<string, unknown>;
@@ -308,18 +310,28 @@ export class ZJMFClient {
    *
    * 无法列出的协议/实例返回空数组（不阻断其它实例）。
    */
-  async listHosts(limit = 200): Promise<ZJMFHost[]> {
-    const pageSize = Math.min(Math.max(limit, 1), 50);
-    const path =
-      this.connection.protocol === 'finance'
-        ? `/host/list?limit=${encodeURIComponent(String(limit))}`
-        : `console/v1/host?page=1&limit=${encodeURIComponent(String(pageSize))}`;
-    const data = await this.authorizedGet(path);
-    const payload = object(data['data']);
-    const list = Array.isArray(payload['list']) ? payload['list'] : [];
-    return list
-      .map(normalizeHost)
-      .filter((host): host is ZJMFHost => host !== null);
+  async listHosts(limit?: number): Promise<ZJMFHost[]> {
+    const cap = limit === undefined ? Infinity : Math.max(1, Math.floor(limit));
+    const pageSize = Math.min(cap, 50);
+    const hosts = new Map<string, ZJMFHost>();
+    for (let page = 1; page <= 10000; page++) {
+      const path = this.connection.protocol === 'finance'
+        ? `/host/list?page=${page}&limit=${pageSize}`
+        : `console/v1/host?page=${page}&limit=${pageSize}`;
+      const data = await this.authorizedGet(path);
+      const payload = object(data['data']);
+      const list = Array.isArray(payload['list']) ? payload['list'] : [];
+      const before = hosts.size;
+      for (const row of list) {
+        const host = normalizeHost(row);
+        if (host) hosts.set(host.id, host);
+      }
+      if (hosts.size >= cap) return [...hosts.values()].slice(0, cap);
+      const total = Number(payload['count'] ?? payload['total']);
+      if (list.length === 0 || (Number.isFinite(total) && hosts.size >= total) || (!Number.isFinite(total) && list.length < pageSize)) return [...hosts.values()];
+      if (hosts.size === before) throw new ZJMFClientError(502, '上游实例分页未前进，无法确认完整列表');
+    }
+    throw new ZJMFClientError(502, '上游实例分页超过安全限制，未返回不完整列表');
   }
 
   /**
@@ -490,13 +502,8 @@ export class ZJMFClient {
     const products = object(data['products']);
     const saleTotal =
       stringOrNull(products['sale_total']) ?? stringOrNull(products['total']);
-    if (!saleTotal) return null;
-    let price: number;
-    try {
-      price = decimalToMinor(saleTotal);
-    } catch {
-      return null;
-    }
+    const quotedTotal = safeMinor(saleTotal);
+    if (quotedTotal === undefined) return null;
     const breakdown: Array<{ label: string; value: string; price?: number }> =
       [];
     const child = Array.isArray(products['child']) ? products['child'] : [];
@@ -514,6 +521,7 @@ export class ZJMFClient {
       if (minorPrice !== undefined) entry.price = minorPrice;
       breakdown.push(entry);
     }
+    const price = financeCartTotal(products, quotedTotal, child);
     return {
       price,
       breakdown,
@@ -537,6 +545,8 @@ export class ZJMFClient {
     opts: {
       quantity?: number;
       reference?: string;
+      downstream?: { id: string; token: string; url: string };
+      checkpoint?: (service: { providerServiceId: string; runtime: Record<string, unknown> }) => Promise<void>;
       cycle?: string;
       selections?: Record<string, string | number>;
     } = {},
@@ -545,6 +555,9 @@ export class ZJMFClient {
     credentials: Record<string, string>;
     runtime: Record<string, unknown>;
   }> {
+    if ((opts.quantity ?? 1) !== 1) throw new ZJMFClientError(409, '上游实例必须逐台下单，禁止丢弃批量实例标识');
+    if (opts.downstream && (!/^\d+$/.test(opts.downstream.id) || !/^[a-f0-9]{32}$/.test(opts.downstream.token) || !/^https:\/\/[^/?#]+\/?$/.test(opts.downstream.url)))
+      throw new ZJMFClientError(409, '下游关联参数无效，禁止提交上游请求');
     if (this.connection.protocol === 'finance') {
       return this.createServiceFinance(productId, opts);
     }
@@ -557,6 +570,8 @@ export class ZJMFClient {
     opts: {
       quantity?: number;
       reference?: string;
+      downstream?: { id: string; token: string; url: string };
+      checkpoint?: (service: { providerServiceId: string; runtime: Record<string, unknown> }) => Promise<void>;
       cycle?: string;
       selections?: Record<string, string | number>;
     },
@@ -565,12 +580,8 @@ export class ZJMFClient {
     credentials: Record<string, string>;
     runtime: Record<string, unknown>;
   }> {
-    // 清空购物车是幂等优化：失败不阻塞下单。
-    try {
-      await this.authorizedRequest('console/v1/cart', 'DELETE', false);
-    } catch {
-      // 忽略
-    }
+    // An uncertain clear must not race with a new add/settle request.
+    await this.authorizedRequest('console/v1/cart', 'DELETE', false);
     const body: FormBody = {
       product_id: String(productId),
       qty: String(opts.quantity ?? 1),
@@ -589,7 +600,7 @@ export class ZJMFClient {
     // 证据：`app/common/logic/ResModuleLogic.php:415-425`。
     const settle = await this.authorizedPost('console/v1/cart/settle', {
       positions: ['0'],
-      ...(opts.reference ? { downstream_host_id: opts.reference } : {}),
+      ...(opts.downstream ? { downstream_host_id: opts.downstream.id, downstream_token: opts.downstream.token, downstream_url: opts.downstream.url } : {}),
     });
     const payload = object(settle['data']);
     // V10 返回 host_ids[]，财务返回 hostid。
@@ -605,18 +616,28 @@ export class ZJMFClient {
 
     // 有金额才需要支付；0 元单直接算已支付。
     const amount = Number(payload['amount'] ?? 0);
-    let paid = !Number.isFinite(amount) || amount <= 0;
+    let paid = payload['amount'] !== undefined && Number.isFinite(amount) && amount === 0;
     const orderId = stringOrNull(payload['order_id']);
+    const checkpointRuntime: Record<string, unknown> = { invoiceId: orderId, billingCycle: opts.cycle ?? 'monthly', config: opts.selections ?? {}, paid: false, paymentState: 'ORDER_CREATED', status: 'PENDING_INVOICE' };
+    await opts.checkpoint?.({ providerServiceId, runtime: checkpointRuntime });
+    if (Array.isArray(hostIds) && hostIds.length !== 1) {
+      await opts.checkpoint?.({ providerServiceId, runtime: { ...checkpointRuntime, providerServiceIds: hostIds, paymentState: 'REQUIRES_RECONCILIATION' } });
+      throw new ZJMFClientError(409, '上游返回了非预期数量的实例，已保留全部标识，禁止付款');
+    }
+    let paymentState = paid ? 'PAID' : 'PAYMENT_REQUIRED';
     if (!paid && orderId) {
+      await opts.checkpoint?.({ providerServiceId, runtime: { ...checkpointRuntime, paymentState: 'PAYMENT_IN_FLIGHT' } });
       try {
         const pay = await this.authorizedPost('console/v1/pay', {
           id: orderId,
           gateway: 'credit',
         });
         // V10 付费返回 code=Paid 表示完成，Unpaid 表示还需三方支付。
-        paid = pay['code'] === 'Paid' || pay['status'] === 200 && pay['code'] === undefined;
+        paid = pay['code'] === 'Paid';
+        paymentState = paid ? 'PAID' : pay['code'] === 'Unpaid' ? 'PAYMENT_REQUIRED' : 'PAYMENT_UNKNOWN';
       } catch {
         paid = false;
+        paymentState = 'PAYMENT_UNKNOWN';
       }
     }
 
@@ -630,6 +651,7 @@ export class ZJMFClient {
         status: paid ? 'PROVISIONING' : 'PENDING_INVOICE',
         invoiceId: orderId ?? null,
         paid,
+        paymentState,
         billingCycle: opts.cycle ?? 'monthly',
         config: opts.selections ?? {},
         raw: { settle },
@@ -655,20 +677,47 @@ export class ZJMFClient {
     }
   }
 
-  /** 清空购物车（尽力而为，15s 超时即放弃）。 */
-  private async clearCartWithTimeout(): Promise<void> {
+  /** 清空购物车必须完成；失败时停止下单，不能与后续购物车写操作并行。 */
+  private async clearCartWithTimeout(body: FormBody = {}): Promise<Record<string, unknown>> {
+    return this.authorizedPost('/cart/clear', body);
+  }
+
+  /** Pay a known invoice once. Caller must durably fence concurrent/repeated payments. */
+  async payServiceInvoice(invoiceId: string): Promise<{ paid: boolean; paymentState: string }> {
     try {
-      await Promise.race([
-        this.authorizedPost('/cart/clear', {}),
-        new Promise<never>((_resolve, reject) =>
-          setTimeout(
-            () => reject(new ZJMFClientError(504, '清空购物车超时')),
-            15_000,
-          ),
-        ),
-      ]);
+      const payment = this.connection.protocol === 'finance'
+        ? await this.authorizedPost('/apply_credit', { invoiceid: invoiceId, use_credit: '1', enough: '1', is_api: '1' })
+        : await this.authorizedPost('console/v1/pay', { id: invoiceId, gateway: 'credit' });
+      const paid = this.connection.protocol === 'finance' ? payment['status'] === 1001 : payment['code'] === 'Paid';
+      const unpaid = this.connection.protocol === 'finance' ? payment['status'] === 200 : payment['code'] === 'Unpaid';
+      return { paid, paymentState: paid ? 'PAID' : unpaid ? 'PAYMENT_REQUIRED' : 'PAYMENT_UNKNOWN' };
     } catch {
-      // 忽略：清空失败不阻塞下单。
+      // Unknown is not unpaid. Never automatically submit another debit.
+      return { paid: false, paymentState: 'PAYMENT_UNKNOWN' };
+    }
+  }
+
+  /** Finance V1 UserInvoiceController::getInvoicesDetail: GET only, account-scoped. */
+  async verifyCancelledInvoice(invoiceId: string, serviceIds: string[]): Promise<void> {
+    if (this.connection.protocol !== 'finance' || !/^\d+$/.test(invoiceId) || serviceIds.length !== 1)
+      throw new ZJMFClientError(409, '缺少可核验的老财务原账单及实例标识');
+    const response = await this.authorizedGet(`/get_invoices_detail?id=${encodeURIComponent(invoiceId)}`);
+    const data = object(response['data']);
+    const detail = object(data['detail']);
+    const zero = (value: unknown) => (typeof value === 'number' || typeof value === 'string') && /^0+(\.0+)?$/.test(String(value));
+    const money = (value: unknown) => (typeof value === 'number' || typeof value === 'string') && /^\d+(\.\d+)?$/.test(String(value));
+    if (stringOrNull(detail['id']) !== invoiceId || detail['status'] !== 'Cancelled' || !zero(detail['paid_time']) || !zero(detail['credit']) || !zero(detail['use_credit_limit']) || !money(detail['subtotal']) || !money(detail['total']) || Number(detail['subtotal']) !== Number(detail['total']) || !Array.isArray(data['accounts']) || data['accounts'].length !== 0)
+      throw new ZJMFClientError(409, '原账单未取消、存在付款/余额抵扣，或财务证据不完整，禁止重开');
+    const items = data['invoice_items'];
+    if (!Array.isArray(items)) throw new ZJMFClientError(409, '原账单缺少实例关联证据');
+    const hosts = items.map(object).filter(item => item['type'] === 'host').map(item => stringOrNull(item['rel_id']));
+    if (hosts.length !== serviceIds.length || !serviceIds.every(id => hosts.includes(id)))
+      throw new ZJMFClientError(409, '原账单与实例不匹配，禁止重开');
+    for (const id of serviceIds) {
+      const header = await this.authorizedGet(`/host/header?host_id=${encodeURIComponent(id)}`);
+      const host = object(object(header['data'])['host_data']);
+      if (!['Cancelled', 'Canceled'].includes(String(host['domainstatus'])))
+        throw new ZJMFClientError(409, '原上游实例未确认取消，禁止重开');
     }
   }
 
@@ -677,8 +726,10 @@ export class ZJMFClient {
     productId: string,
     opts: {
       quantity?: number;
+      downstream?: { id: string; token: string; url: string };
       cycle?: string;
       selections?: Record<string, string | number>;
+      checkpoint?: (service: { providerServiceId: string; runtime: Record<string, unknown> }) => Promise<void>;
     },
   ): Promise<{
     providerServiceId: string;
@@ -686,8 +737,15 @@ export class ZJMFClient {
     runtime: Record<string, unknown>;
   }> {
     const billingCycle = opts.cycle ?? 'monthly';
-    // 清空购物车是幂等优化：上游偶发慢/挂起，短超时尽力而为，失败不阻塞下单。
-    await this.clearCartWithTimeout();
+    // 共享购物车必须串行清空成功，失败则停止，避免混入其他请求的商品。
+    const downstream: FormBody = opts.downstream ? {
+      downstream_id: opts.downstream.id, downstream_token: opts.downstream.token, downstream_url: opts.downstream.url,
+    } : {};
+    const cleared = await this.clearCartWithTimeout(downstream);
+    const restoredId = stringOrNull(cleared['hostid']);
+    const restoredInvoice = stringOrNull(cleared['invoiceid']);
+    if (restoredInvoice && !restoredId) throw new ZJMFClientError(409, '原上游账单已存在但缺少实例，禁止重新下单');
+    if (restoredId && !restoredInvoice) throw new ZJMFClientError(409, '原上游实例已存在但缺少账单，禁止重新下单');
 
     const addBody: FormBody = {
       pid: productId,
@@ -700,9 +758,9 @@ export class ZJMFClient {
       if (value === undefined || value === null || value === '') continue;
       addBody[`configoption[${optionId}]`] = String(value);
     }
-    await this.authorizedPost('/cart/add_to_shop', addBody);
+    if (!restoredId) await this.authorizedPost('/cart/add_to_shop', addBody);
 
-    const settle = await this.authorizedPost('/cart/settle', {});
+    const settle = restoredId ? { data: { hostid: restoredId, invoiceid: restoredInvoice } } : await this.authorizedPost('/cart/settle', downstream);
     const settlePayload = object(settle['data']);
     const hostIds = settlePayload['hostid'];
     const invoiceId = stringOrNull(settlePayload['invoiceid']);
@@ -713,30 +771,33 @@ export class ZJMFClient {
       throw new ZJMFClientError(502, '上游结算未返回服务 ID');
     }
 
-    // 用上游余额支付发票（enough=1 视为足够；不足时回退按可用余额支付）。
+    const checkpointRuntime: Record<string, unknown> = { invoiceId, billingCycle, config: opts.selections ?? {}, paid: false, paymentState: 'ORDER_CREATED', status: 'PENDING_INVOICE' };
+    // Durable identity must reach the provider/store before any payment can start.
+    await opts.checkpoint?.({ providerServiceId, runtime: checkpointRuntime });
+
+    if (Array.isArray(hostIds) && hostIds.length !== 1) {
+      await opts.checkpoint?.({ providerServiceId, runtime: { ...checkpointRuntime, providerServiceIds: hostIds, paymentState: 'REQUIRES_RECONCILIATION' } });
+      throw new ZJMFClientError(409, '上游返回了非预期数量的实例，已保留全部标识，禁止付款');
+    }
+
+    // 仅对原发票全额支付一次；余额不足不进行部分扣款。
     let paid = false;
+    let paymentState = 'PAYMENT_REQUIRED';
     if (invoiceId) {
+      await opts.checkpoint?.({ providerServiceId, runtime: { ...checkpointRuntime, paymentState: 'PAYMENT_IN_FLIGHT' } });
       try {
         const credit = await this.authorizedPost('/apply_credit', {
           invoiceid: invoiceId,
           use_credit: '1',
           enough: '1',
+          is_api: '1',
+          ...downstream,
         });
-        paid = credit['status'] === 1001 || credit['status'] === 200;
+        paid = credit['status'] === 1001;
+        paymentState = paid ? 'PAID' : credit['status'] === 200 ? 'PAYMENT_REQUIRED' : 'PAYMENT_UNKNOWN';
       } catch {
         paid = false;
-      }
-      if (!paid) {
-        try {
-          const partial = await this.authorizedPost('/apply_credit', {
-            invoiceid: invoiceId,
-            use_credit: '1',
-            enough: '0',
-          });
-          paid = partial['status'] === 1001 || partial['status'] === 200;
-        } catch {
-          paid = false;
-        }
+        paymentState = 'PAYMENT_UNKNOWN';
       }
     }
 
@@ -750,6 +811,7 @@ export class ZJMFClient {
         status: paid ? 'PROVISIONING' : 'PENDING_INVOICE',
         invoiceId: invoiceId ?? null,
         paid,
+        paymentState,
         billingCycle,
         config: opts.selections ?? {},
         raw: { settle },
@@ -1279,28 +1341,11 @@ export class ZJMFClient {
     }
   }
 
-  /** 用上游余额支付发票（enough=1 失败时回退按可用余额）。 */
+  /** A failed/unknown debit must never fall back to partial credit or another debit. */
   private async applyCredit(invoiceId: string): Promise<void> {
-    try {
-      const full = await this.authorizedPost('/apply_credit', {
-        invoiceid: invoiceId,
-        use_credit: '1',
-        enough: '1',
-      });
-      // 上游约定：apply_credit 仅 1001 表示「已全额用余额支付」；200 为余额不足。
-      if (full['status'] === 1001) return;
-    } catch {
-      // 回退按可用余额支付。
-    }
-    try {
-      await this.authorizedPost('/apply_credit', {
-        invoiceid: invoiceId,
-        use_credit: '1',
-        enough: '0',
-      });
-    } catch {
-      // 支付失败不阻断：订单已在上游生成，由供应商后台处理。
-    }
+    const payment = await this.payServiceInvoice(invoiceId);
+    if (!payment.paid) throw new ZJMFClientError(409,
+      `原上游账单 ${invoiceId} 付款${payment.paymentState === 'PAYMENT_UNKNOWN' ? '结果未知' : '未完成'}，禁止自动重新下单或扣款`);
   }
 
   private async authorizedGet(path: string): Promise<Record<string, unknown>> {
@@ -1322,7 +1367,7 @@ export class ZJMFClient {
   ): Promise<Record<string, unknown>> {
     const token = await this.authenticate();
     const response = await this.request(path, method, token, body);
-    if (retry && (response.status === 401 || response.status === 405)) {
+    if (retry && method === 'GET' && (response.status === 401 || response.status === 405)) {
       this.token = null;
       return this.authorizedRequest(path, method, false, body);
     }
@@ -1349,7 +1394,9 @@ export class ZJMFClient {
       password: this.connection.password,
     });
     if (response.status !== undefined && response.status !== 200) {
-      throw new ZJMFClientError(401, response.message ?? '上游凭证被拒绝');
+      // This is an upstream login failure, never a StackPanel session failure.
+      // Preserve a stable code while keeping the HTTP status in the gateway range.
+      throw new ZJMFClientError(502, '上游凭证被拒绝');
     }
     const token =
       this.connection.protocol === 'finance'
@@ -1379,6 +1426,15 @@ export class ZJMFClient {
     // only a host that resolves to a private address is rejected here.
     await assertNoPrivateResolution(this.connection.baseUrl);
     let response: Response;
+    const form = body ? buildForm(body) : null;
+    const startedAt = Date.now();
+    const transportError = (error: unknown) => {
+      const candidate = error as { name?: string; cause?: { code?: string } };
+      const reason = candidate?.name === 'TimeoutError' || candidate?.name === 'AbortError' ? 'TIMEOUT' :
+        ['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT', 'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'].includes(candidate?.cause?.code ?? '') ? candidate.cause!.code! : 'TRANSPORT_ERROR';
+      // Never persist headers, credentials, query strings, response bodies or arbitrary error text.
+      return new ZJMFClientError(502, `上游请求失败：${method} ${url.pathname} ${reason} (${Date.now() - startedAt}ms)`);
+    };
     try {
       response = await this.fetchImpl(url, {
         method,
@@ -1390,16 +1446,23 @@ export class ZJMFClient {
             ? { 'Content-Type': 'application/x-www-form-urlencoded' }
             : {}),
         },
-        ...(body ? { body: buildForm(body) } : {}),
+        // '&' is an empty urlencoded form. Some finance gateways hang after applying
+        // a zero-length POST; a nonzero framing body avoids losing their response.
+        ...(form ? { body: form.size > 0 ? form : '&' } : {}),
         signal: AbortSignal.timeout(60_000),
       });
-    } catch {
-      throw new ZJMFClientError(502, '无法连接上游');
+    } catch (error) {
+      throw transportError(error);
     }
     // V10 的 console 路由在鉴权失败时可能直接返回 HTTP 401/404（HTML），
     // 但业务错误通常是 HTTP 200 + body.status=400。先把能解析的 body 解析出来，
     // 只有「非 2xx 且不是 JSON」才当成传输层错误。
-    const text = await response.text();
+    let text: string;
+    try { text = await response.text(); } catch (error) { throw transportError(error); }
+    if (!response.ok) {
+      if (method === 'GET' && [401, 405].includes(response.status)) return { status: response.status, message: '上游鉴权失效', data: {} };
+      throw new ZJMFClientError(response.status === 404 ? 404 : 502, `上游返回 HTTP ${response.status}`);
+    }
     let json: unknown = null;
     try {
       json = JSON.parse(text);
@@ -1423,6 +1486,34 @@ export class ZJMFClient {
       data: parsed.data,
     };
   }
+}
+
+/**
+ * Some Finance V1 deployments return `sale_total` as configuration-only amount
+ * from `/cart/get_total`, while `product_sale_price` still carries the selected
+ * billing-cycle base price. Treating that partial total as the whole order makes
+ * a ¥72 package appear as ¥0.96. A complete quote can never be lower than its
+ * non-negative package base, so recover the total from base plus option deltas.
+ */
+function financeCartTotal(
+  products: Record<string, unknown>,
+  quotedTotal: number,
+  child: unknown[],
+): number {
+  const base =
+    (safeMinor(products['product_sale_price']) ?? 0) +
+    (safeMinor(products['product_sale_setup_fee']) ?? 0);
+  if (base <= 0 || quotedTotal >= base) return quotedTotal;
+  let optionTotal = 0;
+  for (const row of child) {
+    const option = object(row);
+    const amount = safeMinor(option['suboption_price']) ?? 0;
+    const quantity = Number(option['qty'] ?? 1);
+    if (amount > 0 && Number.isSafeInteger(quantity) && quantity > 0) {
+      optionTotal += amount * quantity;
+    }
+  }
+  return base + optionTotal;
 }
 
 /**
@@ -1569,12 +1660,23 @@ function normalizeProduct(value: unknown): ZJMFProduct | null {
   return {
     id,
     name: name.slice(0, 191),
-    description: stringOrNull(raw['description'])?.slice(0, 191) ?? null,
+    description: productDescription(raw),
     price,
     currency:
       stringOrNull(raw['currency_code']) ?? stringOrNull(raw['currency']),
     raw,
   };
+}
+
+/** Product detail endpoints use different description keys across ZJMF releases. */
+function productDescription(raw: Record<string, unknown>): string | null {
+  for (const key of ['description', 'brief', 'summary', 'intro', 'remark', 'notes']) {
+    const value = stringOrNull(raw[key]);
+    if (!value) continue;
+    const plain = value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (plain) return plain.slice(0, 191);
+  }
+  return null;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -1611,12 +1713,7 @@ function normalizeHost(value: unknown): ZJMFHost | null {
     stringOrNull(raw['ip']) ??
     stringOrNull(raw['hostname']) ??
     stringOrNull(raw['host']);
-  const expiresAt =
-    epochToIso(raw['due_time']) ??
-    stringOrNull(raw['nextduedate']) ??
-    stringOrNull(raw['expires_at']) ??
-    stringOrNull(raw['expire_at']) ??
-    stringOrNull(raw['due_date']);
+  const expiresAt = readExpiry(raw);
   const priceText =
     stringOrNull(raw['amount']) ??
     stringOrNull(raw['price']) ??
@@ -1631,12 +1728,14 @@ function normalizeHost(value: unknown): ZJMFHost | null {
   }
   return {
     id,
+    productId: stringOrNull(raw['product_id']) ?? stringOrNull(raw['productid']) ?? stringOrNull(raw['pid']),
     name: stringOrNull(raw['domain']) ?? productName ?? `#${id}`,
     productName,
     status,
     statusLabel,
     host,
     expiresAt,
+    openedAt: readOpenedAt(raw),
     amount,
     currency:
       stringOrNull(raw['currency_code']) ?? stringOrNull(raw['currency']),
@@ -1655,13 +1754,34 @@ function stringOrNull(value: unknown): string | null {
  * 已带时区的字符串原样返回，避免破坏 finance 的旧数据。
  */
 function epochToIso(value: unknown): string | null {
-  if (typeof value === 'string' && /[T:-]/.test(value)) return value;
+  if (typeof value === 'string' && /[T:-]/.test(value)) {
+    const text = value.trim();
+    return Number.isFinite(Date.parse(text)) ? text : null;
+  }
   const seconds = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
   const ms = seconds < 1e12 ? seconds * 1000 : seconds;
   const date = new Date(ms);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
+}
+
+/** List and detail endpoints use different date names and seconds/milliseconds. */
+function readExpiry(payload: Record<string, unknown>): string | null {
+  for (const key of ['expiresAt', 'due_time', 'nextduedate', 'expires_at', 'expire_at', 'due_date']) {
+    const date = epochToIso(payload[key]);
+    if (date) return date;
+  }
+  return null;
+}
+
+/** Upstream activation/registration date, never the local import date. */
+function readOpenedAt(payload: Record<string, unknown>): string | null {
+  for (const key of ['openedAt', 'active_time', 'activation_time', 'regdate', 'create_time']) {
+    const date = epochToIso(payload[key]);
+    if (date) return date;
+  }
+  return null;
 }
 
 /** 从 /cart/set_config 的 option 行规范化成平台配置项。 */
@@ -2203,16 +2323,8 @@ function pickServiceDetail(
     statusLabel:
       stringOrNull(payload['status_text']) ??
       stringOrNull(payload['statusLabel']),
-    ...(epochToIso(payload['due_time']) ??
-    epochToIso(payload['nextduedate']) ??
-    epochToIso(payload['expires_at'])
-      ? {
-          expiresAt:
-            epochToIso(payload['due_time']) ??
-            epochToIso(payload['nextduedate']) ??
-            epochToIso(payload['expires_at']),
-        }
-      : {}),
+    ...(readExpiry(payload) ? { expiresAt: readExpiry(payload) } : {}),
+    ...(readOpenedAt(payload) ? { openedAt: readOpenedAt(payload) } : {}),
     ...(stringOrNull(payload['billing_cycle']) ??
     stringOrNull(payload['cycle'])
       ? {

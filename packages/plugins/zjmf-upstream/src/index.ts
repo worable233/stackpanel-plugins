@@ -8,6 +8,7 @@ import type {
   UpstreamProductSource,
   UpstreamServiceItem,
   UpstreamServiceSource,
+  CommerceOperations,
 } from '@stackpanel/sdk';
 import { ExtensionVersionConflict } from '@stackpanel/sdk';
 import { readCheckoutConfig } from '@stackpanel/sdk';
@@ -23,11 +24,13 @@ import {
   type ZJMFV10Module,
   type ZJMFProductConfig,
 } from './zjmf-client.js';
-import { ZJMFProvider } from './provider.js';
+import { ZJMFProvider, normalizeStatus } from './provider.js';
 import { bindContext, resetContext } from './context.js';
 import {
   zjmfSyncRunModel,
   zjmfUpstreamModel,
+  provisioningJournalModel,
+  provisioningCartLockModel,
   type ZjmfUpstreamData,
 } from './data.js';
 import {
@@ -80,10 +83,11 @@ class UpstreamError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    code?: string,
   ) {
     super(message);
     this.name = 'UpstreamError';
-    this.code = UPSTREAM_ERROR_CODES[message] ?? 'zjmf.error';
+    this.code = code ?? UPSTREAM_ERROR_CODES[message] ?? 'zjmf.error';
   }
 }
 
@@ -106,6 +110,7 @@ const coerceBoolean = z.preprocess((value) => {
 const createUpstreamSchema = z.object({
   name: z.string().trim().min(1).max(191),
   baseUrl: z.string().trim().min(1).max(191),
+  downstreamUrl: z.string().trim().max(191).refine(value => !value || /^https:\/\/[^/?#]+\/?$/.test(value), '下游站点必须为 HTTPS 站点根地址').optional(),
   protocol: protocolSchema,
   username: z.string().trim().min(1).max(191),
   password: z.string().min(1).max(191),
@@ -150,7 +155,7 @@ interface SyncSummary {
 }
 
 /** Backend service that owns all source credentials and supplier synchronization. */
-class ZJMFUpstreamService {
+export class ZJMFUpstreamService {
   constructor(private readonly ctx: PluginContext) {}
 
   /** 执行一轮到期同步。由内核任务 `scheduled-sync` 周期调用（集群唯一执行）。 */
@@ -184,6 +189,7 @@ class ZJMFUpstreamService {
       {
         name: data.name,
         baseUrl: normalizeBaseUrl(data.baseUrl),
+        ...(data.downstreamUrl ? { downstreamUrl: normalizeBaseUrl(data.downstreamUrl) } : {}),
         protocol: data.protocol,
         currency: data.currency.toUpperCase(),
         markupBps: data.markupBps,
@@ -226,6 +232,7 @@ class ZJMFUpstreamService {
     if (data.baseUrl !== undefined)
       next.baseUrl = normalizeBaseUrl(data.baseUrl);
     if (data.protocol !== undefined) next.protocol = data.protocol;
+    if (data.downstreamUrl !== undefined) next.downstreamUrl = data.downstreamUrl ? normalizeBaseUrl(data.downstreamUrl) : '';
     if (data.currency !== undefined)
       next.currency = data.currency.toUpperCase();
     if (data.markupBps !== undefined) next.markupBps = data.markupBps;
@@ -479,20 +486,27 @@ class ZJMFUpstreamService {
       await finishSyncRun(runId, { status: 'SUCCEEDED', ...aggregate });
       return aggregate;
     } catch (error) {
+      const displayError =
+        error instanceof ZJMFClientError && error.code === 'zjmf.client.credentials_rejected'
+          ? new UpstreamError(
+              502,
+              `同步上游“${source.name}”失败：上游拒绝登录。请检查该 ${source.protocol === 'finance' ? 'V1' : 'V10'} 上游的账号、密码和接口地址。`,
+              error.code,
+            )
+          : error;
       await finishSyncRun(runId, {
         status: 'FAILED',
-        error: messageOf(error).slice(0, 191),
+        error: messageOf(displayError).slice(0, 191),
       });
-      if (error instanceof UpstreamError || error instanceof ZJMFClientError)
-        throw error;
+      if (displayError instanceof UpstreamError || displayError instanceof ZJMFClientError)
+        throw displayError;
       throw new UpstreamError(502, '上游同步失败');
     }
   }
 
   /**
-   * 用上游最新数据刷新一个已绑定商品：更新 metadata.upstream（源价/规格/结账配置）
-   * 与库存。**不覆盖**人工维护的 `cost`（同步只提示差异，见前端成本对比）；
-   * 也不改动商品的类型、定价、分类与介绍。
+   * 用上游最新数据刷新一个已绑定商品：源价（成本）、库存、规格与结账配置均以
+   * 上游为准；售卖价、类型、分类与介绍仍由商家维护。
    */
   private async refreshBoundProduct(
     client: ZJMFClient,
@@ -542,6 +556,7 @@ class ZJMFUpstreamService {
 
     await storeProductMutation().update(local.id, {
       metadata,
+      cost: sourcePrice,
       stock,
       // 上游重新上架时恢复在售。
       ...(local.status === 'DISCONTINUED' ? { status: 'ACTIVE' } : {}),
@@ -615,7 +630,7 @@ class ZJMFUpstreamService {
   /* ---------- 上游商品关联（upstream.product.source）---------- */
 
   private async clients(strict = false): Promise<
-    Array<{ upstreamId: string; client: ZJMFClient; currency: string }>
+    Array<{ upstreamId: string; client: ZJMFClient; currency: string; defaultStock: number }>
   > {
     const sources = await listEnabledUpstreams();
     if (strict && sources.length === 0) {
@@ -625,6 +640,7 @@ class ZJMFUpstreamService {
       upstreamId: string;
       client: ZJMFClient;
       currency: string;
+      defaultStock: number;
     }> = [];
     for (const source of sources) {
       try {
@@ -633,6 +649,7 @@ class ZJMFUpstreamService {
           upstreamId: source.id,
           client,
           currency: source.currency,
+          defaultStock: source.defaultStock,
         });
       } catch (error) {
         if (strict) throw new UpstreamError(503, '上游凭据不可用，请检查上游连接的凭据配置');
@@ -649,7 +666,10 @@ class ZJMFUpstreamService {
     upstreamId: string,
     listedCurrency: string | null,
     sourceCurrency: string,
+    defaultStock: number,
   ): UpstreamProductItem {
+    const snapshot = compactSnapshot(product);
+    const specs = snapshot['specs'];
     return {
       id: product.id,
       name: product.name,
@@ -660,6 +680,10 @@ class ZJMFUpstreamService {
         sourceCurrency
       ).toUpperCase(),
       description: product.description,
+      stock: upstreamStock(product, defaultStock),
+      ...(specs && typeof specs === 'object' && !Array.isArray(specs) && Object.keys(specs).length > 0
+        ? { specs: specs as Record<string, unknown> }
+        : {}),
       sourceRef: upstreamId,
       status: 'ACTIVE',
     };
@@ -672,15 +696,23 @@ class ZJMFUpstreamService {
   ): Promise<UpstreamProductItem[]> {
     const normalized = query.trim().toLowerCase();
     const results: UpstreamProductItem[] = [];
-    for (const { upstreamId, client, currency } of await this.clients()) {
+    for (const { upstreamId, client, currency, defaultStock } of await this.clients()) {
       try {
         const listed = await client.listProducts();
-        for (const product of listed.products) {
+        const matched = listed.products.filter((product) =>
+          !normalized || product.name.toLowerCase().includes(normalized),
+        );
+        // 魔方的列表接口通常只返回名称和价格。商品选择器需要让管理员能
+        // 比较规格，因此对本次结果补齐详情；限制并发以避免压垮上游。
+        const detailed = await mapWithConcurrency(
+          matched.slice(0, Math.max(0, limit - results.length)),
+          4,
+          async (product) => client.getProduct(product.id).catch(() => product),
+        );
+        for (const product of detailed) {
           if (results.length >= limit) break;
-          if (normalized && !product.name.toLowerCase().includes(normalized))
-            continue;
           results.push(
-            this.toUpstreamItem(product, upstreamId, listed.currency, currency),
+            this.toUpstreamItem(product, upstreamId, listed.currency, currency, defaultStock),
           );
         }
       } catch (error) {
@@ -694,11 +726,20 @@ class ZJMFUpstreamService {
   }
 
   /** 取单个上游商品（编辑商品时回显关联）。 */
-  async getUpstreamProduct(id: string): Promise<UpstreamProductItem | null> {
-    for (const { upstreamId, client, currency } of await this.clients()) {
+  async getUpstreamProduct(
+    id: string,
+    options?: { sourceRef?: string },
+  ): Promise<UpstreamProductItem | null> {
+    if (options?.sourceRef) {
+      const source = await getUpstream(options.sourceRef);
+      if (!source || !source.enabled) return null;
+      const product = await new ZJMFClient(await this.connectionFor(source)).getProduct(id);
+      return this.toUpstreamItem(product, source.id, null, source.currency, source.defaultStock);
+    }
+    for (const { upstreamId, client, currency, defaultStock } of await this.clients()) {
       try {
         const product = await client.getProduct(id);
-        return this.toUpstreamItem(product, upstreamId, null, currency);
+        return this.toUpstreamItem(product, upstreamId, null, currency, defaultStock);
       } catch {
         // 该实例没有此商品，继续下一个实例。
       }
@@ -712,7 +753,14 @@ class ZJMFUpstreamService {
    */
   async getUpstreamProductConfig(
     id: string,
+    options?: { sourceRef?: string },
   ): Promise<CheckoutConfigSchema | null> {
+    if (options?.sourceRef) {
+      const source = await getUpstream(options.sourceRef);
+      if (!source || !source.enabled) return null;
+      const config = await new ZJMFClient(await this.connectionFor(source)).getConfig(id);
+      return config ? normalizeCheckoutConfig(config) : null;
+    }
     for (const { client } of await this.clients()) {
       try {
         const config = await client.getConfig(id);
@@ -745,8 +793,42 @@ class ZJMFUpstreamService {
     // 绑定存在商品 metadata.upstream，由 store 负责清除；此处无副作用。
   }
 
+  async inventory() {
+    const accounts = await listUpstreams();
+    const hosts: Array<UpstreamServiceItem & { openedAt: string | null }> = [];
+    const errors: Array<{ sourceName: string; message: string }> = [];
+    for (const account of accounts) {
+      try {
+        const client = new ZJMFClient(await this.connectionFor(account));
+        const instances = await client.listHosts();
+        await mapWithConcurrency(instances.filter(host => !host.expiresAt || !host.openedAt), 4, async host => {
+          try {
+            const detail = await client.getService(host.id);
+            if (typeof detail['expiresAt'] === 'string') host.expiresAt = detail['expiresAt'];
+            if (typeof detail['openedAt'] === 'string') host.openedAt = detail['openedAt'];
+          } catch { errors.push({ sourceName: account.name, message: `实例 #${host.id} 的时间详情读取失败，请重试` }); }
+        });
+        for (const host of instances) hosts.push({ id: host.id, name: host.name, productId: host.productId, productName: host.productName, status: normalizeStatus(host.status ?? ''), statusLabel: host.statusLabel, host: host.host, expiresAt: host.expiresAt, openedAt: host.openedAt ?? null, sourceRef: account.id });
+      } catch { errors.push({ sourceName: account.name, message: '实例读取失败，请检查连接及凭据后重试' }); }
+    }
+    const products = await listBoundProducts();
+    const commerce = this.ctx.getExtensions<CommerceOperations>(EXTENSION_POINTS.commerce)[0];
+    const bound = commerce ? await commerce.listBoundServices('zjmf') : null;
+    return {
+      errors,
+      instances: hosts.map(host => {
+        const mapped = products.filter(({ binding }) => {
+          return binding?.sourceRef === host.sourceRef && binding?.productId === host.productId;
+        });
+        const service = bound?.find(item => item.providerServiceId === host.id && (item.runtime as { upstreamId?: string } | null)?.upstreamId === host.sourceRef);
+        return { ...host, sourceName: accounts.find(account => account.id === host.sourceRef)?.name ?? host.sourceRef ?? '', products: mapped.map(({ product }) => ({ id: product.id, name: product.name })), boundUserId: service?.userId ?? null, boundServiceId: service?.id ?? null, bindingKnown: bound !== null };
+      }),
+      accounts: accounts.map(account => ({ id: account.id, name: account.name, enabled: account.enabled })),
+    };
+  }
+
   /** 列出所有启用上游账号下的已购服务（主机），供管理端绑定到平台账号。 */
-  async listUpstreamServices(limit = 100): Promise<UpstreamServiceItem[]> {
+  async listUpstreamServices(limit?: number): Promise<UpstreamServiceItem[]> {
     const results: UpstreamServiceItem[] = [];
     for (const { upstreamId, client } of await this.clients(true)) {
       try {
@@ -754,9 +836,10 @@ class ZJMFUpstreamService {
         for (const host of hosts) {
           results.push({
             id: host.id,
+            productId: host.productId,
             name: host.name,
             productName: host.productName,
-            status: host.status,
+            status: normalizeStatus(host.status ?? ''),
             statusLabel: host.statusLabel,
             host: host.host,
             expiresAt: host.expiresAt,
@@ -889,6 +972,9 @@ function publicSource(source: UpstreamRecord) {
   const { createdAt: _c, updatedAt: _u, ...rest } = source;
   return {
     ...rest,
+    // Records created before this field was added do not carry it in `spec`.
+    // Keep the Finder contract stable while those records remain valid.
+    lastSyncedAt: source.lastSyncedAt ?? null,
     createdAt: source.createdAt.toISOString(),
     updatedAt: source.updatedAt.toISOString(),
   };
@@ -935,14 +1021,20 @@ function messageOf(error: unknown): string {
   return error instanceof Error && error.message ? error.message : '未知错误';
 }
 
-/** 上游库存：stock_control=1 时用上游 qty（限量），否则用配置的默认库存。 */
+/** 上游库存：优先使用上游返回的实际库存，未启用库存控制时使用连接默认值。 */
 function upstreamStock(product: ZJMFProduct, defaultStock: number): number {
   const raw = product.raw ?? {};
-  if (raw['stock_control'] === 1 || raw['stock_control'] === '1') {
-    const qty = Number(raw['qty']);
+  const controlled = ['1', 'true', 'on'].includes(String(raw['stock_control']).toLowerCase());
+  const quantity = raw['stock'] ?? raw['stock_num'] ?? raw['stock_qty'] ?? raw['qty'];
+  if (controlled || quantity !== undefined) {
+    const qty = Number(quantity);
     if (Number.isInteger(qty) && qty >= 0) return Math.min(qty, 1_000_000);
   }
-  return defaultStock;
+  // Legacy records created before the minimum was enforced may carry 0. That
+  // must not turn an inventory-unmanaged upstream product into a false sold-out.
+  return Number.isInteger(defaultStock) && defaultStock > 0
+    ? Math.min(defaultStock, 1_000_000)
+    : 1_000_000;
 }
 
 /** 把上游配置（ZJMFProductConfig）归一化为平台 CheckoutConfigSchema。 */
@@ -1030,6 +1122,7 @@ export const zjmfUpstreamPlugin = definePlugin({
       '将魔方财务（ZJMF）V1 与 V10 商品作为货源接入商店：提供货源清单、配置读取与履约，不自动创建商店商品。',
     requires: [{ id: 'store', range: '^0.3.0' }],
     consumes: [
+      { pluginId: 'store', extensionPoint: EXTENSION_POINTS.commerce, optional: false },
       {
         pluginId: 'store',
         extensionPoint: 'store.product.read',
@@ -1124,8 +1217,9 @@ export const zjmfUpstreamPlugin = definePlugin({
       },
     ],
   },
-  customModels: [zjmfUpstreamModel, zjmfSyncRunModel],
+  customModels: [zjmfUpstreamModel, zjmfSyncRunModel, provisioningJournalModel, provisioningCartLockModel],
   routes: [
+    { method: 'GET', path: '/zjmf-upstream/admin/instances', auth: 'admin', permission: 'zjmf-upstream.admin', handler: handle(() => currentService().inventory()) },
     {
       method: 'GET',
       path: '/zjmf-upstream/admin/upstreams',
@@ -1238,8 +1332,8 @@ export const zjmfUpstreamPlugin = definePlugin({
         name: '智简魔方',
         search: (query, options) =>
           currentService().searchUpstreamProducts(query, options?.limit),
-        get: (id) => currentService().getUpstreamProduct(id),
-        getConfig: (id) => currentService().getUpstreamProductConfig(id),
+        get: (id, options) => currentService().getUpstreamProduct(id, options),
+        getConfig: (id, options) => currentService().getUpstreamProductConfig(id, options),
         associate: (input) => currentService().associateUpstreamProduct(input),
         dissociate: (productId) =>
           currentService().dissociateUpstreamProduct(productId),
