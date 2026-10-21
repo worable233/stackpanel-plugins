@@ -1,6 +1,5 @@
 # Dependencies
-# No trailing slash: this directory is symlinked to the kernel workspace locally,
-# and a symlink is not a directory as far as git is concerned.
+# No trailing slash: also ignore legacy dependency symlinks during migration.
 node_modules
 .pnpm-store/
 

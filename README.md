@@ -88,6 +88,7 @@ git clone https://github.com/worable233/stackpanel-plugins.git StackPanel-plugin
 
 cd StackPanel
 pnpm install --frozen-lockfile
+pnpm build
 
 cd ../StackPanel-plugins
 pnpm dev:setup --frozen-lockfile
@@ -97,6 +98,8 @@ pnpm --filter @stackpanel/plugin-<id> build
 ```
 
 首次生成锁文件或有意更新依赖时使用 `pnpm dev:setup --no-frozen-lockfile`。切换内核分支或升级内核依赖后，先重新安装内核，再运行插件仓的 `dev:setup` 与 `deps:check`。
+
+内核检出不在 `../StackPanel` 时，用环境变量 `STACKPANEL_KERNEL_ROOT` 指定，并把 `pnpm-workspace.yaml` 里的 `link:` 路径改成同样的位置。`pnpm deps:check` 会校验「内核已安装、内核包已构建、`@stackpanel/*` 与 `zod` 都解析到内核那一份」。
 
 若要在内核开发环境中读取本仓插件源，将 `STACKPANEL_PLUGIN_SOURCES` 指向 `../StackPanel-plugins/packages/plugins`，然后在内核仓库运行 `pnpm build:frontend`。外部同名插件源优先于内核内置副本；生产环境请使用已验证的市场包或 ZIP，而不是开发源目录。
 

@@ -88,6 +88,7 @@ git clone https://github.com/worable233/stackpanel-plugins.git StackPanel-plugin
 
 cd StackPanel
 pnpm install --frozen-lockfile
+pnpm build
 
 cd ../StackPanel-plugins
 pnpm dev:setup --frozen-lockfile
@@ -97,6 +98,8 @@ pnpm --filter @stackpanel/plugin-<id> build
 ```
 
 Use `pnpm dev:setup --no-frozen-lockfile` only when intentionally creating or updating the lockfile. After switching kernel branches or upgrading kernel dependencies, reinstall the kernel first, then run `dev:setup` and `deps:check` in this repository.
+
+When the kernel checkout is not at `../StackPanel`, point `STACKPANEL_KERNEL_ROOT` at it and update the `link:` paths in `pnpm-workspace.yaml` accordingly. `pnpm deps:check` verifies that the kernel is installed and built, and that `@stackpanel/*` plus `zod` all resolve to the kernel's copy.
 
 To read these plugin sources in a kernel development environment, point `STACKPANEL_PLUGIN_SOURCES` at `../StackPanel-plugins/packages/plugins`, then run `pnpm build:frontend` in the kernel repository. An external source with the same plugin id takes precedence over the built-in copy. In production, use a tested marketplace package or ZIP rather than a development source directory.
 

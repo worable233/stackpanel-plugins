@@ -8,6 +8,12 @@
   "engines": {
     "node": ">=22"
   },
+  "scripts": {
+    "preinstall": "node scripts/check-dependencies.mjs --before-install",
+    "dev:setup": "node scripts/setup-dev.mjs",
+    "deps:check": "node scripts/check-dependencies.mjs",
+    "test": "pnpm deps:check && pnpm -r --if-present test"
+  },
   "devDependencies": {
     "esbuild": "^0.27.7",
     "typescript": "^6.0.3"
