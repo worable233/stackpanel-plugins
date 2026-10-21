@@ -12,10 +12,13 @@
     "preinstall": "node scripts/check-dependencies.mjs --before-install",
     "dev:setup": "node scripts/setup-dev.mjs",
     "deps:check": "node scripts/check-dependencies.mjs",
-    "test": "pnpm deps:check && pnpm -r --if-present test"
+    "test": "pnpm deps:check && pnpm -r --if-present test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "esbuild": "^0.27.7",
+    "prettier": "^3.9.10",
     "typescript": "^6.0.3"
   }
 }

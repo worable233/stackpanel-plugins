@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+pnpm-lock.yaml
+
+# 文档与工作流不做自动重排：中文表格会被压成超宽对齐，diff 噪声远大于收益。
+*.md
+.github/
+
+# 由内核 build:frontend 生成；revision 是 dist/ 的 SHA1，每次构建都会变。
+packages/plugins/*/frontend/manifest.json
+
+# 从内核迁出的集成测试，跟随内核仓库的风格维护。
+packages/plugins/*/kernel-tests/
