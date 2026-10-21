@@ -143,12 +143,11 @@ export function GatewayOverviewPage(
     return `${base}?${params.toString()}`;
   };
 
-  const chartTitle = range === "today" ? "今日用量" : `${rangeLabel}用量`;
+  const chartTitle = range === "today" ? "今日用量趋势" : `${rangeLabel}用量趋势`;
   const chartDesc =
     range === "today"
       ? "按小时统计的消费与 token 用量。"
-      : "按天统计的消费与 token 用量。";
-  const labelEvery = range === "today" ? 2 : range === "7d" ? 1 : 3;
+      : "按日期统计的消费与 token 用量。";
 
   return (
     <main className="space-y-8">
@@ -222,13 +221,14 @@ export function GatewayOverviewPage(
               </div>
             }
           >
-            <div className="rounded-2xl border bg-card p-5 shadow-sm">
+            <div className="rounded-xl border bg-card px-3 py-3 sm:px-5 sm:py-4">
               <UsageChart
                 data={series.map((point) => ({
                   label: point.label,
                   value: metric === "tokens" ? point.tokens : point.amount,
                 }))}
                 formatValue={metric === "tokens" ? formatTokens : money}
+                metric={metric}
               />
             </div>
           </Section>
