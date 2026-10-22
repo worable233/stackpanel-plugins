@@ -1,0 +1,31 @@
+{
+  "name": "@stackpanel/plugin-hello",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "stackpanel": {
+    "builtin": false
+  },
+  "description": "示例 StackPanel 插件：生命周期钩子、路由扩展与事件监听。",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepare": "tsc -p tsconfig.build.json",
+    "build": "node ../../../scripts/build-plugin.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@stackpanel/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

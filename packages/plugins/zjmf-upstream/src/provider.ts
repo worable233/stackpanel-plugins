@@ -1,0 +1,749 @@
+import type {
+  CheckoutPriceContext,
+  CheckoutPriceResult,
+  CheckoutSelection,
+  FulfillmentProvider,
+  PluginContext,
+  ProvisionContext,
+  ProvisionResult,
+  ProviderServiceContext,
+  ServiceAction,
+  ServiceActionResult,
+  ServiceChangeInput,
+  ServiceDetail,
+  ServiceRenewalInput,
+  ServiceResource,
+  ServiceResourceKind,
+  MetricSeries,
+} from '@stackpanel/sdk';
+import { randomUUID } from 'node:crypto';
+import {
+  applyMarkup,
+  assertPublicUpstreamUrl,
+  ZJMFClient,
+  ZJMFClientError,
+  type ZJMFConnection,
+  type ZJMFMetric,
+} from './zjmf-client.js';
+import { getUpstream, readUpstreamBinding } from './repository.js';
+
+const CREDENTIALS_PREFIX = 'credentials.';
+const SERVICE_CREDENTIALS_PREFIX = 'svc.';
+
+class ZJMFProviderError extends Error {
+  /** Alias so Fastify's error handler maps the error to an HTTP status. */
+  readonly statusCode: number;
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ZJMFProviderError';
+    this.statusCode = status;
+  }
+}
+
+interface Credentials {
+  username: string;
+  password: string;
+}
+
+/** 云服务器履约提供方：对接智简魔方上游开通/详情/监控/运维动作。 */
+export class ZJMFProvider implements FulfillmentProvider {
+  readonly id = 'zjmf';
+  readonly name = '智简魔方';
+  readonly fulfillmentTypes = ['upstream_service'];
+
+  constructor(private readonly ctx: PluginContext) {}
+
+  /** 从已交付服务解析连接（provision 时把 upstreamId 写入 runtime）。 */
+  private async resolveForService(
+    service: ProviderServiceContext['service'],
+  ): Promise<{ client: ZJMFClient }> {
+    const runtime = (service.runtime ?? {}) as { upstreamId?: unknown };
+    const upstreamId =
+      typeof runtime.upstreamId === 'string' ? runtime.upstreamId : null;
+    if (!upstreamId) throw new ZJMFProviderError(409, '服务未关联上游');
+    return { client: await this.connect(upstreamId) };
+  }
+
+  private async connect(upstreamId: string): Promise<ZJMFClient> {
+    const upstream = await getUpstream(upstreamId);
+    if (!upstream || !upstream.enabled)
+      throw new ZJMFProviderError(409, '上游不可用');
+    const stored = await this.ctx.secrets.get(
+      `${CREDENTIALS_PREFIX}${upstream.id}`,
+    );
+    if (!stored) throw new ZJMFProviderError(409, '上游凭证未配置');
+    let credentials: Credentials;
+    try {
+      credentials = JSON.parse(stored) as Credentials;
+    } catch {
+      throw new ZJMFProviderError(409, '上游凭证无效');
+    }
+    if (upstream.protocol !== 'finance' && upstream.protocol !== 'v10') {
+      throw new ZJMFProviderError(409, '上游协议无效');
+    }
+    const baseUrl = await assertPublicUpstreamUrl(upstream.baseUrl).catch(
+      (error) => {
+        if (error instanceof ZJMFClientError) throw error;
+        throw new ZJMFProviderError(400, '上游地址无效');
+      },
+    );
+    const connection: ZJMFConnection = {
+      id: upstream.id,
+      baseUrl,
+      protocol: upstream.protocol as 'finance' | 'v10',
+      ...credentials,
+      // 实验开关透传（默认 false）：未取证 V10 路由默认不支持（工单 #2 §3.3）。
+      allowUnverifiedV10Routes: upstream.allowUnverifiedV10Routes ?? false,
+      v10Module: upstream.v10Module ?? 'auto',
+    };
+    return new ZJMFClient(connection);
+  }
+
+  async provision(ctx: ProvisionContext): Promise<ProvisionResult> {
+    if (ctx.product.providerId !== this.id) {
+      throw new ZJMFProviderError(409, '商品不属于智简魔方提供方');
+    }
+    const providerProductId = ctx.product.providerProductId;
+    if (!providerProductId)
+      throw new ZJMFProviderError(409, '商品缺少上游商品 ID');
+    const { client, upstreamId } = await this.resolveForProduct(
+      ctx.product.metadata,
+    );
+    const config = ctx.config;
+    const created = await client.createService(providerProductId, {
+      quantity: ctx.quantity,
+      reference: `order:${ctx.orderId}`,
+      ...(config?.cycle ? { cycle: config.cycle } : {}),
+      ...(config?.selections ? { selections: config.selections } : {}),
+    });
+    let credentialsRef: string | null = null;
+    if (Object.keys(created.credentials).length > 0) {
+      // 写入调用方（store）传入的密钥存储，确保后续 getDetail 能从同一命名空间读取。
+      credentialsRef = `${SERVICE_CREDENTIALS_PREFIX}${randomUUID()}`;
+      await ctx.secrets.set(
+        credentialsRef,
+        JSON.stringify(created.credentials),
+      );
+    }
+    return {
+      status: 'PENDING',
+      providerServiceId: created.providerServiceId,
+      credentialsRef,
+      runtime: {
+        ...created.runtime,
+        upstreamId,
+        status:
+          created.runtime.status === 'PENDING_INVOICE'
+            ? 'PENDING'
+            : 'PROVISIONING',
+      },
+    };
+  }
+
+  /** 按顾客配置试算结算价格：上游 get_total（含上游客户等级折扣）+ 我方 markup。 */
+  async calculateCheckoutPrice(
+    ctx: CheckoutPriceContext,
+  ): Promise<CheckoutPriceResult> {
+    const { client, markupBps } = await this.resolveForProduct(
+      ctx.product.metadata,
+    );
+    const config = ctx.config;
+    const opts: {
+      cycle?: string;
+      selections?: Record<string, string | number>;
+      quantity?: number;
+    } = { quantity: ctx.quantity };
+    if (config.cycle) opts.cycle = config.cycle;
+    if (config.selections && Object.keys(config.selections).length > 0) {
+      opts.selections = config.selections;
+    }
+    const quote = await client.calculatePrice(
+      ctx.product.providerProductId ?? '',
+      opts,
+    );
+    if (!quote) throw new ZJMFProviderError(400, '上游不支持该商品配置计价');
+    const price = applyMarkup(quote.price, markupBps);
+    return {
+      price,
+      renewPrice: price,
+      breakdown: quote.breakdown,
+      summary: quote.summary,
+    };
+  }
+
+  /**
+   * 从商品 metadata 解析上游连接。绑定（含实例标识）由 store 写入
+   * `metadata.upstream`，zjmf 不再持有本地映射表。
+   */
+  private async resolveForProduct(
+    metadata: unknown,
+  ): Promise<{ client: ZJMFClient; upstreamId: string; markupBps: number }> {
+    const binding = readUpstreamBinding(metadata);
+    if (!binding || !binding.sourceRef)
+      throw new ZJMFProviderError(409, '商品未关联智简魔方上游');
+    const upstream = await getUpstream(binding.sourceRef);
+    if (!upstream || !upstream.enabled)
+      throw new ZJMFProviderError(409, '上游不可用');
+    return {
+      client: await this.connect(binding.sourceRef),
+      upstreamId: upstream.id,
+      markupBps: upstream.markupBps,
+    };
+  }
+
+  async getDetail(ctx: ProviderServiceContext): Promise<ServiceDetail> {
+    const providerServiceId = ctx.service.providerServiceId;
+    const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
+    if (!providerServiceId) {
+      return {
+        title: ctx.service.productName ?? (runtime['host'] as string) ?? '服务',
+        status: normalizeStatus(ctx.service.status),
+        fields: [],
+        actions: defaultActions(),
+      };
+    }
+    const { client } = await this.resolveForService(ctx.service);
+    const detail = await client.getService(providerServiceId);
+    const fields: ServiceDetail['fields'] = [];
+    const ip = stringOr(detail['ip']);
+    if (ip) fields.push({ label: 'IPv4 地址', value: ip, copyable: true });
+    const host = stringOr(detail['host']);
+    if (host && host !== ip)
+      fields.push({ label: '主机名', value: host, copyable: true });
+    const username = stringOr(detail['username']);
+    if (username)
+      fields.push({ label: 'ROOT 账户', value: username, copyable: true });
+    const password = await this.readCachedPassword(ctx);
+    if (password)
+      fields.push({
+        label: 'ROOT 密码',
+        value: password,
+        secret: true,
+        copyable: true,
+      });
+    const specs = (detail['specs'] ?? runtime['specs']) as
+      Record<string, unknown> | null | undefined;
+    if (specs && typeof specs === 'object') {
+      for (const [key, label] of Object.entries(SPEC_LABELS)) {
+        const value = specs[key];
+        if (value !== undefined && value !== null) {
+          fields.push({ label, value: String(value), copyable: false });
+        }
+      }
+    }
+    const status =
+      (detail['status'] as string) ?? (runtime['status'] as string | undefined);
+    const statusLabel = stringOr(detail['statusLabel']);
+    return {
+      title: ctx.service.productName ?? stringOr(detail['host']) ?? '服务',
+      status: normalizeStatus(status ?? ctx.service.status),
+      ...(statusLabel ? { statusLabel } : {}),
+      fields,
+      actions: defaultActions(),
+    };
+  }
+
+  private async readCachedPassword(
+    ctx: ProviderServiceContext,
+  ): Promise<string | null> {
+    if (!ctx.service.credentialsRef) return null;
+    const stored = await ctx.secrets.get(ctx.service.credentialsRef);
+    if (!stored) return null;
+    try {
+      const parsed = JSON.parse(stored) as Record<string, unknown>;
+      const value =
+        parsed['password'] ?? parsed['pass'] ?? parsed['root_password'];
+      return typeof value === 'string' && value ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getMetrics(ctx: ProviderServiceContext): Promise<MetricSeries[]> {
+    if (!ctx.service.providerServiceId) return [];
+    const { client } = await this.resolveForService(ctx.service);
+    const metrics: ZJMFMetric[] = await client.getServiceMetrics(
+      ctx.service.providerServiceId,
+    );
+    return metrics.map((metric) => ({
+      id: metric.id,
+      label: metric.label,
+      unit: metric.unit,
+      color: metric.id.includes('cpu') ? 'var(--primary)' : '#8b5cf6',
+      points: metric.points,
+    }));
+  }
+
+  async executeAction(
+    actionId: string,
+    ctx: ProviderServiceContext,
+    params?: Record<string, string>,
+  ): Promise<ServiceActionResult> {
+    if (!ctx.service.providerServiceId) {
+      throw new ZJMFProviderError(409, '服务尚未开通');
+    }
+    if (!SUPPORTED_ACTIONS.has(actionId)) {
+      throw new ZJMFProviderError(400, '不支持的运维动作');
+    }
+    assertSafeParams(params);
+    const { client } = await this.resolveForService(ctx.service);
+    const data = await client.runServiceAction(
+      ctx.service.providerServiceId,
+      actionId,
+      params,
+    );
+
+    // 上游可能在响应里回带展示数据（新密码、控制台地址）；尽力提取，缺失则忽略。
+    const fields: ServiceActionResult['fields'] = [];
+    const password = firstString(data, [
+      'password',
+      'new_password',
+      'pass',
+      'vnc_pass',
+    ]);
+    if (password)
+      fields.push({
+        label: actionId === 'vnc' ? 'VNC 密码' : '新密码',
+        value: password,
+        secret: true,
+        copyable: true,
+      });
+    const url = firstString(data, [
+      'url',
+      'vnc_url',
+      'console_url',
+      'console',
+    ]);
+    const result: ServiceActionResult = {};
+    if (fields.length > 0) result.fields = fields;
+    if (url) {
+      result.url = url;
+      // 平台前端 action 无回传通道，落库到 runtime 以便刷新后仍展示控制台地址。
+      const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
+      result.runtime = { ...runtime, consoleUrl: url };
+    }
+    return result;
+  }
+
+  async suspend(ctx: ProviderServiceContext): Promise<void> {
+    await this.executeAction('power_off', ctx);
+  }
+
+  async resume(ctx: ProviderServiceContext): Promise<void> {
+    await this.executeAction('power_on', ctx);
+  }
+
+  async terminate(ctx: ProviderServiceContext): Promise<void> {
+    if (!ctx.service.providerServiceId) return;
+    const { client } = await this.resolveForService(ctx.service);
+    await client.runServiceAction(ctx.service.providerServiceId, 'terminate');
+  }
+
+  /**
+   * 续费回调（尽力而为）：store 已推进本平台到期时间，这里把续费同步到上游。
+   * 上游未取证/不支持时 client 抛 `zjmf.client.unsupported`（不再静默），
+   * 由 store 记录 `runtime.renewalNotifyError` 且不阻断续费（工单 #3 决策 B）。
+   */
+  async renew(
+    ctx: ProviderServiceContext,
+    info: ServiceRenewalInput,
+  ): Promise<ServiceActionResult> {
+    if (!ctx.service.providerServiceId) return {};
+    const { client } = await this.resolveForService(ctx.service);
+    const cycle = info.selection?.cycle;
+    await client.renewService(
+      ctx.service.providerServiceId,
+      cycle ? { cycle } : {},
+    );
+    return { message: `已同步续费至 ${info.newExpiresAt}` };
+  }
+
+  /** 升配/降配：把新的配置选择提交给上游升降级接口。 */
+  async changePackage(
+    ctx: ProviderServiceContext,
+    change: ServiceChangeInput,
+  ): Promise<ServiceActionResult> {
+    if (!ctx.service.providerServiceId) {
+      throw new ZJMFProviderError(409, '服务尚未开通');
+    }
+    const { client } = await this.resolveForService(ctx.service);
+    const selections =
+      change.config?.selections &&
+      Object.fromEntries(
+        Object.entries(change.config.selections).filter(
+          ([, value]) => value !== undefined && value !== null && value !== '',
+        ),
+      );
+    await client.changePackage(ctx.service.providerServiceId, {
+      ...(selections ? { selections } : {}),
+    });
+    const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
+    return {
+      message: '配置变更已提交上游',
+      runtime: change.config ? { ...runtime, config: change.config } : runtime,
+    };
+  }
+
+  /** 换商品：把目标上游商品提交给上游升降级商品接口。 */
+  async changeProduct(
+    ctx: ProviderServiceContext,
+    change: ServiceChangeInput,
+  ): Promise<ServiceActionResult> {
+    if (!ctx.service.providerServiceId) {
+      throw new ZJMFProviderError(409, '服务尚未开通');
+    }
+    const target = change.targetProviderProductId;
+    if (!target) throw new ZJMFProviderError(409, '缺少目标上游商品');
+    const { client } = await this.resolveForService(ctx.service);
+    const cycle = change.config?.cycle;
+    await client.changeProduct(ctx.service.providerServiceId, target, {
+      ...(cycle ? { cycle } : {}),
+    });
+    const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
+    return {
+      message: '商品变更已提交上游',
+      runtime: change.config ? { ...runtime, config: change.config } : runtime,
+    };
+  }
+
+  /** 升配/降配差价试算：上游权威（魔方 upgrade_config_page 的 price_difference）。 */
+  async calculateChangePrice(
+    ctx: CheckoutPriceContext & {
+      from?: CheckoutSelection;
+      service?: ProviderServiceContext['service'];
+    },
+  ): Promise<CheckoutPriceResult> {
+    const { client, markupBps } = await this.resolveForProduct(
+      ctx.product.metadata,
+    );
+    const providerServiceId = ctx.service?.providerServiceId ?? null;
+    if (!providerServiceId) {
+      throw new ZJMFProviderError(400, '缺少上游服务标识');
+    }
+    const selections =
+      ctx.config.selections &&
+      Object.fromEntries(
+        Object.entries(ctx.config.selections).filter(
+          ([, value]) => value !== undefined && value !== null && value !== '',
+        ),
+      );
+    const quote = await client.calculateChangePrice(providerServiceId, {
+      ...(selections ? { selections } : {}),
+    });
+    if (!quote) throw new ZJMFProviderError(400, '上游不支持该商品变配计价');
+    const price = Math.max(0, applyMarkup(quote.price, markupBps));
+    return {
+      price,
+      ...(quote.breakdown ? { breakdown: quote.breakdown } : {}),
+      ...(quote.summary ? { summary: quote.summary } : {}),
+    };
+  }
+
+  /** 转移所有权（尽力而为）：上游若不支持则仅由 store 落库换主。 */
+  async changeOwner(
+    ctx: ProviderServiceContext,
+    targetUserId: string,
+  ): Promise<ServiceActionResult> {
+    if (!ctx.service.providerServiceId) return {};
+    const { client } = await this.resolveForService(ctx.service);
+    await client.changeOwner(ctx.service.providerServiceId, targetUserId);
+    return { message: `所有权已转移至 ${targetUserId}` };
+  }
+
+  /**
+   * 声明上游可用的服务子资源种类。
+   *
+   * V10 的 `snapshot/backup/disk/ip` 路由已有源码证据
+   * （`public/plugins/server/mf_cloud/route.php:35-60`），不再需要实验开关。
+   * finance 走 `provision/custom/content`，同样不受影响。
+   */
+  async listResourceKinds(
+    ctx: ProviderServiceContext,
+  ): Promise<ServiceResourceKind[]> {
+    if (!ctx.service.providerServiceId) return [];
+    // 只有云家族（mf_cloud/remf_cloud）有快照/备份路由；物理机与通用产品
+    // 声明了也只会在调用时 400，故在声明阶段收敛。这里只做「能力声明」，
+    // 解析不到上游（无绑定/凭证缺失）就按不支持处理，避免详情页整体报错。
+    const supported = await this.resolveForService(ctx.service)
+      .then(({ client }) =>
+        client.supportsServiceResources(ctx.service.providerServiceId!),
+      )
+      .catch(() => false);
+    if (!supported) return [];
+    const kinds: ServiceResourceKind[] = [
+      {
+        id: 'snapshot',
+        label: '快照',
+        creatable: true,
+        createParams: [
+          {
+            name: 'disk_id',
+            label: '磁盘 ID',
+            type: 'text',
+            required: true,
+            maxLength: 64,
+          },
+          {
+            name: 'name',
+            label: '快照名称',
+            type: 'text',
+            required: true,
+            maxLength: 64,
+          },
+        ],
+        columns: [
+          { key: 'name', label: '名称' },
+          { key: 'create_time', label: '创建时间' },
+          { key: 'status', label: '状态' },
+        ],
+        rowActions: [
+          { id: 'restore', label: '恢复', danger: true, confirm: true },
+          { id: 'delete', label: '删除', danger: true, confirm: true },
+        ],
+      },
+      {
+        id: 'backup',
+        label: '备份',
+        creatable: true,
+        createParams: [
+          {
+            name: 'disk_id',
+            label: '磁盘 ID',
+            type: 'text',
+            required: true,
+            maxLength: 64,
+          },
+          {
+            name: 'name',
+            label: '备份名称',
+            type: 'text',
+            required: true,
+            maxLength: 64,
+          },
+        ],
+        columns: [
+          { key: 'name', label: '名称' },
+          { key: 'create_time', label: '创建时间' },
+          { key: 'status', label: '状态' },
+        ],
+        rowActions: [
+          { id: 'restore', label: '恢复', danger: true, confirm: true },
+          { id: 'delete', label: '删除', danger: true, confirm: true },
+        ],
+      },
+    ];
+    return kinds;
+  }
+
+  /**
+   * 列出某类子资源。
+   *
+   * 上游失败（传输/鉴权/HTTP/结构非法）**上抛**，不再静默降级为空列表——
+   * 「拉取失败」与「没有资源」必须可区分（工单 #2 §3.2）。
+   */
+  async listResources(
+    ctx: ProviderServiceContext,
+    kind: string,
+  ): Promise<ServiceResource[]> {
+    if (!ctx.service.providerServiceId) return [];
+    if (!RESOURCE_KINDS.has(kind)) return [];
+    const { client } = await this.resolveForService(ctx.service);
+    const rows = await client.listServiceResources(
+      ctx.service.providerServiceId,
+      kind,
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      fields: pickResourceColumns(kind, row.fields),
+    }));
+  }
+
+  /** 新建子资源。 */
+  async createResource(
+    ctx: ProviderServiceContext,
+    kind: string,
+    params?: Record<string, string>,
+  ): Promise<ServiceActionResult> {
+    if (!ctx.service.providerServiceId) {
+      throw new ZJMFProviderError(409, '服务尚未开通');
+    }
+    if (!RESOURCE_KINDS.has(kind)) {
+      throw new ZJMFProviderError(400, '不支持该资源类型');
+    }
+    assertSafeParams(params);
+    const { client } = await this.resolveForService(ctx.service);
+    await client.createServiceResource(
+      ctx.service.providerServiceId,
+      kind,
+      params,
+    );
+    return { message: '已提交创建' };
+  }
+
+  /** 对子资源执行行内动作（扩容/挂载/删除/恢复…）。 */
+  async runResourceAction(
+    ctx: ProviderServiceContext,
+    kind: string,
+    resourceId: string,
+    actionId: string,
+    params?: Record<string, string>,
+  ): Promise<ServiceActionResult> {
+    if (!ctx.service.providerServiceId) {
+      throw new ZJMFProviderError(409, '服务尚未开通');
+    }
+    if (!RESOURCE_KINDS.has(kind)) {
+      throw new ZJMFProviderError(400, '不支持该资源类型');
+    }
+    assertSafeParams(params);
+    const { client } = await this.resolveForService(ctx.service);
+    await client.runResourceAction(
+      ctx.service.providerServiceId,
+      kind,
+      resourceId,
+      actionId,
+      params,
+    );
+    return { message: '操作已提交' };
+  }
+}
+
+/** 上游增值运维支持的资源类型。 */
+const RESOURCE_KINDS = new Set(['snapshot', 'backup']);
+
+/** 从上游行数据里挑出声明过的列（保持前端列顺序）。 */
+function pickResourceColumns(
+  kind: string,
+  fields: Record<string, string>,
+): Record<string, string> {
+  const keys =
+    kind === 'snapshot' || kind === 'backup'
+      ? ['name', 'create_time', 'status', 'notes']
+      : Object.keys(fields);
+  const picked: Record<string, string> = {};
+  for (const key of keys) {
+    if (fields[key] !== undefined) picked[key] = fields[key];
+  }
+  return picked;
+}
+
+const SPEC_LABELS: Record<string, string> = {
+  cpu: 'CPU',
+  memory: '内存',
+  disk: '磁盘',
+  bandwidth: '带宽',
+  os: '操作系统',
+  region: '地域',
+};
+
+const SUPPORTED_ACTIONS = new Set([
+  'power_on',
+  'power_off',
+  'reboot',
+  'terminate',
+  'reinstall',
+  'reset_password',
+  'vnc',
+]);
+
+/** 上游保留字段：调用方参数不得覆盖（否则可篡改动作/鉴权）。 */
+const RESERVED_ACTION_PARAMS = new Set(['id', 'func', 'is_api', 'action']);
+
+/** 参数名必须为合法标识符，且不占用上游保留字段。 */
+function assertSafeParams(params: Record<string, string> | undefined): void {
+  for (const key of Object.keys(params ?? {})) {
+    if (
+      RESERVED_ACTION_PARAMS.has(key) ||
+      !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(key)
+    ) {
+      throw new ZJMFProviderError(400, '运维动作参数无效');
+    }
+  }
+}
+
+function defaultActions(): ServiceAction[] {
+  return [
+    { id: 'power_on', label: '开机' },
+    { id: 'power_off', label: '关机' },
+    { id: 'reboot', label: '重启', confirm: true },
+    {
+      id: 'reinstall',
+      label: '重装系统',
+      danger: true,
+      confirm: true,
+      params: [
+        {
+          name: 'os',
+          label: '操作系统 ID',
+          type: 'text',
+          required: true,
+          maxLength: 64,
+        },
+      ],
+    },
+    {
+      id: 'reset_password',
+      label: '重置密码',
+      confirm: true,
+      params: [
+        {
+          name: 'password',
+          label: '新密码',
+          type: 'password',
+          required: true,
+          maxLength: 64,
+        },
+      ],
+    },
+    { id: 'vnc', label: '打开控制台（VNC）' },
+  ];
+}
+
+/** 从上游响应中按候选键取首个非空字符串。 */
+function firstString(
+  source: Record<string, unknown>,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value) return value;
+  }
+  const data = source['data'];
+  if (data && typeof data === 'object') {
+    const nested = data as Record<string, unknown>;
+    for (const key of keys) {
+      const value = nested[key];
+      if (typeof value === 'string' && value) return value;
+    }
+  }
+  return null;
+}
+
+export function normalizeStatus(
+  status: string,
+): NonNullable<ServiceDetail['status']> {
+  const normalized = (status ?? '').toUpperCase();
+  if (normalized.includes('PROVISION')) return 'PROVISIONING';
+  if (normalized.includes('TERMINAT') || normalized.includes('DELET'))
+    return 'TERMINATED';
+  if (
+    normalized.includes('SUSPEND') ||
+    normalized.includes('OFF') ||
+    normalized.includes('SHUT')
+  )
+    return 'SUSPENDED';
+  if (normalized.includes('FAIL')) return 'FAILED';
+  if (
+    normalized.includes('ACTIVE') ||
+    normalized.includes('RUNNING') ||
+    normalized.includes('ON')
+  )
+    return 'ACTIVE';
+  return 'PENDING_PROVISION';
+}
+
+function stringOr(value: unknown): string | null {
+  return typeof value === 'string' && value ? value : null;
+}

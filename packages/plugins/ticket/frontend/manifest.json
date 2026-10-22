@@ -1,0 +1,166 @@
+{
+  "version": "0.1.0",
+  "revision": "e4387fef8662",
+  "entry": "frontend/dist/index.js",
+  "pages": [],
+  "layouts": [],
+  "finders": [
+    "ticket.myTickets",
+    "ticket.ticket",
+    "ticket.adminTickets",
+    "ticket.adminTicket"
+  ],
+  "adminRoutes": [
+    {
+      "path": "/tickets",
+      "component": "admin/tickets",
+      "permission": "ticket.admin",
+      "nav": {
+        "label": "工单管理",
+        "group": "商店插件"
+      },
+      "data": [
+        {
+          "finder": "ticket.adminTickets",
+          "as": "tickets"
+        }
+      ]
+    },
+    {
+      "path": "/tickets/:id",
+      "component": "admin/tickets/detail",
+      "permission": "ticket.admin",
+      "data": [
+        {
+          "finder": "ticket.adminTicket",
+          "as": "ticket",
+          "input": {
+            "id": ":id"
+          }
+        }
+      ]
+    }
+  ],
+  "adminActions": [],
+  "actions": [
+    {
+      "id": "ticket.create",
+      "method": "POST",
+      "path": "/tickets",
+      "permission": "ticket.create",
+      "input": [
+        {
+          "name": "subject",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    },
+    {
+      "id": "ticket.reply",
+      "method": "POST",
+      "path": "/tickets/:id/messages",
+      "permission": "ticket.create",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    },
+    {
+      "id": "ticket.update",
+      "method": "PATCH",
+      "path": "/ticket/admin/tickets/:id",
+      "permission": "ticket.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "maxLength": 32
+        },
+        {
+          "name": "priority",
+          "type": "string",
+          "maxLength": 32
+        },
+        {
+          "name": "assigneeId",
+          "type": "string",
+          "maxLength": 191
+        }
+      ]
+    }
+  ],
+  "accountRoutes": [
+    {
+      "path": "/tickets",
+      "component": "account/tickets",
+      "permission": "ticket.view",
+      "nav": {
+        "label": "我的工单",
+        "group": "服务"
+      },
+      "data": [
+        {
+          "finder": "ticket.myTickets",
+          "as": "tickets"
+        }
+      ]
+    },
+    {
+      "path": "/tickets/new",
+      "component": "account/tickets/new",
+      "permission": "ticket.create",
+      "data": []
+    },
+    {
+      "path": "/tickets/:id",
+      "component": "account/tickets/detail",
+      "permission": "ticket.view",
+      "data": [
+        {
+          "finder": "ticket.ticket",
+          "as": "ticket",
+          "input": {
+            "id": ":id"
+          }
+        }
+      ]
+    }
+  ],
+  "accountWidgets": [
+    {
+      "id": "tickets",
+      "title": "服务工单",
+      "component": "account/tickets"
+    }
+  ],
+  "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/admin.js.map",
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
+  ]
+}

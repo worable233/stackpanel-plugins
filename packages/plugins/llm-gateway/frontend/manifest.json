@@ -1,0 +1,439 @@
+{
+  "version": "0.1.0",
+  "revision": "0fd9ecb7be84",
+  "entry": "frontend/dist/index.js",
+  "pages": [],
+  "layouts": [],
+  "finders": [
+    "llmGateway.keys",
+    "llmGateway.billing",
+    "llmGateway.prices",
+    "llmGateway.usage",
+    "llmGateway.adminOverview",
+    "llmGateway.adminAccounts",
+    "llmGateway.adminPrices"
+  ],
+  "adminRoutes": [
+    {
+      "path": "/overview",
+      "component": "admin/overview",
+      "permission": "llm-gateway.admin",
+      "nav": {
+        "label": "API 中转",
+        "group": "商店插件"
+      },
+      "data": [
+        {
+          "finder": "llmGateway.adminOverview",
+          "as": "overview"
+        }
+      ]
+    },
+    {
+      "path": "/accounts",
+      "component": "admin/accounts",
+      "permission": "llm-gateway.admin",
+      "nav": {
+        "label": "中转账号与定价",
+        "group": "商店插件"
+      },
+      "data": [
+        {
+          "finder": "llmGateway.adminAccounts",
+          "as": "accounts"
+        },
+        {
+          "finder": "llmGateway.adminPrices",
+          "as": "prices"
+        }
+      ]
+    }
+  ],
+  "adminActions": [],
+  "actions": [
+    {
+      "id": "llm-gateway.set-billing",
+      "method": "POST",
+      "path": "/llm-gateway/billing",
+      "permission": "llm-gateway.use",
+      "input": [
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "llm-gateway.create-key",
+      "method": "POST",
+      "path": "/llm-gateway/keys",
+      "permission": "llm-gateway.use",
+      "input": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "maxLength": 64
+        },
+        {
+          "name": "models",
+          "type": "string",
+          "maxLength": 500
+        },
+        {
+          "name": "expiresInDays",
+          "type": "integer",
+          "min": 1,
+          "max": 3650
+        },
+        {
+          "name": "rpmLimit",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "concurrencyLimit",
+          "type": "integer",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": "llm-gateway.update-key",
+      "method": "PATCH",
+      "path": "/llm-gateway/keys/:id",
+      "permission": "llm-gateway.use",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "maxLength": 64
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "maxLength": 16
+        },
+        {
+          "name": "models",
+          "type": "string",
+          "maxLength": 500
+        },
+        {
+          "name": "rpmLimit",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "concurrencyLimit",
+          "type": "integer",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": "llm-gateway.delete-key",
+      "method": "DELETE",
+      "path": "/llm-gateway/keys/:id",
+      "permission": "llm-gateway.use",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    },
+    {
+      "id": "llm-gateway.create-account",
+      "method": "POST",
+      "path": "/llm-gateway/admin/accounts",
+      "permission": "llm-gateway.admin",
+      "input": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "maxLength": 64
+        },
+        {
+          "name": "baseUrl",
+          "type": "string",
+          "required": true,
+          "maxLength": 500
+        },
+        {
+          "name": "apiKey",
+          "type": "string",
+          "required": true,
+          "maxLength": 500
+        },
+        {
+          "name": "provider",
+          "type": "string",
+          "maxLength": 32
+        },
+        {
+          "name": "models",
+          "type": "ids",
+          "maxLength": 128,
+          "max": 500
+        },
+        {
+          "name": "priority",
+          "type": "integer"
+        },
+        {
+          "name": "weight",
+          "type": "integer",
+          "min": 1
+        },
+        {
+          "name": "maxConcurrency",
+          "type": "integer",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": "llm-gateway.update-account",
+      "method": "PATCH",
+      "path": "/llm-gateway/admin/accounts/:id",
+      "permission": "llm-gateway.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "maxLength": 64
+        },
+        {
+          "name": "baseUrl",
+          "type": "string",
+          "maxLength": 500
+        },
+        {
+          "name": "apiKey",
+          "type": "string",
+          "maxLength": 500
+        },
+        {
+          "name": "provider",
+          "type": "string",
+          "maxLength": 32
+        },
+        {
+          "name": "models",
+          "type": "ids",
+          "maxLength": 128,
+          "max": 500
+        },
+        {
+          "name": "priority",
+          "type": "integer"
+        },
+        {
+          "name": "weight",
+          "type": "integer",
+          "min": 1
+        },
+        {
+          "name": "maxConcurrency",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "maxLength": 16
+        }
+      ]
+    },
+    {
+      "id": "llm-gateway.set-account-status",
+      "method": "PATCH",
+      "path": "/llm-gateway/admin/accounts/:id",
+      "permission": "llm-gateway.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": true,
+          "maxLength": 16
+        }
+      ]
+    },
+    {
+      "id": "llm-gateway.delete-account",
+      "method": "DELETE",
+      "path": "/llm-gateway/admin/accounts/:id",
+      "permission": "llm-gateway.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    },
+    {
+      "id": "llm-gateway.save-price",
+      "method": "POST",
+      "path": "/llm-gateway/admin/prices",
+      "permission": "llm-gateway.admin",
+      "input": [
+        {
+          "name": "model",
+          "type": "string",
+          "required": true,
+          "maxLength": 128
+        },
+        {
+          "name": "upstreamModel",
+          "type": "string",
+          "maxLength": 128
+        },
+        {
+          "name": "inputPrice",
+          "type": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "name": "outputPrice",
+          "type": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "name": "cacheReadPrice",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "cacheWritePrice",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "capabilities",
+          "type": "ids",
+          "maxLength": 32,
+          "max": 8
+        },
+        {
+          "name": "multiplier",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "enabled",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "id": "llm-gateway.delete-price",
+      "method": "DELETE",
+      "path": "/llm-gateway/admin/prices/:id",
+      "permission": "llm-gateway.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    }
+  ],
+  "accountRoutes": [
+    {
+      "path": "/gateway",
+      "component": "account/gateway-overview",
+      "permission": "llm-gateway.use",
+      "nav": {
+        "label": "概览",
+        "group": "大模型"
+      },
+      "data": [
+        {
+          "finder": "llmGateway.billing",
+          "as": "billing"
+        },
+        {
+          "finder": "llmGateway.usage",
+          "as": "usage"
+        }
+      ]
+    },
+    {
+      "path": "/gateway/pricing",
+      "component": "account/gateway-pricing",
+      "permission": "llm-gateway.use",
+      "nav": {
+        "label": "模型定价",
+        "group": "大模型"
+      },
+      "data": [
+        {
+          "finder": "llmGateway.prices",
+          "as": "prices"
+        }
+      ]
+    },
+    {
+      "path": "/gateway/keys",
+      "component": "account/gateway-keys",
+      "permission": "llm-gateway.use",
+      "nav": {
+        "label": "API 密钥",
+        "group": "大模型"
+      },
+      "data": [
+        {
+          "finder": "llmGateway.billing",
+          "as": "billing"
+        },
+        {
+          "finder": "llmGateway.keys",
+          "as": "keys"
+        }
+      ]
+    }
+  ],
+  "accountWidgets": [
+    {
+      "id": "llm-gateway",
+      "title": "API 中转",
+      "component": "account/gateway",
+      "permission": "llm-gateway.use"
+    }
+  ],
+  "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/admin.js.map",
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
+  ]
+}

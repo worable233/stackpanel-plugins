@@ -1,0 +1,82 @@
+{
+  "version": "0.1.0",
+  "revision": "da236d8343b2",
+  "entry": "frontend/dist/index.js",
+  "pages": [],
+  "layouts": [],
+  "finders": [
+    "cms.adminPosts",
+    "cms.adminPages",
+    "cms.adminRedirects"
+  ],
+  "adminRoutes": [
+    {
+      "path": "/posts",
+      "component": "admin/posts",
+      "data": [
+        {
+          "finder": "cms.adminPosts",
+          "as": "list"
+        }
+      ],
+      "nav": {
+        "label": "内容管理 · 文章",
+        "group": "CMS"
+      }
+    },
+    {
+      "path": "/pages",
+      "component": "admin/pages",
+      "data": [
+        {
+          "finder": "cms.adminPages",
+          "as": "list"
+        }
+      ],
+      "nav": {
+        "label": "内容管理 · 页面",
+        "group": "CMS"
+      }
+    },
+    {
+      "path": "/redirects",
+      "component": "admin/redirects",
+      "data": [
+        {
+          "finder": "cms.adminRedirects",
+          "as": "list"
+        }
+      ],
+      "nav": {
+        "label": "内容管理 · 重定向",
+        "group": "CMS"
+      }
+    },
+    {
+      "path": "/posts/new",
+      "component": "admin/post-new"
+    },
+    {
+      "path": "/pages/new",
+      "component": "admin/page-new"
+    },
+    {
+      "path": "/posts/:id",
+      "component": "admin/post-edit"
+    },
+    {
+      "path": "/pages/:id",
+      "component": "admin/page-edit"
+    }
+  ],
+  "adminActions": [],
+  "actions": [],
+  "accountRoutes": [],
+  "accountWidgets": [],
+  "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/admin.js.map",
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
+  ]
+}

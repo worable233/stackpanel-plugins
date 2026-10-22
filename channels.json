@@ -1,0 +1,12 @@
+{
+  "channels": [
+    {
+      "channel": "stable",
+      "sequence": 1
+    },
+    {
+      "channel": "beta",
+      "sequence": 1
+    }
+  ]
+}

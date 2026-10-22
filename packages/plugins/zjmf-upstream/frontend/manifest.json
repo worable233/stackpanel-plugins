@@ -1,0 +1,148 @@
+{
+  "version": "0.1.0",
+  "revision": "a8ace3e5644b",
+  "entry": "frontend/dist/index.js",
+  "pages": [],
+  "layouts": [],
+  "finders": [
+    "zjmf-upstream.upstreams"
+  ],
+  "adminRoutes": [
+    {
+      "path": "/overview",
+      "component": "admin/summary",
+      "permission": "zjmf-upstream.admin",
+      "nav": {
+        "label": "概览",
+        "group": "上游",
+        "order": 0
+      },
+      "data": [
+        {
+          "finder": "zjmf-upstream.upstreams",
+          "as": "upstreams"
+        }
+      ]
+    },
+    {
+      "path": "/connections",
+      "component": "admin/overview",
+      "permission": "zjmf-upstream.admin",
+      "nav": {
+        "label": "上游连接",
+        "group": "上游",
+        "order": 10
+      },
+      "data": [
+        {
+          "finder": "zjmf-upstream.upstreams",
+          "as": "upstreams"
+        }
+      ]
+    }
+  ],
+  "adminActions": [],
+  "actions": [
+    {
+      "id": "zjmf-upstream.create",
+      "method": "POST",
+      "path": "/zjmf-upstream/admin/upstreams",
+      "permission": "zjmf-upstream.admin",
+      "input": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "baseUrl",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "protocol",
+          "type": "string",
+          "required": true,
+          "maxLength": 8
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "required": true,
+          "maxLength": 8
+        },
+        {
+          "name": "markupBps",
+          "type": "integer",
+          "required": true,
+          "min": 0,
+          "max": 100000
+        },
+        {
+          "name": "defaultStock",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "max": 1000000
+        },
+        {
+          "name": "syncIntervalMinutes",
+          "type": "integer",
+          "required": true,
+          "min": 15,
+          "max": 1440
+        }
+      ]
+    },
+    {
+      "id": "zjmf-upstream.sync",
+      "method": "POST",
+      "path": "/zjmf-upstream/admin/upstreams/sync",
+      "permission": "zjmf-upstream.admin",
+      "input": [
+        {
+          "name": "sourceId",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    },
+    {
+      "id": "zjmf-upstream.delete",
+      "method": "DELETE",
+      "path": "/zjmf-upstream/admin/upstreams/:id",
+      "permission": "zjmf-upstream.admin",
+      "input": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "maxLength": 191
+        }
+      ]
+    }
+  ],
+  "accountRoutes": [],
+  "accountWidgets": [],
+  "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/admin.js.map",
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
+  ]
+}

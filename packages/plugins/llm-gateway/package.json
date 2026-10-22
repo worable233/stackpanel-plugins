@@ -1,0 +1,36 @@
+{
+  "name": "@stackpanel/plugin-llm-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "stackpanel": {
+    "builtin": false
+  },
+  "description": "API 中转售卖：OpenAI 兼容 LLM 网关——签发用户 key、上游账号池转发、按 token 后付费扣钱包余额。",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepare": "tsc -p tsconfig.build.json",
+    "build": "node ../../../scripts/build-plugin.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@stackpanel/net-guard": "workspace:*",
+    "@stackpanel/sdk": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
