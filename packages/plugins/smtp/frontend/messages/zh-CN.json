@@ -1,0 +1,23 @@
+{
+  "admin.systemSettings": "SMTP 邮件",
+  "page.title": "SMTP 邮件",
+  "page.description": "用于发送注册邮箱验证码、密码安全通知和站内通知邮件。",
+  "page.noSecrets": "平台加密密钥未配置，无法保存 SMTP 密码。",
+  "field.host": "SMTP 主机",
+  "field.port": "端口",
+  "field.from": "发件邮箱",
+  "field.fromName": "发件人名称",
+  "field.user": "用户名",
+  "field.password": "密码",
+  "field.secure": "隐式 TLS（通常端口 465）",
+  "field.startTls": "STARTTLS（通常端口 587）",
+  "action.save": "保存配置",
+  "action.saving": "保存中…",
+  "test.title": "发送测试邮件",
+  "test.placeholder": "收件地址",
+  "test.submit": "发送测试",
+  "test.sent": "测试邮件已发送",
+  "notice.saved": "SMTP 配置已保存",
+  "error.saveFailed": "保存失败",
+  "error.sendFailed": "发送失败"
+}

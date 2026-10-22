@@ -1,5 +1,6 @@
 packages:
   - packages/plugins/*
+  - packages/plugins/*/frontend
 
 # 内核提供的工作区包：SDK / spec / UI / net-guard。
 #

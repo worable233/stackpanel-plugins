@@ -5,6 +5,7 @@ import { PageHeader } from '@stackpanel/ui';
 import { useState, type ReactElement } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { messages, t } from './i18n.js';
 
 const statusSchema = z.object({
   configured: z.boolean(),
@@ -50,8 +51,9 @@ function Field({
   );
 }
 
-function SmtpSettings({ data }: AdminPageComponentProps): ReactElement {
-  const status = data.data.status as Status | undefined;
+function SmtpSettings(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
+  const status = props.data.status as Status | undefined;
   const [host, setHost] = useState(status?.host ?? '');
   const [port, setPort] = useState(String(status?.port ?? 465));
   const [from, setFrom] = useState(status?.from ?? '');
@@ -66,7 +68,7 @@ function SmtpSettings({ data }: AdminPageComponentProps): ReactElement {
     event.preventDefault();
     setBusy(true);
     try {
-      const res = await fetch('/api/plugins/smtp/smtp/admin/config', {
+      const res = await fetch('/api/plugins/smtp/admin/config', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -83,11 +85,11 @@ function SmtpSettings({ data }: AdminPageComponentProps): ReactElement {
           excludeTypes: '',
         }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? '保存失败');
-      toast.success('SMTP 配置已保存');
+      if (!res.ok) throw new Error((await res.json()).error ?? tr('error.saveFailed'));
+      toast.success(tr('notice.saved'));
       window.location.reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '保存失败');
+      toast.error(e instanceof Error ? e.message : tr('error.saveFailed'));
     } finally {
       setBusy(false);
     }
@@ -95,38 +97,55 @@ function SmtpSettings({ data }: AdminPageComponentProps): ReactElement {
   async function test() {
     setBusy(true);
     try {
-      const res = await fetch('/api/plugins/smtp/smtp/admin/test', {
+      const res = await fetch('/api/plugins/smtp/admin/test', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ to: testTo }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? '发送失败');
-      toast.success('测试邮件已发送');
+      if (!res.ok) throw new Error((await res.json()).error ?? tr('error.sendFailed'));
+      toast.success(tr('test.sent'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '发送失败');
+      toast.error(e instanceof Error ? e.message : tr('error.sendFailed'));
     } finally {
       setBusy(false);
     }
   }
   return (
     <main className="w-full space-y-6">
-      <PageHeader title="SMTP 邮件" />
-      <p className="text-sm text-muted-foreground">
-        用于发送注册邮箱验证码、密码安全通知和站内通知邮件。
-      </p>
+      <PageHeader title={tr('page.title')} />
+      <p className="text-sm text-muted-foreground">{tr('page.description')}</p>
       {status?.secretsEnabled === false ? (
         <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          平台加密密钥未配置，无法保存 SMTP 密码。
+          {tr('page.noSecrets')}
         </p>
       ) : null}
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-        <Field label="SMTP 主机" name="host" value={host} onChange={setHost} required />
-        <Field label="端口" name="port" value={port} onChange={setPort} type="number" required />
-        <Field label="发件邮箱" name="from" value={from} onChange={setFrom} type="email" required />
-        <Field label="发件人名称" name="fromName" value={fromName} onChange={setFromName} />
-        <Field label="用户名" name="user" value={user} onChange={setUser} />
+        <Field label={tr('field.host')} name="host" value={host} onChange={setHost} required />
         <Field
-          label="密码"
+          label={tr('field.port')}
+          name="port"
+          value={port}
+          onChange={setPort}
+          type="number"
+          required
+        />
+        <Field
+          label={tr('field.from')}
+          name="from"
+          value={from}
+          onChange={setFrom}
+          type="email"
+          required
+        />
+        <Field
+          label={tr('field.fromName')}
+          name="fromName"
+          value={fromName}
+          onChange={setFromName}
+        />
+        <Field label={tr('field.user')} name="user" value={user} onChange={setUser} />
+        <Field
+          label={tr('field.password')}
           name="password"
           value={password}
           onChange={setPassword}
@@ -134,7 +153,7 @@ function SmtpSettings({ data }: AdminPageComponentProps): ReactElement {
         />
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={secure} onChange={(e) => setSecure(e.target.checked)} />
-          隐式 TLS（通常端口 465）
+          {tr('field.secure')}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -142,23 +161,23 @@ function SmtpSettings({ data }: AdminPageComponentProps): ReactElement {
             checked={startTls}
             onChange={(e) => setStartTls(e.target.checked)}
           />
-          STARTTLS（通常端口 587）
+          {tr('field.startTls')}
         </label>
         <button
           className="h-9 w-fit rounded-md bg-primary px-4 text-sm text-primary-foreground disabled:opacity-60 sm:col-span-2"
           disabled={busy}
         >
-          {busy ? '保存中…' : '保存配置'}
+          {busy ? tr('action.saving') : tr('action.save')}
         </button>
       </form>
       <section className="border-t pt-5">
-        <h2 className="text-sm font-semibold">发送测试邮件</h2>
+        <h2 className="text-sm font-semibold">{tr('test.title')}</h2>
         <div className="mt-3 flex max-w-xl gap-2">
           <input
             className="h-9 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm"
             value={testTo}
             onChange={(e) => setTestTo(e.target.value)}
-            placeholder="收件地址"
+            placeholder={tr('test.placeholder')}
             type="email"
           />
           <button
@@ -167,7 +186,7 @@ function SmtpSettings({ data }: AdminPageComponentProps): ReactElement {
             disabled={busy || !testTo}
             onClick={() => void test()}
           >
-            发送测试
+            {tr('test.submit')}
           </button>
         </div>
       </section>
@@ -176,6 +195,8 @@ function SmtpSettings({ data }: AdminPageComponentProps): ReactElement {
 }
 
 const frontend: FrontendPackage = {
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  messages,
   finders: {
     'smtp.status': {
       handler: async (_input: Record<string, unknown>, ctx: FinderContext) =>

@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "revision": "ea86588729d2",
+  "revision": "c35df8d5d840",
   "entry": "frontend/dist/index.js",
   "pages": [
     {
@@ -22,8 +22,8 @@
       "component": "admin/overview",
       "permission": "notice.admin",
       "nav": {
-        "label": "公告",
-        "group": "内容",
+        "labelKey": "nav.label",
+        "groupKey": "nav.group",
         "order": 40
       },
       "data": [
@@ -41,6 +41,9 @@
       "method": "POST",
       "path": "/notice/admin/announcements",
       "permission": "notice.admin",
+      "successFeedback": {
+        "messageKey": "feedback.created"
+      },
       "input": [
         {
           "name": "title",
@@ -73,6 +76,7 @@
       "method": "PATCH",
       "path": "/notice/admin/announcements/:id",
       "permission": "notice.admin",
+      "silent": true,
       "input": [
         {
           "name": "id",
@@ -92,6 +96,9 @@
       "method": "DELETE",
       "path": "/notice/admin/announcements/:id",
       "permission": "notice.admin",
+      "successFeedback": {
+        "messageKey": "feedback.deleted"
+      },
       "input": [
         {
           "name": "id",
@@ -111,5 +118,92 @@
     "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
-  ]
+  ],
+  "locales": ["zh-CN", "zh-TW", "zh-HK", "en-US"],
+  "messages": {
+    "zh-CN": {
+      "nav.label": "公告",
+      "nav.group": "内容",
+      "page.title": "站点公告",
+      "page.empty": "暂无公告。",
+      "admin.title": "站点公告",
+      "admin.field.title": "标题",
+      "admin.field.content": "内容",
+      "admin.field.sortOrder": "排序（小值在前）",
+      "admin.field.status": "状态",
+      "admin.state.published": "发布",
+      "admin.state.draft": "草稿",
+      "admin.badge.published": "已发布",
+      "admin.badge.draft": "草稿",
+      "admin.submit": "发布公告",
+      "admin.unpublish": "下架",
+      "admin.delete": "删除",
+      "admin.empty": "还没有公告，先发布第一条。",
+      "feedback.created": "公告已发布",
+      "feedback.deleted": "公告已删除"
+    },
+    "zh-TW": {
+      "nav.label": "公告",
+      "nav.group": "內容",
+      "page.title": "站點公告",
+      "page.empty": "暫無公告。",
+      "admin.title": "站點公告",
+      "admin.field.title": "標題",
+      "admin.field.content": "內容",
+      "admin.field.sortOrder": "排序（小值在前）",
+      "admin.field.status": "狀態",
+      "admin.state.published": "釋出",
+      "admin.state.draft": "草稿",
+      "admin.badge.published": "已釋出",
+      "admin.badge.draft": "草稿",
+      "admin.submit": "釋出公告",
+      "admin.unpublish": "下架",
+      "admin.delete": "刪除",
+      "admin.empty": "還沒有公告，先發布第一條。",
+      "feedback.created": "公告已釋出",
+      "feedback.deleted": "公告已刪除"
+    },
+    "zh-HK": {
+      "nav.label": "公告",
+      "nav.group": "內容",
+      "page.title": "站點公告",
+      "page.empty": "暫無公告。",
+      "admin.title": "站點公告",
+      "admin.field.title": "標題",
+      "admin.field.content": "內容",
+      "admin.field.sortOrder": "排序（小值在前）",
+      "admin.field.status": "狀態",
+      "admin.state.published": "釋出",
+      "admin.state.draft": "草稿",
+      "admin.badge.published": "已釋出",
+      "admin.badge.draft": "草稿",
+      "admin.submit": "釋出公告",
+      "admin.unpublish": "下架",
+      "admin.delete": "刪除",
+      "admin.empty": "還沒有公告，先發布第一條。",
+      "feedback.created": "公告已釋出",
+      "feedback.deleted": "公告已刪除"
+    },
+    "en-US": {
+      "nav.label": "Announcements",
+      "nav.group": "Content",
+      "page.title": "Site announcements",
+      "page.empty": "No announcements yet.",
+      "admin.title": "Site announcements",
+      "admin.field.title": "Title",
+      "admin.field.content": "Content",
+      "admin.field.sortOrder": "Order (lower first)",
+      "admin.field.status": "Status",
+      "admin.state.published": "Published",
+      "admin.state.draft": "Draft",
+      "admin.badge.published": "Published",
+      "admin.badge.draft": "Draft",
+      "admin.submit": "Publish announcement",
+      "admin.unpublish": "Unpublish",
+      "admin.delete": "Delete",
+      "admin.empty": "No announcements yet. Publish the first one.",
+      "feedback.created": "Notice published",
+      "feedback.deleted": "Notice deleted"
+    }
+  }
 }

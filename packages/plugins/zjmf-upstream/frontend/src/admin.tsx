@@ -20,6 +20,7 @@ import {
   Select,
   Field,
 } from '@stackpanel/ui';
+import { t } from './i18n.js';
 
 interface Upstream {
   id: string;
@@ -45,6 +46,7 @@ interface UpstreamListResult {
 }
 
 export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const result = props.data.upstreams as UpstreamListResult | undefined;
   const create = props.actions['zjmf-upstream.create'];
   const update = props.actions['zjmf-upstream.update'];
@@ -57,33 +59,35 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
   return (
     <main className="w-full space-y-8">
       <PageHeader
-        title="魔方上游"
-        actions={create ? <Button onClick={() => setCreateOpen(true)}>添加上游</Button> : null}
+        title={tr('page.title')}
+        actions={
+          create ? <Button onClick={() => setCreateOpen(true)}>{tr('page.add')}</Button> : null
+        }
       />
 
       {result?.secretsEnabled === false ? (
         <div className="rounded-lg border border-destructive/35 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          未配置平台加密密钥，无法保存上游账号。
+          {tr('page.secretsMissing')}
         </div>
       ) : null}
 
       {create ? (
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogContent
-            closeLabel="关闭"
+            closeLabel={tr('dialog.close')}
             className="!left-auto !right-0 !top-0 !h-dvh !max-h-dvh !max-w-xl !translate-x-0 !translate-y-0 !rounded-none !border-y-0 !border-r-0 data-open:slide-in-from-right data-closed:slide-out-to-right"
           >
             <DialogHeader>
-              <DialogTitle>添加上游</DialogTitle>
-              <DialogDescription>填写上游接口和同步参数。</DialogDescription>
+              <DialogTitle>{tr('create.title')}</DialogTitle>
+              <DialogDescription>{tr('create.description')}</DialogDescription>
             </DialogHeader>
             <form action={create} className="grid gap-4 py-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-name">名称 *</Label>
+                <Label htmlFor="zjmf-name">{tr('form.name')}</Label>
                 <Input id="zjmf-name" name="name" required />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-base-url">接口地址 *</Label>
+                <Label htmlFor="zjmf-base-url">{tr('form.baseUrl')}</Label>
                 <Input
                   id="zjmf-base-url"
                   name="baseUrl"
@@ -92,14 +96,14 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-protocol">协议</Label>
+                <Label htmlFor="zjmf-protocol">{tr('form.protocol')}</Label>
                 <Select id="zjmf-protocol" name="protocol" defaultValue="finance">
-                  <option value="finance">魔方财务 V1</option>
-                  <option value="v10">魔方财务 V10</option>
+                  <option value="finance">{tr('form.protocolFinance')}</option>
+                  <option value="v10">{tr('form.protocolV10')}</option>
                 </Select>
               </div>
               <Field>
-                <Label htmlFor="zjmf-downstream-url">本平台公开地址（下游关联）</Label>
+                <Label htmlFor="zjmf-downstream-url">{tr('form.downstreamUrl')}</Label>
                 <Input
                   id="zjmf-downstream-url"
                   name="downstreamUrl"
@@ -107,33 +111,33 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                 />
               </Field>
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-v10-module">V10 模块家族</Label>
+                <Label htmlFor="zjmf-v10-module">{tr('form.v10Module')}</Label>
                 <Select id="zjmf-v10-module" name="v10Module" defaultValue="auto">
-                  <option value="auto">自动探测（推荐）</option>
-                  <option value="mf_cloud">mf_cloud（直营云）</option>
-                  <option value="remf_cloud">remf_cloud（代理云）</option>
-                  <option value="mf_dcim">mf_dcim（物理机）</option>
-                  <option value="idcsmart_common">idcsmart_common（通用）</option>
+                  <option value="auto">{tr('form.v10ModuleAuto')}</option>
+                  <option value="mf_cloud">{tr('form.v10ModuleMfCloud')}</option>
+                  <option value="remf_cloud">{tr('form.v10ModuleRemfCloud')}</option>
+                  <option value="mf_dcim">{tr('form.v10ModuleMfDcim')}</option>
+                  <option value="idcsmart_common">{tr('form.v10ModuleIdcsmart')}</option>
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-username">账号 *</Label>
+                <Label htmlFor="zjmf-username">{tr('form.username')}</Label>
                 <Input id="zjmf-username" name="username" required />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-password">密码 *</Label>
+                <Label htmlFor="zjmf-password">{tr('form.password')}</Label>
                 <Input id="zjmf-password" name="password" type="password" required />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-currency">币种 *</Label>
+                <Label htmlFor="zjmf-currency">{tr('form.currency')}</Label>
                 <Input id="zjmf-currency" name="currency" defaultValue="CNY" required />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-markup">加价（基点）</Label>
+                <Label htmlFor="zjmf-markup">{tr('form.markup')}</Label>
                 <Input id="zjmf-markup" name="markupBps" type="number" defaultValue="0" min="0" />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-stock">库存</Label>
+                <Label htmlFor="zjmf-stock">{tr('form.stock')}</Label>
                 <Input
                   id="zjmf-stock"
                   name="defaultStock"
@@ -143,7 +147,7 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="zjmf-interval">同步间隔（分钟）</Label>
+                <Label htmlFor="zjmf-interval">{tr('form.interval')}</Label>
                 <Input
                   id="zjmf-interval"
                   name="syncIntervalMinutes"
@@ -161,18 +165,16 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                     className="mt-0.5 size-4 accent-destructive"
                   />
                   <span>
-                    <span className="font-medium text-destructive">
-                      允许调用未取证的 V10 路由（换商品）
-                    </span>
+                    <span className="font-medium text-destructive">{tr('form.unverified')}</span>
                     <br />
-                    服务生命周期（开关机/重装/VNC/续费/快照/备份）已按
-                    <code>console/v1/&lt;family&gt;</code> 源码契约实现，无需勾选。
-                    这里只放开仍未取证的「换商品」，默认关闭。
+                    {tr('form.unverifiedHelpBefore')}
+                    <code>console/v1/&lt;family&gt;</code>
+                    {tr('form.unverifiedHelpAfter')}
                   </span>
                 </label>
               </div>
               <Button type="submit" className="sm:col-span-2">
-                添加上游
+                {tr('create.submit')}
               </Button>
             </form>
           </DialogContent>
@@ -182,24 +184,22 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
       {update ? (
         <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
           <DialogContent
-            closeLabel="关闭"
+            closeLabel={tr('dialog.close')}
             className="!left-auto !right-0 !top-0 !h-dvh !max-h-dvh !max-w-xl !translate-x-0 !translate-y-0 !rounded-none !border-y-0 !border-r-0 data-open:slide-in-from-right data-closed:slide-out-to-right"
           >
             <DialogHeader>
-              <DialogTitle>编辑上游</DialogTitle>
-              <DialogDescription>
-                更新连接与同步参数。留空账号和密码会保留现有凭据。
-              </DialogDescription>
+              <DialogTitle>{tr('edit.title')}</DialogTitle>
+              <DialogDescription>{tr('edit.description')}</DialogDescription>
             </DialogHeader>
             {editing ? (
               <form action={update} className="grid gap-4 py-4 sm:grid-cols-2">
                 <input type="hidden" name="id" value={editing.id} />
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-name">名称 *</Label>
+                  <Label htmlFor="zjmf-edit-name">{tr('form.name')}</Label>
                   <Input id="zjmf-edit-name" name="name" defaultValue={editing.name} required />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-base-url">接口地址 *</Label>
+                  <Label htmlFor="zjmf-edit-base-url">{tr('form.baseUrl')}</Label>
                   <Input
                     id="zjmf-edit-base-url"
                     name="baseUrl"
@@ -208,14 +208,14 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-protocol">协议</Label>
+                  <Label htmlFor="zjmf-edit-protocol">{tr('form.protocol')}</Label>
                   <Select id="zjmf-edit-protocol" name="protocol" defaultValue={editing.protocol}>
-                    <option value="finance">魔方财务 V1</option>
-                    <option value="v10">魔方财务 V10</option>
+                    <option value="finance">{tr('form.protocolFinance')}</option>
+                    <option value="v10">{tr('form.protocolV10')}</option>
                   </Select>
                 </div>
                 <Field>
-                  <Label htmlFor="zjmf-edit-downstream-url">本平台公开地址（下游关联）</Label>
+                  <Label htmlFor="zjmf-edit-downstream-url">{tr('form.downstreamUrl')}</Label>
                   <Input
                     id="zjmf-edit-downstream-url"
                     name="downstreamUrl"
@@ -224,40 +224,40 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                   />
                 </Field>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-v10-module">V10 模块家族</Label>
+                  <Label htmlFor="zjmf-edit-v10-module">{tr('form.v10Module')}</Label>
                   <Select
                     id="zjmf-edit-v10-module"
                     name="v10Module"
                     defaultValue={editing.v10Module ?? 'auto'}
                   >
-                    <option value="auto">自动探测（推荐）</option>
-                    <option value="mf_cloud">mf_cloud（直营云）</option>
-                    <option value="remf_cloud">remf_cloud（代理云）</option>
-                    <option value="mf_dcim">mf_dcim（物理机）</option>
-                    <option value="idcsmart_common">idcsmart_common（通用）</option>
+                    <option value="auto">{tr('form.v10ModuleAuto')}</option>
+                    <option value="mf_cloud">{tr('form.v10ModuleMfCloud')}</option>
+                    <option value="remf_cloud">{tr('form.v10ModuleRemfCloud')}</option>
+                    <option value="mf_dcim">{tr('form.v10ModuleMfDcim')}</option>
+                    <option value="idcsmart_common">{tr('form.v10ModuleIdcsmart')}</option>
                   </Select>
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-username">账号</Label>
+                  <Label htmlFor="zjmf-edit-username">{tr('edit.username')}</Label>
                   <Input
                     id="zjmf-edit-username"
                     name="username"
                     autoComplete="off"
-                    placeholder="留空则不修改"
+                    placeholder={tr('edit.keepUnchanged')}
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-password">密码</Label>
+                  <Label htmlFor="zjmf-edit-password">{tr('edit.password')}</Label>
                   <Input
                     id="zjmf-edit-password"
                     name="password"
                     type="password"
                     autoComplete="new-password"
-                    placeholder="留空则不修改"
+                    placeholder={tr('edit.keepUnchanged')}
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-currency">币种 *</Label>
+                  <Label htmlFor="zjmf-edit-currency">{tr('form.currency')}</Label>
                   <Input
                     id="zjmf-edit-currency"
                     name="currency"
@@ -266,7 +266,7 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-markup">加价（基点）</Label>
+                  <Label htmlFor="zjmf-edit-markup">{tr('form.markup')}</Label>
                   <Input
                     id="zjmf-edit-markup"
                     name="markupBps"
@@ -276,7 +276,7 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-stock">库存</Label>
+                  <Label htmlFor="zjmf-edit-stock">{tr('form.stock')}</Label>
                   <Input
                     id="zjmf-edit-stock"
                     name="defaultStock"
@@ -286,7 +286,7 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="zjmf-edit-interval">同步间隔（分钟）</Label>
+                  <Label htmlFor="zjmf-edit-interval">{tr('form.interval')}</Label>
                   <Input
                     id="zjmf-edit-interval"
                     name="syncIntervalMinutes"
@@ -296,18 +296,18 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                   />
                 </div>
                 <div className="grid gap-1.5 sm:col-span-2">
-                  <Label htmlFor="zjmf-edit-unverified-routes">允许未取证 V10 路由</Label>
+                  <Label htmlFor="zjmf-edit-unverified-routes">{tr('edit.unverified')}</Label>
                   <Select
                     id="zjmf-edit-unverified-routes"
                     name="allowUnverifiedV10Routes"
                     defaultValue={String(Boolean(editing.allowUnverifiedV10Routes))}
                   >
-                    <option value="false">关闭</option>
-                    <option value="true">开启（仅换商品）</option>
+                    <option value="false">{tr('edit.unverifiedOff')}</option>
+                    <option value="true">{tr('edit.unverifiedOn')}</option>
                   </Select>
                 </div>
                 <Button type="submit" className="sm:col-span-2">
-                  保存更改
+                  {tr('edit.submit')}
                 </Button>
               </form>
             ) : null}
@@ -317,7 +317,7 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
 
       <section className="overflow-hidden rounded-lg border bg-card">
         <div className="border-b px-4 py-3">
-          <SectionTitle>已接入上游</SectionTitle>
+          <SectionTitle>{tr('list.title')}</SectionTitle>
         </div>
         {upstreams.length > 0 ? (
           <div className="divide-y">
@@ -333,18 +333,23 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                       {upstream.protocol === 'finance' ? 'V1' : 'V10'}
                     </span>
                     {!upstream.credentialsConfigured ? (
-                      <span className="text-xs text-destructive">未配置凭据</span>
+                      <span className="text-xs text-destructive">
+                        {tr('list.credentialsMissing')}
+                      </span>
                     ) : null}
                     {upstream.allowUnverifiedV10Routes ? (
                       <span className="rounded-lg border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-                        实验性：未取证 V10 换商品
+                        {tr('list.experimental')}
                       </span>
                     ) : null}
                   </div>
                   <p className="mt-1 truncate text-xs text-muted-foreground">{upstream.baseUrl}</p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {upstream.productCount} 个商品 · 加价 {formatPercent(upstream.markupBps)} ·{' '}
-                    {upstream.syncIntervalMinutes} 分钟
+                    {tr('list.meta', {
+                      products: upstream.productCount,
+                      markup: formatPercent(upstream.markupBps),
+                      minutes: upstream.syncIntervalMinutes,
+                    })}
                   </p>
                 </div>
                 {update || sync || remove ? (
@@ -356,23 +361,23 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                         size="sm"
                         onClick={() => setEditing(upstream)}
                       >
-                        编辑
+                        {tr('list.edit')}
                       </Button>
                     ) : null}
                     {sync ? (
                       <form action={sync}>
                         <input type="hidden" name="sourceId" value={upstream.id} />
-                        <SyncSubmitButton />
+                        <SyncSubmitButton locale={props.locale} />
                       </form>
                     ) : null}
                     {remove ? (
                       <details className="relative">
                         <summary className="inline-flex h-8 cursor-pointer list-none items-center rounded-lg border border-destructive/60 px-3 text-xs font-medium text-destructive hover:bg-destructive/10 [&::-webkit-details-marker]:hidden">
-                          删除
+                          {tr('list.delete')}
                         </summary>
                         <div className="absolute right-0 z-10 mt-2 w-64 rounded-2xl border bg-card p-3 shadow-lg">
                           <p className="text-xs text-muted-foreground">
-                            将删除该上游及其映射的商品与凭证，此操作不可撤销。确认删除？
+                            {tr('list.deleteConfirm')}
                           </p>
                           <form
                             action={remove}
@@ -380,7 +385,7 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                           >
                             <input type="hidden" name="id" value={upstream.id} />
                             <Button type="submit" variant="destructive" size="sm">
-                              确认删除
+                              {tr('list.deleteSubmit')}
                             </Button>
                           </form>
                         </div>
@@ -392,18 +397,19 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
             ))}
           </div>
         ) : (
-          <p className="px-4 py-12 text-center text-sm text-muted-foreground">还没有上游。</p>
+          <p className="px-4 py-12 text-center text-sm text-muted-foreground">{tr('list.empty')}</p>
         )}
       </section>
     </main>
   );
 }
 
-function SyncSubmitButton(): ReactElement {
+function SyncSubmitButton({ locale }: { locale: string | undefined }): ReactElement {
   const { pending } = useFormStatus();
+  const tr = t(locale);
   return (
     <Button type="submit" variant="outline" size="sm" disabled={pending}>
-      {pending ? '正在同步…' : '立即同步'}
+      {pending ? tr('list.syncing') : tr('list.sync')}
     </Button>
   );
 }
@@ -413,6 +419,7 @@ function formatPercent(bps: number): string {
 }
 
 function UpstreamOverview(props: AdminPageComponentProps) {
+  const tr = t(props.locale);
   const data = props.data.upstreams as
     | {
         upstreams: Array<{
@@ -428,46 +435,46 @@ function UpstreamOverview(props: AdminPageComponentProps) {
   const connections = data?.upstreams ?? [];
   return (
     <FeatureOverview
-      title="概览"
-      description="查看上游连接、凭据与商品同步状态。"
+      title={tr('overview.title')}
+      description={tr('overview.description')}
       unavailable={!data}
       labels={{
-        unavailable: '暂时无法读取上游连接状态。',
-        manageTitle: '上游管理',
-        manageDescription: '管理连接、凭据、同步和定价规则。',
-        activityDescription: '最近上游连接的同步状态。',
-        empty: '还没有上游连接。',
+        unavailable: tr('overview.unavailable'),
+        manageTitle: tr('overview.manageTitle'),
+        manageDescription: tr('overview.manageDescription'),
+        activityDescription: tr('overview.activityDescription'),
+        empty: tr('overview.empty'),
       }}
       metrics={[
-        { label: '上游连接', value: connections.length },
+        { label: tr('overview.metricConnections'), value: connections.length },
         {
-          label: '已启用',
+          label: tr('overview.metricEnabled'),
           value: connections.filter((item) => item.enabled).length,
         },
         {
-          label: '已配置凭据',
+          label: tr('overview.metricCredentials'),
           value: connections.filter((item) => item.credentialsConfigured).length,
         },
       ]}
       links={[
         {
-          label: '上游实例',
-          description: '查看所有已有实例及商品关联、用户归属。',
+          label: tr('overview.linkInstances'),
+          description: tr('overview.linkInstancesDescription'),
           href: '/admin/plugin/zjmf-upstream/instances',
         },
         {
-          label: '上游连接',
-          description: '管理连接、凭据、同步和定价规则。',
+          label: tr('overview.linkConnections'),
+          description: tr('overview.manageDescription'),
           href: '/admin/plugin/zjmf-upstream/connections',
         },
       ]}
       activity={{
-        title: '同步状态',
+        title: tr('overview.activityTitle'),
         items: connections.slice(0, 5).map((item) => ({
           label: item.name,
           detail: item.lastSyncedAt
-            ? new Date(item.lastSyncedAt).toLocaleString('zh-CN')
-            : '尚未同步',
+            ? new Date(item.lastSyncedAt).toLocaleString(props.locale ?? 'zh-CN')
+            : tr('overview.neverSynced'),
         })),
       }}
     />

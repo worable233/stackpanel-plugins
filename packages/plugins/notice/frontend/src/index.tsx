@@ -1,6 +1,7 @@
 import type { FinderProvider, FrontendPackage, FrontendPageProps } from '@stackpanel/sdk';
 import type { ReactElement } from 'react';
 import { z } from 'zod';
+import { messages, t } from './i18n.js';
 
 const announcementSchema = z.object({
   id: z.string(),
@@ -16,13 +17,14 @@ const listSchema = z.object({ announcements: z.array(announcementSchema) });
 
 /** Public page rendered by the web shell under /notice. */
 function NoticePage(props: FrontendPageProps): ReactElement {
+  const tr = t(props.locale);
   const result = props.data.announcements as z.infer<typeof listSchema> | undefined;
   const announcements = result?.announcements ?? [];
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
       <div>
         <h1 className="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">
-          站点公告
+          {tr('page.title')}
         </h1>
       </div>
       {announcements.length ? (
@@ -45,7 +47,7 @@ function NoticePage(props: FrontendPageProps): ReactElement {
           ))}
         </ul>
       ) : (
-        <p className="mt-8 text-sm text-muted-foreground">暂无公告。</p>
+        <p className="mt-8 text-sm text-muted-foreground">{tr('page.empty')}</p>
       )}
     </main>
   );
@@ -61,6 +63,8 @@ const noticeFinders: Record<string, FinderProvider> = {
 };
 
 export const frontend: FrontendPackage = {
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  messages,
   finders: noticeFinders,
   pages: [
     {
@@ -77,6 +81,7 @@ export const frontend: FrontendPackage = {
         method: 'POST',
         path: '/notice/admin/announcements',
         permission: 'notice.admin',
+        successFeedback: { messageKey: 'feedback.created' },
         input: [
           { name: 'title', type: 'string', required: true, maxLength: 191 },
           { name: 'content', type: 'string', required: true, maxLength: 5000 },
@@ -89,6 +94,8 @@ export const frontend: FrontendPackage = {
         method: 'PATCH',
         path: '/notice/admin/announcements/:id',
         permission: 'notice.admin',
+        // The list row already shows the new published state.
+        silent: true,
         input: [
           { name: 'id', type: 'string', required: true, maxLength: 191 },
           { name: 'published', type: 'boolean', required: true },
@@ -99,6 +106,7 @@ export const frontend: FrontendPackage = {
         method: 'DELETE',
         path: '/notice/admin/announcements/:id',
         permission: 'notice.admin',
+        successFeedback: { messageKey: 'feedback.deleted' },
         input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
       },
     ],
@@ -107,7 +115,7 @@ export const frontend: FrontendPackage = {
         path: '/overview',
         component: 'admin/overview',
         permission: 'notice.admin',
-        nav: { label: '公告', group: '内容', order: 40 },
+        nav: { labelKey: 'nav.label', groupKey: 'nav.group', order: 40 },
         data: [{ finder: 'notice.adminList', as: 'announcements' }],
       },
     ],

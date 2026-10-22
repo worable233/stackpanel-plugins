@@ -1,0 +1,21 @@
+{
+  "nav.label": "公告",
+  "nav.group": "内容",
+  "page.title": "站点公告",
+  "page.empty": "暂无公告。",
+  "admin.title": "站点公告",
+  "admin.field.title": "标题",
+  "admin.field.content": "内容",
+  "admin.field.sortOrder": "排序（小值在前）",
+  "admin.field.status": "状态",
+  "admin.state.published": "发布",
+  "admin.state.draft": "草稿",
+  "admin.badge.published": "已发布",
+  "admin.badge.draft": "草稿",
+  "admin.submit": "发布公告",
+  "admin.unpublish": "下架",
+  "admin.delete": "删除",
+  "admin.empty": "还没有公告，先发布第一条。",
+  "feedback.created": "公告已发布",
+  "feedback.deleted": "公告已删除"
+}

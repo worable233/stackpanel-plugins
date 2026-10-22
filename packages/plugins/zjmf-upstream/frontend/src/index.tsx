@@ -1,5 +1,6 @@
 import type { FinderContext, FrontendPackage } from '@stackpanel/sdk';
 import { z } from 'zod';
+import { messages } from './i18n.js';
 
 const upstreamListSchema = z.object({
   secretsEnabled: z.boolean(),
@@ -63,6 +64,8 @@ const finders = {
 };
 
 export const frontend: FrontendPackage = {
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  messages,
   finders,
   ui: {
     actions: [
@@ -71,6 +74,7 @@ export const frontend: FrontendPackage = {
         method: 'POST',
         path: '/zjmf-upstream/admin/upstreams',
         permission: 'zjmf-upstream.admin',
+        successFeedback: { messageKey: 'feedback.created' },
         input: [
           { name: 'name', type: 'string', required: true, maxLength: 191 },
           { name: 'baseUrl', type: 'string', required: true, maxLength: 191 },
@@ -108,6 +112,7 @@ export const frontend: FrontendPackage = {
         path: '/zjmf-upstream/admin/upstreams/sync',
         permission: 'zjmf-upstream.admin',
         successFeedback: {
+          messageKey: 'action.syncSuccess',
           message: '同步完成：已更新 {updated} 个商品，跳过 {skipped} 个。',
           params: {
             updated: 'updated',
@@ -121,6 +126,7 @@ export const frontend: FrontendPackage = {
         method: 'PATCH',
         path: '/zjmf-upstream/admin/upstreams/:id',
         permission: 'zjmf-upstream.admin',
+        successFeedback: { messageKey: 'feedback.updated' },
         input: [
           { name: 'id', type: 'string', required: true, maxLength: 191 },
           { name: 'name', type: 'string', required: true, maxLength: 191 },
@@ -142,6 +148,7 @@ export const frontend: FrontendPackage = {
         method: 'DELETE',
         path: '/zjmf-upstream/admin/upstreams/:id',
         permission: 'zjmf-upstream.admin',
+        successFeedback: { messageKey: 'feedback.deleted' },
         input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
       },
     ],
@@ -150,21 +157,21 @@ export const frontend: FrontendPackage = {
         path: '/instances',
         component: 'admin/instances',
         permission: 'zjmf-upstream.admin',
-        nav: { label: '上游实例', group: '上游', order: 20 },
+        nav: { labelKey: 'nav.instances', groupKey: 'nav.group', order: 20 },
         data: [{ finder: 'zjmf-upstream.instances', as: 'inventory' }],
       },
       {
         path: '/overview',
         component: 'admin/summary',
         permission: 'zjmf-upstream.admin',
-        nav: { label: '概览', group: '上游', order: 0 },
+        nav: { labelKey: 'nav.overview', groupKey: 'nav.group', order: 0 },
         data: [{ finder: 'zjmf-upstream.upstreams', as: 'upstreams' }],
       },
       {
         path: '/connections',
         component: 'admin/overview',
         permission: 'zjmf-upstream.admin',
-        nav: { label: '上游连接', group: '上游', order: 10 },
+        nav: { labelKey: 'nav.connections', groupKey: 'nav.group', order: 10 },
         data: [{ finder: 'zjmf-upstream.upstreams', as: 'upstreams' }],
       },
     ],

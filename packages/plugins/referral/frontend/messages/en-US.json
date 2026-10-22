@@ -89,5 +89,8 @@
   "admin.records.colState": "Status",
   "admin.records.colTime": "Time",
   "admin.records.empty": "No attribution records yet.",
-  "admin.adjust.note": "Note"
+  "admin.adjust.note": "Note",
+  "feedback.codeCreated": "Invite code created",
+  "feedback.configSaved": "Settings saved",
+  "feedback.adjusted": "Balance adjusted"
 }

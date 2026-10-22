@@ -1,0 +1,30 @@
+name: i18n
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  catalogs:
+    name: Package message catalogs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 本仓库无法独立 `pnpm install`（插件以 workspace 协议引用内核包），
+      # 而这两道门禁只需要 `opencc-js` 一个纯 JS 依赖。
+      - name: Install catalog tooling
+        run: >-
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund
+          opencc-js@^1.4.2
+
+      - name: Check key / placeholder / reference parity
+        run: node scripts/check-package-catalogs.mjs
+
+      - name: Check Traditional Chinese catalogs are up to date
+        run: node scripts/i18n-hant.mjs --check

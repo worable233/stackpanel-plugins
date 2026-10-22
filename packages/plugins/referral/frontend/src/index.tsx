@@ -286,7 +286,7 @@ const referralFinders: Record<string, FinderProvider> = {
 };
 
 export const frontend: FrontendPackage = {
-  locales: ['zh-CN', 'en-US'],
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
   messages,
   finders: referralFinders,
   pages: [],
@@ -298,6 +298,7 @@ export const frontend: FrontendPackage = {
         method: 'POST',
         path: '/referral/codes',
         permission: 'store.referral',
+        successFeedback: { messageKey: 'feedback.codeCreated' },
         input: [
           { name: 'label', type: 'string', maxLength: 40 },
           { name: 'rewardAmount', type: 'integer', min: 0, max: 2000000000 },
@@ -308,6 +309,8 @@ export const frontend: FrontendPackage = {
         method: 'PATCH',
         path: '/referral/codes/:id',
         permission: 'store.referral',
+        // The code list already reflects the new state.
+        silent: true,
         input: [
           { name: 'id', type: 'string', required: true, maxLength: 191 },
           { name: 'state', type: 'string', required: true, maxLength: 16 },
@@ -318,6 +321,7 @@ export const frontend: FrontendPackage = {
         method: 'POST',
         path: '/store/admin/referrals/config',
         permission: 'store.admin',
+        successFeedback: { messageKey: 'feedback.configSaved' },
         input: [
           { name: 'enabled', type: 'boolean', required: true },
           { name: 'trigger', type: 'string', required: true, maxLength: 32 },
@@ -335,6 +339,7 @@ export const frontend: FrontendPackage = {
         method: 'POST',
         path: '/store/admin/referrals/adjustments',
         permission: 'store.admin',
+        successFeedback: { messageKey: 'feedback.adjusted' },
         input: [
           { name: 'email', type: 'string', required: true, maxLength: 191 },
           { name: 'amount', type: 'integer', required: true, min: -2000000000, max: 2000000000 },

@@ -1,5 +1,6 @@
 import type { FinderContext, FrontendPackage } from '@stackpanel/sdk';
 import { z } from 'zod';
+import { messages } from './i18n.js';
 
 const statusSchema = z.object({
   configured: z.boolean(),
@@ -17,6 +18,8 @@ const finders = {
 };
 
 export const frontend: FrontendPackage = {
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  messages,
   finders,
   ui: {
     actions: [
@@ -25,6 +28,8 @@ export const frontend: FrontendPackage = {
         method: 'POST',
         path: '/epay/admin/config',
         permission: 'epay.admin',
+        // The admin form submits directly and toasts its own result.
+        silent: true,
         input: [
           { name: 'baseUrl', type: 'string', required: true, maxLength: 191 },
           { name: 'pid', type: 'string', required: true, maxLength: 64 },
@@ -49,14 +54,14 @@ export const frontend: FrontendPackage = {
         path: '/settings',
         component: 'admin/overview',
         permission: 'epay.admin',
-        nav: { label: '配置', group: '易支付', order: 20 },
+        nav: { labelKey: 'nav.settings', groupKey: 'nav.group', order: 20 },
         data: [{ finder: 'epay.status', as: 'status' }],
       },
       {
         path: '/overview',
         component: 'admin/summary',
         permission: 'epay.admin',
-        nav: { label: '概览', group: '易支付', order: 10 },
+        nav: { labelKey: 'nav.overview', groupKey: 'nav.group', order: 10 },
         data: [{ finder: 'epay.status', as: 'status' }],
       },
     ],

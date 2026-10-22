@@ -2,6 +2,7 @@ import { ArticleBody, ErrorPage } from '@stackpanel/ui';
 import type { FinderProvider, FrontendPackage, FrontendPageProps } from '@stackpanel/sdk';
 import { z } from 'zod';
 import type { CmsKind } from './shared.js';
+import { messages } from './i18n.js';
 
 /**
  * CMS admin console — server-side finders and route/action declarations.
@@ -145,6 +146,8 @@ const cmsFinders: Record<string, FinderProvider> = {
 };
 
 export const frontend: FrontendPackage = {
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  messages,
   finders: cmsFinders,
   pages: [
     {
@@ -159,7 +162,7 @@ export const frontend: FrontendPackage = {
       {
         path: '/overview',
         component: 'admin/summary',
-        nav: { label: '概览', group: '内容', order: 0 },
+        nav: { labelKey: 'nav.overview', groupKey: 'nav.group', order: 0 },
         data: [
           { finder: 'cms.adminPosts', as: 'posts' },
           { finder: 'cms.adminPages', as: 'pages' },
@@ -170,19 +173,19 @@ export const frontend: FrontendPackage = {
         path: '/posts',
         component: 'admin/posts',
         data: [{ finder: 'cms.adminPosts', as: 'list' }],
-        nav: { label: '文章', group: '内容', order: 10 },
+        nav: { labelKey: 'nav.posts', groupKey: 'nav.group', order: 10 },
       },
       {
         path: '/pages',
         component: 'admin/pages',
         data: [{ finder: 'cms.adminPages', as: 'list' }],
-        nav: { label: '页面', group: '内容', order: 20 },
+        nav: { labelKey: 'nav.pages', groupKey: 'nav.group', order: 20 },
       },
       {
         path: '/redirects',
         component: 'admin/redirects',
         data: [{ finder: 'cms.adminRedirects', as: 'list' }],
-        nav: { label: '重定向', group: '内容', order: 30 },
+        nav: { labelKey: 'nav.redirects', groupKey: 'nav.group', order: 30 },
       },
       // `/new` must precede `/:id` so it is not captured as an id.
       { path: '/posts/new', component: 'admin/post-new' },

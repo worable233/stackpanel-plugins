@@ -1,5 +1,6 @@
 import type { FinderProvider, FrontendPackage } from '@stackpanel/sdk';
 import { z } from 'zod';
+import { messages } from './i18n.js';
 
 const invoiceItemSchema = z.object({
   description: z.string(),
@@ -131,6 +132,8 @@ const invoiceFinders: Record<string, FinderProvider> = {
 };
 
 export const frontend: FrontendPackage = {
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  messages,
   finders: invoiceFinders,
   ui: {
     actions: [
@@ -175,6 +178,8 @@ export const frontend: FrontendPackage = {
           { name: 'paymentInfo', type: 'string', maxLength: 2000 },
         ],
         redirect: { responsePath: 'nextPath' },
+        // The redirect itself is the receipt.
+        silent: true,
       },
       {
         id: 'invoice.update',
@@ -218,12 +223,15 @@ export const frontend: FrontendPackage = {
           { name: 'paymentInfo', type: 'string', maxLength: 2000 },
         ],
         redirect: { responsePath: 'nextPath' },
+        // The redirect itself is the receipt.
+        silent: true,
       },
       {
         id: 'invoice.delete',
         method: 'DELETE',
         path: '/invoice/admin/invoices/:id',
         permission: 'invoice.admin',
+        successFeedback: { messageKey: 'feedback.deleted' },
         input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
       },
     ],
@@ -232,7 +240,7 @@ export const frontend: FrontendPackage = {
         path: '/invoices',
         component: 'admin/invoices',
         permission: 'invoice.admin',
-        nav: { label: '发票', group: '财务', order: 20 },
+        nav: { labelKey: 'nav.label', groupKey: 'nav.group', order: 20 },
         data: [{ finder: 'invoice.adminInvoices', as: 'invoices' }],
       },
       {

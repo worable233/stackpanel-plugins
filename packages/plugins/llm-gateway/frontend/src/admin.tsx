@@ -51,6 +51,7 @@ import {
   protocolLabel,
   shortTime,
 } from './ui';
+import { t } from './i18n.js';
 
 /**
  * 管理端交互页面（客户端 bundle）。
@@ -64,6 +65,7 @@ import {
  */
 
 type AccountRow = z.infer<typeof accountSchema>;
+type Translator = (key: string, params?: Record<string, string | number>) => string;
 
 const MODEL_LIMIT = 500;
 
@@ -74,23 +76,25 @@ function asStringArray(value: unknown): string[] {
 }
 
 function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
+  const locale = props.locale ?? 'zh-CN';
   const data = props.data as { overview?: z.infer<typeof adminOverviewSchema> };
   const overview = data.overview;
   return (
     <main className="space-y-8">
-      <PageHeader title="概览" />
+      <PageHeader title={tr('admin.overview.title')} />
       {overview ? (
         <Stats
           items={[
-            { label: '上游账号', value: String(overview.accounts) },
-            { label: '用户密钥', value: String(overview.keys) },
-            { label: '请求数', value: String(overview.summary.requests) },
-            { label: '营收', value: money(overview.summary.amount) },
+            { label: tr('admin.overview.accounts'), value: String(overview.accounts) },
+            { label: tr('admin.overview.keys'), value: String(overview.keys) },
+            { label: tr('admin.overview.requests'), value: String(overview.summary.requests) },
+            { label: tr('admin.overview.revenue'), value: money(overview.summary.amount) },
           ]}
         />
       ) : null}
 
-      <Section icon={<TrendingUp />} title="模型消耗 Top 10">
+      <Section icon={<TrendingUp />} title={tr('admin.overview.topModels')}>
         {overview?.topModels.length ? (
           <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
             {overview.topModels.map((row) => (
@@ -100,7 +104,9 @@ function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
               >
                 <span className="min-w-0 truncate font-medium">{row.model}</span>
                 <div className="flex shrink-0 items-center gap-4 text-xs text-muted-foreground">
-                  <span className="tabular-nums">{row.requests} 次</span>
+                  <span className="tabular-nums">
+                    {tr('admin.overview.topModelRequests', { count: row.requests })}
+                  </span>
                   <span className="hidden tabular-nums sm:inline">{row.totalTokens} token</span>
                   <span className="font-mono text-sm font-semibold text-foreground tabular-nums">
                     {money(row.amount)}
@@ -110,11 +116,15 @@ function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
             ))}
           </ul>
         ) : (
-          <Empty text="暂无数据。" icon={<TrendingUp />} />
+          <Empty text={tr('admin.overview.empty')} icon={<TrendingUp />} />
         )}
       </Section>
 
-      <Section icon={<History />} title="最近请求" description="最近 100 条请求流水。">
+      <Section
+        icon={<History />}
+        title={tr('admin.overview.recentTitle')}
+        description={tr('admin.overview.recentDescription')}
+      >
         {overview?.logs.length ? (
           <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
             {overview.logs.map((log) => (
@@ -124,7 +134,9 @@ function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">{log.model}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{shortTime(log.createdAt)}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {shortTime(log.createdAt, locale)}
+                  </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-4">
                   <span className="text-xs text-muted-foreground tabular-nums">
@@ -137,7 +149,7 @@ function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
                         : 'text-xs text-destructive'
                     }
                   >
-                    {log.status === 'SUCCESS' ? '成功' : '失败'}
+                    {log.status === 'SUCCESS' ? tr('common.success') : tr('common.failed')}
                   </span>
                   <span className="font-mono font-semibold tabular-nums">{money(log.amount)}</span>
                 </div>
@@ -145,7 +157,7 @@ function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
             ))}
           </ul>
         ) : (
-          <Empty text="暂无请求。" icon={<History />} />
+          <Empty text={tr('admin.overview.recentEmpty')} icon={<History />} />
         )}
       </Section>
     </main>
@@ -153,6 +165,7 @@ function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
 }
 
 function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const data = props.data as {
     accounts?: z.infer<typeof adminAccountsSchema>;
     prices?: z.infer<typeof adminPricesSchema>;
@@ -162,11 +175,11 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="上游账号与定价" />
+      <PageHeader title={tr('admin.accounts.title')} />
       <Section
         icon={<Server />}
-        title="上游账号池"
-        description="每个账号独立配置可用模型；同优先级内按权重随机调度，maxConcurrency 为 0 表示不限并发。"
+        title={tr('admin.accounts.poolTitle')}
+        description={tr('admin.accounts.poolDescription')}
         action={
           <Button
             type="button"
@@ -174,7 +187,7 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
             render={<Link href="/admin/plugin/llm-gateway/accounts/new" />}
           >
             <Plus className="size-4" />
-            新增账号
+            {tr('admin.accounts.addAccount')}
           </Button>
         }
       >
@@ -197,7 +210,7 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
                             : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
                         }
                       >
-                        {account.status === 'ACTIVE' ? '启用' : '停用'}
+                        {account.status === 'ACTIVE' ? tr('common.enabled') : tr('common.disabled')}
                       </span>
                       <span className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-normal text-muted-foreground">
                         {protocolLabel(account.provider)}
@@ -207,9 +220,14 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
                       {account.baseUrl}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {models.length ? `${models.length} 个模型` : '全部模型'} · 优先级{' '}
-                      {account.priority} · 权重 {account.weight} · 并发{' '}
-                      {account.maxConcurrency || '∞'}
+                      {tr('admin.accounts.meta', {
+                        models: models.length
+                          ? tr('admin.accounts.modelCount', { count: models.length })
+                          : tr('admin.accounts.allModels'),
+                        priority: account.priority,
+                        weight: account.weight,
+                        concurrency: account.maxConcurrency || '∞',
+                      })}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
@@ -223,7 +241,7 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
                       }
                     >
                       <Pencil className="size-3.5" />
-                      编辑
+                      {tr('common.edit')}
                     </Button>
                     <form action={props.actions['llm-gateway.set-account-status']}>
                       <input type="hidden" name="id" value={account.id} />
@@ -233,7 +251,7 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
                         value={account.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'}
                       />
                       <Button type="submit" variant="ghost" size="sm">
-                        {account.status === 'ACTIVE' ? '停用' : '启用'}
+                        {account.status === 'ACTIVE' ? tr('common.disabled') : tr('common.enabled')}
                       </Button>
                     </form>
                     <form action={props.actions['llm-gateway.delete-account']}>
@@ -248,14 +266,14 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
             })}
           </ul>
         ) : (
-          <Empty text="还没有上游账号。点击右上角「新增账号」添加一个。" icon={<Server />} />
+          <Empty text={tr('admin.accounts.empty')} icon={<Server />} />
         )}
       </Section>
 
       <Section
         icon={<Tags />}
-        title="模型定价"
-        description="用户模型名可自定义，并可绑定到上游真实存在的模型；价格为「分 / 百万 token」，model 填 * 作为兜底价。缓存价留 0 表示按输入价计，倍率 100 = 1x。能力标记用于用户端展示。"
+        title={tr('admin.accounts.pricingTitle')}
+        description={tr('admin.accounts.pricingDescription')}
         action={
           <Button
             type="button"
@@ -263,7 +281,7 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
             render={<Link href="/admin/plugin/llm-gateway/prices/new" />}
           >
             <Plus className="size-4" />
-            新增定价
+            {tr('admin.accounts.addPrice')}
           </Button>
         }
       >
@@ -279,7 +297,7 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
                     {price.model}
                     {price.upstreamModel && price.upstreamModel !== price.model ? (
                       <span className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-normal text-muted-foreground">
-                        → 上游 {price.upstreamModel}
+                        {tr('admin.accounts.upstreamBadge', { model: price.upstreamModel })}
                       </span>
                     ) : null}
                     <span
@@ -289,19 +307,22 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
                           : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
                       }
                     >
-                      {price.enabled ? '启用' : '停用'}
+                      {price.enabled ? tr('common.enabled') : tr('common.disabled')}
                     </span>
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-                    输入 {money(price.inputPrice)} · 输出 {money(price.outputPrice)} · 缓存读{' '}
-                    {price.cacheReadPrice ? money(price.cacheReadPrice) : '—'} · 缓存写{' '}
-                    {price.cacheWritePrice ? money(price.cacheWritePrice) : '—'}
+                    {tr('admin.accounts.priceMeta', {
+                      input: money(price.inputPrice),
+                      output: money(price.outputPrice),
+                      cacheRead: price.cacheReadPrice ? money(price.cacheReadPrice) : '—',
+                      cacheWrite: price.cacheWritePrice ? money(price.cacheWritePrice) : '—',
+                    })}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {price.capabilities.length
-                      ? price.capabilities.map((item) => capabilityLabel(item)).join(' / ')
+                      ? price.capabilities.map((item) => capabilityLabel(item, tr)).join(' / ')
                       : '—'}{' '}
-                    · 倍率 {price.multiplier}%
+                    · {tr('admin.accounts.priceMultiplier', { multiplier: price.multiplier })}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -313,7 +334,7 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
                     render={<Link href={`/admin/plugin/llm-gateway/prices/${price.id}/edit`} />}
                   >
                     <Pencil className="size-3.5" />
-                    编辑
+                    {tr('common.edit')}
                   </Button>
                   <form action={props.actions['llm-gateway.delete-price']}>
                     <input type="hidden" name="id" value={price.id} />
@@ -326,7 +347,7 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
             ))}
           </ul>
         ) : (
-          <Empty text="还没有定价。添加一条开始计费。" icon={<Tags />} />
+          <Empty text={tr('admin.accounts.priceEmpty')} icon={<Tags />} />
         )}
       </Section>
     </div>
@@ -334,6 +355,7 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
 }
 
 function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const data = props.data as {
     prices?: z.infer<typeof adminPricesSchema>;
     accounts?: z.infer<typeof adminAccountsSchema>;
@@ -365,12 +387,12 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
         models?: unknown;
       } | null;
       if (!response.ok || !json || !Array.isArray(json.models))
-        throw new Error(`拉取失败（${response.status}）`);
+        throw new Error(tr('common.fetchFailedStatus', { status: response.status }));
       const next = json.models.filter((item): item is string => typeof item === 'string');
-      if (!next.length) throw new Error('上游未返回任何模型');
+      if (!next.length) throw new Error(tr('common.noUpstreamModels'));
       setModels((current) => Array.from(new Set([...current, ...next])).sort());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '拉取失败');
+      setError(cause instanceof Error ? cause.message : tr('common.fetchFailed'));
     } finally {
       setLoadingCatalog(false);
     }
@@ -380,8 +402,8 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
     <main className="flex flex-col gap-6">
       <PageHeader
         backHref="/admin/plugin/llm-gateway/accounts"
-        backLabel="返回账号与定价"
-        title={priceId ? '编辑模型定价' : '新增模型定价'}
+        backLabel={tr('admin.editor.backToAccounts')}
+        title={priceId ? tr('admin.editor.priceTitleEdit') : tr('admin.editor.priceTitleNew')}
         actions={
           <>
             <Button
@@ -390,7 +412,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
               onClick={() => router.push('/admin/plugin/llm-gateway/accounts')}
               disabled={saving}
             >
-              取消
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -402,14 +424,14 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
               ) : (
                 <Save data-icon="inline-start" />
               )}
-              {saving ? '保存中…' : '保存定价'}
+              {saving ? tr('common.saving') : tr('admin.editor.savePrice')}
             </Button>
           </>
         }
       />
       {priceId && !editing ? (
         <p role="alert" className="text-sm text-muted-foreground">
-          该模型定价不存在或已被删除，请返回列表。
+          {tr('admin.editor.priceMissing')}
         </p>
       ) : (
         <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -427,7 +449,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
                 router.push('/admin/plugin/llm-gateway/accounts');
                 router.refresh();
               } catch (cause) {
-                setError(cause instanceof Error ? cause.message : '保存失败，请重试');
+                setError(cause instanceof Error ? cause.message : tr('common.saveFailed'));
               } finally {
                 setSaving(false);
               }
@@ -439,24 +461,24 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
             ) : null}
             <Card>
               <CardHeader>
-                <SectionTitle>模型配置</SectionTitle>
+                <SectionTitle>{tr('admin.editor.modelConfig')}</SectionTitle>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
                   <Field>
-                    <Label htmlFor="price-model-page">用户模型名（对外展示 / 调用）</Label>
+                    <Label htmlFor="price-model-page">{tr('admin.editor.userModel')}</Label>
                     <Input
                       id="price-model-page"
                       name="model"
                       required
                       readOnly={editing !== null}
                       defaultValue={editing?.model ?? ''}
-                      placeholder="例如 deepseek-chat 或 *"
+                      placeholder={tr('admin.editor.userModelPlaceholder')}
                     />
-                    <FieldDescription>填 * 作为兜底价；编辑时模型名不可修改。</FieldDescription>
+                    <FieldDescription>{tr('admin.editor.userModelHelp')}</FieldDescription>
                   </Field>
                   <Field>
-                    <Label htmlFor="price-upstream-page">绑定上游模型（实际转发）</Label>
+                    <Label htmlFor="price-upstream-page">{tr('admin.editor.upstreamModel')}</Label>
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <Input
                         id="price-upstream-page"
@@ -464,7 +486,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
                         list="upstream-model-options-page"
                         value={upstreamModel}
                         onChange={(event) => setUpstreamModel(event.target.value)}
-                        placeholder="留空 = 与用户模型名相同"
+                        placeholder={tr('admin.editor.upstreamModelPlaceholder')}
                         className="flex-1"
                       />
                       <Button
@@ -477,7 +499,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
                           data-icon="inline-start"
                           className={loadingCatalog ? 'animate-spin' : undefined}
                         />
-                        从上游拉取
+                        {tr('admin.editor.fetchFromUpstream')}
                       </Button>
                     </div>
                     <datalist id="upstream-model-options-page">
@@ -491,31 +513,31 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
             </Card>
             <Card>
               <CardHeader>
-                <SectionTitle>计费设置</SectionTitle>
-                <CardDescription>价格单位为分 / 百万 token。</CardDescription>
+                <SectionTitle>{tr('admin.editor.billingSettings')}</SectionTitle>
+                <CardDescription>{tr('admin.editor.billingUnit')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
                   <div className="grid gap-5 sm:grid-cols-2">
                     {(
                       [
-                        ['inputPrice', '输入价（分 / 1M token）', editing?.inputPrice ?? 0],
-                        ['outputPrice', '输出价（分 / 1M token）', editing?.outputPrice ?? 0],
+                        ['inputPrice', 'admin.editor.inputPrice', editing?.inputPrice ?? 0],
+                        ['outputPrice', 'admin.editor.outputPrice', editing?.outputPrice ?? 0],
                         [
                           'cacheReadPrice',
-                          '缓存读价（分 / 1M，0=按输入价）',
+                          'admin.editor.cacheReadPrice',
                           editing?.cacheReadPrice ?? 0,
                         ],
                         [
                           'cacheWritePrice',
-                          '缓存写价（分 / 1M，0=按输入价）',
+                          'admin.editor.cacheWritePrice',
                           editing?.cacheWritePrice ?? 0,
                         ],
-                        ['multiplier', '倍率（%）', editing?.multiplier ?? 100],
+                        ['multiplier', 'admin.editor.multiplier', editing?.multiplier ?? 100],
                       ] as const
-                    ).map(([name, label, value]) => (
+                    ).map(([name, labelKey, value]) => (
                       <Field key={name}>
-                        <Label htmlFor={`price-${name}-page`}>{label}</Label>
+                        <Label htmlFor={`price-${name}-page`}>{tr(labelKey)}</Label>
                         <Input
                           id={`price-${name}-page`}
                           name={name}
@@ -533,11 +555,11 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
             </Card>
             <Card>
               <CardHeader>
-                <SectionTitle>模型能力</SectionTitle>
+                <SectionTitle>{tr('admin.editor.capabilities')}</SectionTitle>
               </CardHeader>
               <CardContent>
                 <FieldSet>
-                  <FieldLegend className="sr-only">模型能力</FieldLegend>
+                  <FieldLegend className="sr-only">{tr('admin.editor.capabilities')}</FieldLegend>
                   <div className="flex flex-wrap gap-x-5 gap-y-3">
                     {CAPABILITY_OPTIONS.map((option) => (
                       <label key={option.value} className="flex items-center gap-2 text-sm">
@@ -548,7 +570,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
                           defaultChecked={editing?.capabilities.includes(option.value) ?? false}
                           className="size-4 accent-primary"
                         />
-                        {option.label}
+                        {tr(option.labelKey)}
                       </label>
                     ))}
                   </div>
@@ -563,13 +585,10 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
           </form>
           <Card className="xl:sticky xl:top-24">
             <CardHeader>
-              <SectionTitle>定价说明</SectionTitle>
+              <SectionTitle>{tr('admin.editor.priceNotes')}</SectionTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">
-                倍率 100% 表示原价。缓存价格设为 0
-                时按输入价计费。修改仅影响后续请求，不改变历史账单。
-              </p>
+              <p className="text-sm text-muted-foreground">{tr('admin.editor.priceNotesBody')}</p>
               {editing ? <p className="mt-4 break-all font-mono text-sm">{editing.model}</p> : null}
             </CardContent>
           </Card>
@@ -580,6 +599,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
 }
 
 function GatewayAdminAccountEditor(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const data = props.data as { accounts?: z.infer<typeof adminAccountsSchema> };
   const accountId = props.params?.id;
   const editing = accountId
@@ -594,12 +614,12 @@ function GatewayAdminAccountEditor(props: AdminPageComponentProps): ReactElement
     <main className="flex flex-col gap-6">
       <PageHeader
         backHref="/admin/plugin/llm-gateway/accounts"
-        backLabel="返回账号列表"
-        title={editing ? '编辑账号' : '新增上游账号'}
+        backLabel={tr('admin.editor.backToAccountList')}
+        title={editing ? tr('admin.editor.accountTitleEdit') : tr('admin.editor.accountTitleNew')}
         actions={
           <>
             <Button type="button" variant="ghost" onClick={returnToList} disabled={saving}>
-              取消
+              {tr('common.cancel')}
             </Button>
             <Button type="submit" form="gateway-account-form" disabled={saving}>
               {saving ? (
@@ -607,7 +627,7 @@ function GatewayAdminAccountEditor(props: AdminPageComponentProps): ReactElement
               ) : (
                 <Save data-icon="inline-start" />
               )}
-              {saving ? '保存中…' : '保存账号'}
+              {saving ? tr('common.saving') : tr('admin.editor.saveAccount')}
             </Button>
           </>
         }
@@ -621,23 +641,34 @@ function GatewayAdminAccountEditor(props: AdminPageComponentProps): ReactElement
             updateAction={updateAction}
             onDone={returnToList}
             onPendingChange={setSaving}
+            tr={tr}
           />
         </div>
         <aside className="rounded-xl border bg-card p-5 xl:sticky xl:top-24">
-          <SectionTitle>账号概览</SectionTitle>
-          <p className="mt-1 text-sm text-muted-foreground">配置完成后用于模型请求转发。</p>
+          <SectionTitle>{tr('admin.editor.accountOverview')}</SectionTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {tr('admin.editor.accountOverviewDescription')}
+          </p>
           <dl className="mt-5 flex flex-col gap-4 text-sm">
             <div className="flex items-center justify-between">
-              <dt className="text-muted-foreground">状态</dt>
-              <dd>{editing?.status === 'DISABLED' ? '停用' : '启用'}</dd>
+              <dt className="text-muted-foreground">{tr('admin.editor.status')}</dt>
+              <dd>
+                {editing?.status === 'DISABLED' ? tr('common.disabled') : tr('common.enabled')}
+              </dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-muted-foreground">协议</dt>
-              <dd>{editing ? protocolLabel(editing.provider) : '待配置'}</dd>
+              <dt className="text-muted-foreground">{tr('admin.editor.protocol')}</dt>
+              <dd>
+                {editing ? protocolLabel(editing.provider) : tr('admin.editor.notConfigured')}
+              </dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-muted-foreground">模型</dt>
-              <dd>{editing ? asStringArray(editing.models).length || '全部' : '待配置'}</dd>
+              <dt className="text-muted-foreground">{tr('admin.editor.models')}</dt>
+              <dd>
+                {editing
+                  ? asStringArray(editing.models).length || tr('admin.editor.all')
+                  : tr('admin.editor.notConfigured')}
+              </dd>
             </div>
           </dl>
         </aside>
@@ -652,12 +683,14 @@ function AccountForm({
   updateAction,
   onDone,
   onPendingChange,
+  tr,
 }: {
   editing: AccountRow | null;
   createAction: (formData: FormData) => Promise<void>;
   updateAction: (formData: FormData) => Promise<void>;
   onDone: () => void;
   onPendingChange: (pending: boolean) => void;
+  tr: Translator;
 }): ReactElement {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -709,11 +742,11 @@ function AccountForm({
 
   async function fetchModels() {
     if (!baseUrl.trim()) {
-      setError('请先填写 Base URL');
+      setError(tr('admin.editor.missingBaseUrl'));
       return;
     }
     if (!editing && !apiKey.trim()) {
-      setError('请先填写上游 API Key');
+      setError(tr('admin.editor.missingApiKey'));
       return;
     }
     setFetching(true);
@@ -733,16 +766,17 @@ function AccountForm({
         models?: string[];
         error?: string;
       };
-      if (!response.ok) throw new Error(json.error ?? `拉取失败（${response.status}）`);
+      if (!response.ok)
+        throw new Error(json.error ?? tr('common.fetchFailedStatus', { status: response.status }));
       const models = Array.isArray(json.models) ? json.models : [];
       if (models.length === 0) {
-        setError('上游未返回任何模型');
+        setError(tr('common.noUpstreamModels'));
         return;
       }
       setAvailable((current) => Array.from(new Set([...current, ...models])).sort());
       setSelected(models.slice(0, MODEL_LIMIT));
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : '拉取失败');
+      setError(fetchError instanceof Error ? fetchError.message : tr('common.fetchFailed'));
     } finally {
       setFetching(false);
     }
@@ -751,15 +785,15 @@ function AccountForm({
   function submit() {
     if (isPending) return;
     if (!name.trim()) {
-      setError('请填写名称');
+      setError(tr('admin.editor.missingName'));
       return;
     }
     if (!baseUrl.trim()) {
-      setError('请填写 Base URL');
+      setError(tr('admin.editor.missingBaseUrl'));
       return;
     }
     if (!editing && !apiKey.trim()) {
-      setError('请填写上游 API Key');
+      setError(tr('admin.editor.missingApiKey'));
       return;
     }
     setError(null);
@@ -785,7 +819,7 @@ function AccountForm({
         }
         onDone();
       } catch {
-        setError('保存失败，请重试');
+        setError(tr('common.saveFailed'));
       } finally {
         onPendingChange(false);
       }
@@ -803,17 +837,17 @@ function AccountForm({
       }}
     >
       <div>
-        <SectionTitle>基础配置</SectionTitle>
-        <p className="mt-1 text-sm text-muted-foreground">填写上游连接信息和调度参数。</p>
+        <SectionTitle>{tr('admin.editor.basic')}</SectionTitle>
+        <p className="mt-1 text-sm text-muted-foreground">{tr('admin.editor.basicDescription')}</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="account-name">名称</Label>
+          <Label htmlFor="account-name">{tr('admin.editor.name')}</Label>
           <Input
             id="account-name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="OpenAI 主账号"
+            placeholder={tr('admin.editor.namePlaceholder')}
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -832,7 +866,7 @@ function AccountForm({
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="account-provider">上游协议</Label>
+          <Label htmlFor="account-provider">{tr('admin.editor.provider')}</Label>
           <Select
             id="account-provider"
             value={provider}
@@ -844,36 +878,34 @@ function AccountForm({
               </option>
             ))}
           </Select>
-          <p className="text-xs text-muted-foreground">
-            入口协议不同时会自动做协议转换；同协议优先直通。
-          </p>
+          <p className="text-xs text-muted-foreground">{tr('admin.editor.providerHelp')}</p>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="account-api-key">上游 API Key</Label>
+          <Label htmlFor="account-api-key">{tr('admin.editor.apiKey')}</Label>
           <Input
             id="account-api-key"
             type="password"
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
-            placeholder={editing ? '留空则保持原密钥' : 'sk-...'}
+            placeholder={editing ? tr('admin.editor.apiKeyKeep') : 'sk-...'}
           />
         </div>
         {editing ? (
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="account-status">状态</Label>
+            <Label htmlFor="account-status">{tr('admin.editor.status')}</Label>
             <Select
               id="account-status"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
             >
-              <option value="ACTIVE">启用</option>
-              <option value="DISABLED">停用</option>
+              <option value="ACTIVE">{tr('common.enabled')}</option>
+              <option value="DISABLED">{tr('common.disabled')}</option>
             </Select>
           </div>
         ) : null}
         <div className="grid grid-cols-3 gap-3 sm:col-span-2">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="account-priority">优先级</Label>
+            <Label htmlFor="account-priority">{tr('admin.editor.priority')}</Label>
             <Input
               id="account-priority"
               type="number"
@@ -882,7 +914,7 @@ function AccountForm({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="account-weight">权重</Label>
+            <Label htmlFor="account-weight">{tr('admin.editor.weight')}</Label>
             <Input
               id="account-weight"
               type="number"
@@ -892,7 +924,7 @@ function AccountForm({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="account-concurrency">最大并发（0=不限）</Label>
+            <Label htmlFor="account-concurrency">{tr('admin.editor.maxConcurrency')}</Label>
             <Input
               id="account-concurrency"
               type="number"
@@ -905,14 +937,14 @@ function AccountForm({
       </div>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <SectionTitle>可用模型</SectionTitle>
+          <SectionTitle>{tr('admin.editor.availableModels')}</SectionTitle>
           <p className="text-xs text-muted-foreground">
-            留空表示不限制；已选 {selected.length} 个。
+            {tr('admin.editor.availableModelsHelp', { count: selected.length })}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" size="sm" onClick={clearSelected}>
-            清空
+            {tr('admin.editor.clear')}
           </Button>
           <Button
             type="button"
@@ -926,7 +958,7 @@ function AccountForm({
             ) : (
               <RefreshCw className="size-3.5" />
             )}
-            从上游拉取
+            {tr('admin.editor.fetchFromUpstream')}
           </Button>
         </div>
       </div>
@@ -939,12 +971,12 @@ function AccountForm({
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="筛选模型"
+                placeholder={tr('admin.editor.filterModels')}
                 className="pl-8"
               />
             </div>
             <Button type="button" variant="outline" size="sm" onClick={selectAllVisible}>
-              全选
+              {tr('admin.editor.selectAll')}
             </Button>
           </div>
           <div className="flex max-h-56 flex-wrap gap-1.5 overflow-y-auto rounded-lg border bg-muted/20 p-2">
@@ -972,9 +1004,7 @@ function AccountForm({
           </div>
         </>
       ) : (
-        <p className="text-xs text-muted-foreground">
-          还没有模型清单。填好 Base URL / API Key 后点「从上游拉取」，或直接手动添加。
-        </p>
+        <p className="text-xs text-muted-foreground">{tr('admin.editor.modelsEmpty')}</p>
       )}
 
       <div className="flex items-center gap-2">
@@ -987,10 +1017,10 @@ function AccountForm({
               addManual();
             }
           }}
-          placeholder="手动添加模型（逗号分隔）"
+          placeholder={tr('admin.editor.manualPlaceholder')}
         />
         <Button type="button" variant="outline" size="sm" onClick={addManual}>
-          添加
+          {tr('admin.editor.add')}
         </Button>
       </div>
 

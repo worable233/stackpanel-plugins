@@ -55,6 +55,19 @@ pnpm --filter @stackpanel/plugin-<id> build
 pnpm --filter @stackpanel/api test
 ```
 
+## 多语言
+
+插件前端统一提供 `zh-CN` / `en-US` / `zh-TW` / `zh-HK` 四种语言。`zh-CN` 是唯一
+手写源，两种繁体由脚本生成。文案 key、`labelKey`/`titleKey`/`messageKey` 的用法与
+manifest 重建流程见 [docs/package-i18n.md](./docs/package-i18n.md)。
+
+提交前请跑：
+
+```bash
+pnpm i18n:hant     # 重新生成 zh-TW / zh-HK
+pnpm i18n:check    # 目录一致性与繁体同步
+```
+
 ## 代码规范
 
 - **TypeScript strict**，禁止 `any` 逃逸；不要用 `@ts-ignore` 掩盖类型问题。

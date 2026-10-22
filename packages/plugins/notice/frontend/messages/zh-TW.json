@@ -1,0 +1,21 @@
+{
+  "nav.label": "公告",
+  "nav.group": "內容",
+  "page.title": "站點公告",
+  "page.empty": "暫無公告。",
+  "admin.title": "站點公告",
+  "admin.field.title": "標題",
+  "admin.field.content": "內容",
+  "admin.field.sortOrder": "排序（小值在前）",
+  "admin.field.status": "狀態",
+  "admin.state.published": "釋出",
+  "admin.state.draft": "草稿",
+  "admin.badge.published": "已釋出",
+  "admin.badge.draft": "草稿",
+  "admin.submit": "釋出公告",
+  "admin.unpublish": "下架",
+  "admin.delete": "刪除",
+  "admin.empty": "還沒有公告，先發布第一條。",
+  "feedback.created": "公告已釋出",
+  "feedback.deleted": "公告已刪除"
+}

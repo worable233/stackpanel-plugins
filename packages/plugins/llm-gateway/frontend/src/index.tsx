@@ -55,15 +55,18 @@ import {
   capabilityLabel,
   formatTokens,
   keysSchema,
+  modelDisplayName,
   modelsText,
   money,
   publicPricesSchema,
+  rangeLabel,
   shortTime,
   unitPrice,
   usageSchema,
 } from './ui';
 import type { UsageRange } from './ui';
 import { UsageChart } from './usage-chart';
+import { messages, t } from './i18n.js';
 
 /**
  * 模型服务（llm-gateway）前端包（服务端 bundle）。
@@ -101,6 +104,7 @@ const finders: Record<string, FinderProvider> = {
 /* --------------------------------- 用户页 --------------------------------- */
 
 export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const data = props.data as {
     billing?: z.infer<typeof billingSchema>;
     usage?: z.infer<typeof usageSchema>;
@@ -121,7 +125,7 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
   const modelCount = byModel.length;
   const base = '/account/gateway';
 
-  const rangeLabel = RANGE_OPTIONS.find((option) => option.value === range)?.label ?? '';
+  const rangeLabelText = rangeLabel(range, tr);
 
   const href = (next: { range?: UsageRange; metric?: 'cost' | 'tokens' }): string => {
     const params = new URLSearchParams();
@@ -130,13 +134,19 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
     return `${base}?${params.toString()}`;
   };
 
-  const chartTitle = range === 'today' ? '今日用量趋势' : `${rangeLabel}用量趋势`;
+  const chartTitle =
+    range === 'today'
+      ? tr('overview.chartTitleToday')
+      : tr('overview.chartTitleRange', { range: rangeLabelText });
   const chartDesc =
-    range === 'today' ? '按小时统计的消费与 token 用量。' : '按日期统计的消费与 token 用量。';
+    range === 'today' ? tr('overview.chartDescToday') : tr('overview.chartDescRange');
 
   return (
     <main className="space-y-8">
-      <PageHeader title="概览" actions={<RangePicker range={range} href={href} />} />
+      <PageHeader
+        title={tr('overview.title')}
+        actions={<RangePicker range={range} href={href} tr={tr} />}
+      />
 
       {billing && !billing.enabled ? (
         <form
@@ -144,26 +154,29 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
           className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-3.5 text-sm"
         >
           <input type="hidden" name="enabled" value="true" />
-          <span className="text-amber-700 dark:text-amber-400">
-            API 计费尚未开启，开启后才能通过接口调用模型。
-          </span>
+          <span className="text-amber-700 dark:text-amber-400">{tr('overview.billingOff')}</span>
           <button
             type="submit"
             className="h-9 rounded-lg bg-foreground px-3 text-sm font-semibold text-background transition-opacity hover:opacity-90"
           >
-            开启计费
+            {tr('overview.enableBilling')}
           </button>
         </form>
       ) : null}
 
       {usage ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="可用余额" value={money(billing?.balance ?? 0)} />
-            <Stat label={`${rangeLabel}消费`} value={money(active?.summary.amount ?? 0)} />
-            <Stat label={`${rangeLabel}请求`} value={String(active?.summary.requests ?? 0)} />
+          <div className="grid gap-3 sm:grid-cols-3">
             <Stat
-              label={`${rangeLabel} Token`}
+              label={tr('overview.metricCost', { range: rangeLabelText })}
+              value={money(active?.summary.amount ?? 0)}
+            />
+            <Stat
+              label={tr('overview.metricRequests', { range: rangeLabelText })}
+              value={String(active?.summary.requests ?? 0)}
+            />
+            <Stat
+              label={tr('overview.metricTokens', { range: rangeLabelText })}
               value={formatTokens(active?.summary.totalTokens ?? 0)}
             />
           </div>
@@ -182,7 +195,7 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
                       : 'rounded-md px-3 py-1 text-muted-foreground hover:bg-muted'
                   }
                 >
-                  消费
+                  {tr('overview.metricCostShort')}
                 </Link>
                 <Link
                   href={href({ metric: 'tokens' })}
@@ -204,18 +217,18 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
                   value: metric === 'tokens' ? point.tokens : point.amount,
                 }))}
                 formatValue={metric === 'tokens' ? formatTokens : money}
-                metric={metric}
+                ariaLabel={tr('overview.chartAria')}
               />
             </div>
           </Section>
 
           <Section
             icon={<PieChart />}
-            title="按模型用量"
-            description={`${rangeLabel}各模型的请求、token 与消费。`}
+            title={tr('overview.byModelTitle')}
+            description={tr('overview.byModelDescription', { range: rangeLabelText })}
             action={
               <span className="rounded-full border bg-muted/40 px-2.5 py-0.5 text-xs text-muted-foreground tabular-nums">
-                {modelCount} 个模型
+                {tr('overview.modelCount', { count: modelCount })}
               </span>
             }
           >
@@ -227,9 +240,12 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
                     className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{modelLabel(row.model)}</p>
+                      <p className="truncate font-medium">{modelDisplayName(row.model, tr)}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                        {row.requests} 次请求 · {formatTokens(row.tokens)} token
+                        {tr('overview.modelRowMeta', {
+                          requests: row.requests,
+                          tokens: formatTokens(row.tokens),
+                        })}
                       </p>
                     </div>
                     <span className="shrink-0 font-mono font-semibold tabular-nums">
@@ -239,11 +255,18 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
                 ))}
               </ul>
             ) : (
-              <Empty text={`${rangeLabel}还没有模型用量。`} icon={<PieChart />} />
+              <Empty
+                text={tr('overview.byModelEmpty', { range: rangeLabelText })}
+                icon={<PieChart />}
+              />
             )}
           </Section>
 
-          <Section icon={<History />} title="最近用量" description="最近 100 条请求流水。">
+          <Section
+            icon={<History />}
+            title={tr('overview.recentTitle')}
+            description={tr('overview.recentDescription')}
+          >
             {usage.logs.length ? (
               <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
                 {usage.logs.map((log) => (
@@ -252,9 +275,9 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
                     className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{modelLabel(log.model)}</p>
+                      <p className="truncate font-medium">{modelDisplayName(log.model, tr)}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {shortTime(log.createdAt)}
+                        {shortTime(log.createdAt, props.locale ?? 'zh-CN')}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-4">
@@ -273,7 +296,7 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
                             : 'text-xs text-destructive'
                         }
                       >
-                        {log.status === 'SUCCESS' ? '成功' : '失败'}
+                        {log.status === 'SUCCESS' ? tr('common.success') : tr('common.failed')}
                       </span>
                       <span className="font-mono font-semibold tabular-nums">
                         {money(log.amount)}
@@ -283,7 +306,7 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
                 ))}
               </ul>
             ) : (
-              <Empty text="暂无用量记录。" icon={<History />} />
+              <Empty text={tr('overview.recentEmpty')} icon={<History />} />
             )}
           </Section>
         </>
@@ -298,16 +321,18 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
 function RangePicker({
   range,
   href,
+  tr,
 }: {
   range: UsageRange;
   href: (next: { range: UsageRange }) => string;
+  tr: (key: string, params?: Record<string, string | number>) => string;
 }): ReactElement {
   const current = RANGE_OPTIONS.find((option) => option.value === range) ?? RANGE_OPTIONS[0];
   return (
     <details className="group relative">
       <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden">
         <CalendarDays className="size-4 text-muted-foreground" />
-        {current.label}
+        {tr(current.labelKey)}
         <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
       </summary>
       <div className="absolute right-0 z-20 mt-2 w-40 rounded-xl border bg-popover p-1 shadow-md">
@@ -323,7 +348,7 @@ function RangePicker({
                   : 'flex items-center justify-between rounded-lg px-3 py-1.5 text-sm hover:bg-muted/60'
               }
             >
-              {option.label}
+              {tr(option.labelKey)}
               {activeOption ? <Check className="size-4 text-primary" /> : null}
             </Link>
           );
@@ -335,6 +360,7 @@ function RangePicker({
 
 /** 模型定价：搜索 + 行选中 + 右侧详情（全部 URL 驱动，服务端渲染）。 */
 export function GatewayPricingPage(props: AccountPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const data = props.data as { prices?: z.infer<typeof publicPricesSchema> };
   const prices = data.prices?.prices ?? [];
   const query = (props.searchParams['q'] ?? '').trim().toLowerCase();
@@ -361,7 +387,7 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
   return (
     <main className="space-y-8">
       <PageHeader
-        title="模型定价"
+        title={tr('pricing.title')}
         actions={
           <>
             <form method="get" action={base} className="relative">
@@ -370,12 +396,12 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
                 type="search"
                 name="q"
                 defaultValue={props.searchParams['q'] ?? ''}
-                placeholder="搜索模型"
+                placeholder={tr('pricing.searchPlaceholder')}
                 className="h-9 w-56 rounded-lg border bg-background pl-8 pr-3 text-sm outline-none focus-visible:border-ring"
               />
             </form>
             <span className="text-xs text-muted-foreground tabular-nums">
-              共 {prices.length} 个
+              {tr('pricing.total', { count: prices.length })}
             </span>
           </>
         }
@@ -388,12 +414,12 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
               <table className="w-full text-sm">
                 <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2">模型</th>
-                    <th className="px-3 py-2">能力</th>
-                    <th className="px-3 py-2 whitespace-nowrap">输入 / 1M</th>
-                    <th className="px-3 py-2 whitespace-nowrap">输出 / 1M</th>
-                    <th className="px-3 py-2 whitespace-nowrap">缓存读 / 1M</th>
-                    <th className="px-3 py-2 whitespace-nowrap">缓存写 / 1M</th>
+                    <th className="px-3 py-2">{tr('pricing.colModel')}</th>
+                    <th className="px-3 py-2">{tr('pricing.colCapability')}</th>
+                    <th className="px-3 py-2 whitespace-nowrap">{tr('pricing.colInput')}</th>
+                    <th className="px-3 py-2 whitespace-nowrap">{tr('pricing.colOutput')}</th>
+                    <th className="px-3 py-2 whitespace-nowrap">{tr('pricing.colCacheRead')}</th>
+                    <th className="px-3 py-2 whitespace-nowrap">{tr('pricing.colCacheWrite')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -413,11 +439,11 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
                             }`}
                             className="font-medium whitespace-nowrap hover:underline"
                           >
-                            {modelLabel(price.model)}
+                            {modelDisplayName(price.model, tr)}
                           </Link>
                         </td>
                         <td className="px-3 py-2">
-                          <CapabilityIcons value={price.capabilities} />
+                          <CapabilityIcons value={price.capabilities} tr={tr} />
                         </td>
                         <td className="px-3 py-2 tabular-nums">{money(price.inputPrice)}</td>
                         <td className="px-3 py-2 tabular-nums">{money(price.outputPrice)}</td>
@@ -434,7 +460,7 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
               </table>
             </div>
           ) : (
-            <Empty text={query ? '没有匹配的模型。' : '暂无可售模型定价。'} icon={<Tags />} />
+            <Empty text={query ? tr('pricing.noMatch') : tr('pricing.empty')} icon={<Tags />} />
           )}
         </section>
 
@@ -445,29 +471,41 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
                 <IconBadge>
                   <Tags />
                 </IconBadge>
-                <h2 className="min-w-0 truncate font-semibold">{modelLabel(selected.model)}</h2>
+                <h2 className="min-w-0 truncate font-semibold">
+                  {modelDisplayName(selected.model, tr)}
+                </h2>
               </div>
               {selected.model === '*' ? (
-                <p className="mt-1.5 text-xs text-muted-foreground">未单独定价的模型按此价计费</p>
+                <p className="mt-1.5 text-xs text-muted-foreground">{tr('pricing.fallbackNote')}</p>
               ) : (
                 <p className="mt-1.5 font-mono text-xs text-muted-foreground">{selected.model}</p>
               )}
               <div className="mt-4">
-                <CapabilityIcons value={selected.capabilities} />
+                <CapabilityIcons value={selected.capabilities} tr={tr} />
               </div>
               <dl className="mt-4 grid gap-2 text-sm">
-                <PriceRow label="输入" value={unitPrice(selected.inputPrice)} />
-                <PriceRow label="输出" value={unitPrice(selected.outputPrice)} />
-                <PriceRow label="缓存读" value={unitPrice(selected.cacheReadPrice)} />
-                <PriceRow label="缓存写" value={unitPrice(selected.cacheWritePrice)} />
-                <PriceRow label="倍率" value={`${selected.multiplier}%`} />
+                <PriceRow
+                  label={tr('pricing.priceInput')}
+                  value={unitPrice(selected.inputPrice, tr)}
+                />
+                <PriceRow
+                  label={tr('pricing.priceOutput')}
+                  value={unitPrice(selected.outputPrice, tr)}
+                />
+                <PriceRow
+                  label={tr('pricing.priceCacheRead')}
+                  value={unitPrice(selected.cacheReadPrice, tr)}
+                />
+                <PriceRow
+                  label={tr('pricing.priceCacheWrite')}
+                  value={unitPrice(selected.cacheWritePrice, tr)}
+                />
+                <PriceRow label={tr('pricing.priceMultiplier')} value={`${selected.multiplier}%`} />
               </dl>
-              <p className="mt-4 text-xs text-muted-foreground">
-                缓存价仅在命中提示缓存时生效；其余输入按「输入」价计。
-              </p>
+              <p className="mt-4 text-xs text-muted-foreground">{tr('pricing.cacheNote')}</p>
             </div>
           ) : (
-            <Empty text="选择左侧模型查看详情。" icon={<Tags />} />
+            <Empty text={tr('pricing.selectHint')} icon={<Tags />} />
           )}
         </aside>
       </div>
@@ -484,21 +522,22 @@ function PriceRow({ label, value }: { label: string; value: string }): ReactElem
   );
 }
 
-/** 兜底行 `*` 的展示名。 */
-function modelLabel(model: string): string {
-  return model === '*' ? '其他模型（兜底价）' : model;
-}
-
-const CAPABILITY_ICONS: Record<string, { icon: typeof Brain; label: string }> = {
-  reasoning: { icon: Brain, label: '推理' },
-  image: { icon: ImageIcon, label: '图像' },
-  pdf: { icon: FileText, label: 'PDF' },
-  tools: { icon: Terminal, label: '工具' },
-  text: { icon: Type, label: '文本' },
+const CAPABILITY_ICONS: Record<string, { icon: typeof Brain; labelKey: string }> = {
+  reasoning: { icon: Brain, labelKey: 'capability.reasoning' },
+  image: { icon: ImageIcon, labelKey: 'capability.image' },
+  pdf: { icon: FileText, labelKey: 'capability.pdf' },
+  tools: { icon: Terminal, labelKey: 'capability.tools' },
+  text: { icon: Type, labelKey: 'capability.text' },
 };
 
 /** 能力图标行（无能力时不渲染）。 */
-function CapabilityIcons({ value }: { value: string[] }): ReactElement | null {
+function CapabilityIcons({
+  value,
+  tr,
+}: {
+  value: string[];
+  tr: (key: string, params?: Record<string, string | number>) => string;
+}): ReactElement | null {
   if (!value.length) return <span className="text-xs text-muted-foreground">—</span>;
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -508,7 +547,7 @@ function CapabilityIcons({ value }: { value: string[] }): ReactElement | null {
         return (
           <span
             key={capability}
-            title={entry?.label ?? capabilityLabel(capability)}
+            title={entry ? tr(entry.labelKey) : capabilityLabel(capability, tr)}
             className="inline-flex size-6 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground"
           >
             <Icon className="size-3.5" />
@@ -523,43 +562,49 @@ function CapabilityIcons({ value }: { value: string[] }): ReactElement | null {
  * 「创建密钥」对话框。抽成独立组件以便放进 `PageHeader` 的 actions 槽，
  * 避免把创建入口埋在内容区里。
  */
-function CreateKeyDialog({ action }: { action: (formData: FormData) => void }): ReactElement {
+function CreateKeyDialog({
+  action,
+  tr,
+}: {
+  action: (formData: FormData) => void;
+  tr: (key: string, params?: Record<string, string | number>) => string;
+}): ReactElement {
   return (
     <Dialog>
       <DialogTrigger render={<Button />}>
         <Plus className="size-4" />
-        创建密钥
+        {tr('keys.create')}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>创建 API 密钥</DialogTitle>
-          <DialogDescription>完整密钥仅在创建后展示一次，请及时保存。</DialogDescription>
+          <DialogTitle>{tr('keys.createTitle')}</DialogTitle>
+          <DialogDescription>{tr('keys.createDescription')}</DialogDescription>
         </DialogHeader>
         <form action={action} className="grid gap-4">
           <div className="grid gap-1.5">
-            <Label htmlFor="key-name">名称</Label>
-            <Input id="key-name" name="name" required placeholder="例如：生产环境" />
+            <Label htmlFor="key-name">{tr('keys.name')}</Label>
+            <Input id="key-name" name="name" required placeholder={tr('keys.namePlaceholder')} />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="key-models">模型白名单（逗号分隔，留空=不限）</Label>
+            <Label htmlFor="key-models">{tr('keys.models')}</Label>
             <Input id="key-models" name="models" placeholder="gpt-4o-mini" />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="key-expires">有效期（天，留空=长期）</Label>
+              <Label htmlFor="key-expires">{tr('keys.expires')}</Label>
               <Input id="key-expires" name="expiresInDays" type="number" min={1} />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="key-rpm">每分钟请求上限（0=不限）</Label>
+              <Label htmlFor="key-rpm">{tr('keys.rpm')}</Label>
               <Input id="key-rpm" name="rpmLimit" type="number" min={0} />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="key-concurrency">并发上限（0=不限）</Label>
+              <Label htmlFor="key-concurrency">{tr('keys.concurrency')}</Label>
               <Input id="key-concurrency" name="concurrencyLimit" type="number" min={0} />
             </div>
           </div>
           <DialogFooter>
-            <Button type="submit">创建密钥</Button>
+            <Button type="submit">{tr('keys.create')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -574,15 +619,17 @@ function CreateKeyDialog({ action }: { action: (formData: FormData) => void }): 
 function BillingToggle({
   enabled,
   action,
+  tr,
 }: {
   enabled: boolean;
   action: (formData: FormData) => void;
+  tr: (key: string, params?: Record<string, string | number>) => string;
 }): ReactElement {
   return (
     <form action={action}>
       <input type="hidden" name="enabled" value={enabled ? 'false' : 'true'} />
       <Button type="submit" variant={enabled ? 'outline' : 'default'} size="sm">
-        {enabled ? '关闭计费' : '开启计费'}
+        {enabled ? tr('keys.billingOn') : tr('keys.billingOffAction')}
       </Button>
     </form>
   );
@@ -590,6 +637,7 @@ function BillingToggle({
 
 /** API 密钥：创建、启停、删除。 */
 export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const data = props.data as {
     keys?: z.infer<typeof keysSchema>;
     billing?: z.infer<typeof billingSchema>;
@@ -601,17 +649,20 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
 
   return (
     <main className="space-y-8">
-      <PageHeader title="API 密钥" actions={<CreateKeyDialog action={createKey} />} />
+      <PageHeader
+        title={tr('keys.title')}
+        actions={<CreateKeyDialog action={createKey} tr={tr} />}
+      />
 
       <Section
         icon={<Wallet />}
-        title="API 计费"
-        description="开启后密钥才能调用模型；费用按实际 token 用量从账户余额扣除。"
-        action={<BillingToggle enabled={billing?.enabled ?? false} action={setBilling} />}
+        title={tr('keys.billingTitle')}
+        description={tr('keys.billingDescription')}
+        action={<BillingToggle enabled={billing?.enabled ?? false} action={setBilling} tr={tr} />}
       >
         <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
           <li className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm">
-            <span className="text-muted-foreground">当前状态</span>
+            <span className="text-muted-foreground">{tr('keys.statusLabel')}</span>
             <span
               className={
                 billing?.enabled
@@ -619,11 +670,11 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
                   : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
               }
             >
-              {billing?.enabled ? '已开启' : '未开启'}
+              {billing?.enabled ? tr('keys.statusEnabled') : tr('keys.statusDisabled')}
             </span>
           </li>
           <li className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm">
-            <span className="text-muted-foreground">可用余额</span>
+            <span className="text-muted-foreground">{tr('keys.balance')}</span>
             <span className="font-mono font-semibold tabular-nums">
               {money(billing?.balance ?? 0)}
             </span>
@@ -637,7 +688,7 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
             <IconBadge className="bg-emerald-500/15 text-emerald-600">
               <KeyRound />
             </IconBadge>
-            新密钥已生成（仅显示一次，请立即保存）
+            {tr('keys.revealed')}
           </div>
           <code className="mt-3 block break-all rounded-lg bg-background px-3 py-2 font-mono text-sm">
             {keys.revealedKey}
@@ -645,11 +696,7 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
         </div>
       ) : null}
 
-      <Section
-        icon={<KeyRound />}
-        title="我的密钥"
-        description="密钥只显示前缀，完整值仅在创建时展示一次。"
-      >
+      <Section icon={<KeyRound />} title={tr('keys.mine')} description={tr('keys.mineDescription')}>
         {keys?.keys?.length ? (
           <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
             {keys.keys.map((key) => (
@@ -667,32 +714,35 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
                           : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
                       }
                     >
-                      {key.status === 'ACTIVE' ? '启用' : '停用'}
+                      {key.status === 'ACTIVE' ? tr('common.enabled') : tr('common.disabled')}
                     </span>
                   </p>
                   <p className="mt-1 font-mono text-xs text-muted-foreground">{key.keyPrefix}…</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {modelsText(key.models)} · 已用 {money(key.quotaUsed)}
-                    {key.quotaLimit !== null ? ` / ${money(key.quotaLimit)}` : ''}
+                    {tr('keys.quotaUsed', {
+                      models: modelsText(key.models, tr),
+                      used:
+                        key.quotaLimit !== null
+                          ? `${money(key.quotaUsed)} / ${money(key.quotaLimit)}`
+                          : money(key.quotaUsed),
+                    })}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Dialog>
                     <DialogTrigger render={<Button type="button" variant="outline" size="sm" />}>
                       <Pencil className="size-3.5" />
-                      编辑
+                      {tr('common.edit')}
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-lg">
                       <DialogHeader>
-                        <DialogTitle>编辑密钥：{key.name}</DialogTitle>
-                        <DialogDescription>
-                          修改名称、模型白名单与限额。完整密钥不可再次查看。
-                        </DialogDescription>
+                        <DialogTitle>{tr('keys.editTitle', { name: key.name })}</DialogTitle>
+                        <DialogDescription>{tr('keys.editDescription')}</DialogDescription>
                       </DialogHeader>
                       <form action={props.actions['llm-gateway.update-key']} className="grid gap-4">
                         <input type="hidden" name="id" value={key.id} />
                         <div className="grid gap-1.5">
-                          <Label htmlFor={`key-name-${key.id}`}>名称</Label>
+                          <Label htmlFor={`key-name-${key.id}`}>{tr('keys.name')}</Label>
                           <Input
                             id={`key-name-${key.id}`}
                             name="name"
@@ -701,9 +751,7 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
                           />
                         </div>
                         <div className="grid gap-1.5">
-                          <Label htmlFor={`key-models-${key.id}`}>
-                            模型白名单（逗号分隔，留空=不限）
-                          </Label>
+                          <Label htmlFor={`key-models-${key.id}`}>{tr('keys.models')}</Label>
                           <Input
                             id={`key-models-${key.id}`}
                             name="models"
@@ -712,7 +760,7 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
                         </div>
                         <div className="grid gap-4 sm:grid-cols-2">
                           <div className="grid gap-1.5">
-                            <Label htmlFor={`key-rpm-${key.id}`}>每分钟请求上限（0=不限）</Label>
+                            <Label htmlFor={`key-rpm-${key.id}`}>{tr('keys.rpm')}</Label>
                             <Input
                               id={`key-rpm-${key.id}`}
                               name="rpmLimit"
@@ -722,7 +770,9 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
                             />
                           </div>
                           <div className="grid gap-1.5">
-                            <Label htmlFor={`key-concurrency-${key.id}`}>并发上限（0=不限）</Label>
+                            <Label htmlFor={`key-concurrency-${key.id}`}>
+                              {tr('keys.concurrency')}
+                            </Label>
                             <Input
                               id={`key-concurrency-${key.id}`}
                               name="concurrencyLimit"
@@ -733,7 +783,7 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
                           </div>
                         </div>
                         <DialogFooter>
-                          <Button type="submit">保存修改</Button>
+                          <Button type="submit">{tr('keys.saveEdit')}</Button>
                         </DialogFooter>
                       </form>
                     </DialogContent>
@@ -746,7 +796,7 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
                       value={key.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'}
                     />
                     <Button type="submit" variant="ghost" size="sm">
-                      {key.status === 'ACTIVE' ? '停用' : '启用'}
+                      {key.status === 'ACTIVE' ? tr('common.disabled') : tr('common.enabled')}
                     </Button>
                   </form>
                   <form action={props.actions['llm-gateway.delete-key']}>
@@ -760,14 +810,15 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
             ))}
           </ul>
         ) : (
-          <Empty text="还没有密钥，创建一个开始使用。" icon={<KeyRound />} />
+          <Empty text={tr('keys.empty')} icon={<KeyRound />} />
         )}
       </Section>
     </main>
   );
 }
 
-export function GatewayAccountWidget(_props: AccountWidgetProps): ReactElement {
+export function GatewayAccountWidget(props: AccountWidgetProps): ReactElement {
+  const tr = t(props.locale);
   return (
     <Link
       href="/account/gateway"
@@ -776,8 +827,8 @@ export function GatewayAccountWidget(_props: AccountWidgetProps): ReactElement {
       <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <Brain className="size-5" />
       </span>
-      <p className="mt-4 text-sm font-semibold">大模型 API</p>
-      <p className="mt-1.5 text-sm text-muted-foreground">查看用量、模型定价与 API 密钥。</p>
+      <p className="mt-4 text-sm font-semibold">{tr('widget.title')}</p>
+      <p className="mt-1.5 text-sm text-muted-foreground">{tr('widget.description')}</p>
     </Link>
   );
 }
@@ -785,6 +836,8 @@ export function GatewayAccountWidget(_props: AccountWidgetProps): ReactElement {
 /* --------------------------------- 导出 --------------------------------- */
 
 const frontend: FrontendPackage = {
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  messages,
   finders,
   ui: {
     actions: [
@@ -793,6 +846,8 @@ const frontend: FrontendPackage = {
         method: 'POST',
         path: '/llm-gateway/billing',
         permission: 'llm-gateway.use',
+        // The toggle's own state is the receipt.
+        silent: true,
         input: [{ name: 'enabled', type: 'boolean', required: true }],
       },
       {
@@ -800,6 +855,7 @@ const frontend: FrontendPackage = {
         method: 'POST',
         path: '/llm-gateway/keys',
         permission: 'llm-gateway.use',
+        successFeedback: { messageKey: 'feedback.keyCreated' },
         input: [
           { name: 'name', type: 'string', required: true, maxLength: 64 },
           { name: 'models', type: 'string', maxLength: 500 },
@@ -813,6 +869,7 @@ const frontend: FrontendPackage = {
         method: 'PATCH',
         path: '/llm-gateway/keys/:id',
         permission: 'llm-gateway.use',
+        successFeedback: { messageKey: 'feedback.keyUpdated' },
         input: [
           { name: 'id', type: 'string', required: true, maxLength: 191 },
           { name: 'name', type: 'string', maxLength: 64 },
@@ -827,6 +884,7 @@ const frontend: FrontendPackage = {
         method: 'DELETE',
         path: '/llm-gateway/keys/:id',
         permission: 'llm-gateway.use',
+        successFeedback: { messageKey: 'feedback.keyDeleted' },
         input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
       },
       {
@@ -834,6 +892,7 @@ const frontend: FrontendPackage = {
         method: 'POST',
         path: '/llm-gateway/admin/accounts',
         permission: 'llm-gateway.admin',
+        successFeedback: { messageKey: 'feedback.accountCreated' },
         input: [
           { name: 'name', type: 'string', required: true, maxLength: 64 },
           { name: 'baseUrl', type: 'string', required: true, maxLength: 500 },
@@ -850,6 +909,7 @@ const frontend: FrontendPackage = {
         method: 'PATCH',
         path: '/llm-gateway/admin/accounts/:id',
         permission: 'llm-gateway.admin',
+        successFeedback: { messageKey: 'feedback.accountUpdated' },
         input: [
           { name: 'id', type: 'string', required: true, maxLength: 191 },
           { name: 'name', type: 'string', maxLength: 64 },
@@ -868,6 +928,8 @@ const frontend: FrontendPackage = {
         method: 'PATCH',
         path: '/llm-gateway/admin/accounts/:id',
         permission: 'llm-gateway.admin',
+        // Status flips are already visible in the row; only failures need a toast.
+        silent: true,
         input: [
           { name: 'id', type: 'string', required: true, maxLength: 191 },
           { name: 'status', type: 'string', required: true, maxLength: 16 },
@@ -878,6 +940,7 @@ const frontend: FrontendPackage = {
         method: 'DELETE',
         path: '/llm-gateway/admin/accounts/:id',
         permission: 'llm-gateway.admin',
+        successFeedback: { messageKey: 'feedback.accountDeleted' },
         input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
       },
       {
@@ -885,6 +948,7 @@ const frontend: FrontendPackage = {
         method: 'POST',
         path: '/llm-gateway/admin/prices',
         permission: 'llm-gateway.admin',
+        successFeedback: { messageKey: 'feedback.priceSaved' },
         input: [
           { name: 'model', type: 'string', required: true, maxLength: 128 },
           { name: 'upstreamModel', type: 'string', maxLength: 128 },
@@ -902,6 +966,7 @@ const frontend: FrontendPackage = {
         method: 'DELETE',
         path: '/llm-gateway/admin/prices/:id',
         permission: 'llm-gateway.admin',
+        successFeedback: { messageKey: 'feedback.priceDeleted' },
         input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
       },
     ],
@@ -910,7 +975,7 @@ const frontend: FrontendPackage = {
         path: '/overview',
         component: 'admin/overview',
         permission: 'llm-gateway.admin',
-        nav: { label: '概览', group: '模型服务', order: 0 },
+        nav: { labelKey: 'nav.overview', groupKey: 'nav.group', order: 0 },
         data: [{ finder: 'llmGateway.adminOverview', as: 'overview' }],
       },
       {
@@ -948,8 +1013,8 @@ const frontend: FrontendPackage = {
         component: 'admin/accounts',
         permission: 'llm-gateway.admin',
         nav: {
-          label: '上游账号与定价',
-          group: '模型服务',
+          labelKey: 'nav.adminAccounts',
+          groupKey: 'nav.group',
           order: 10,
           activePaths: ['/prices'],
         },
@@ -964,7 +1029,7 @@ const frontend: FrontendPackage = {
         path: '/gateway',
         component: 'account/gateway-overview',
         permission: 'llm-gateway.use',
-        nav: { label: '概览', group: '模型服务' },
+        nav: { labelKey: 'nav.overview', groupKey: 'nav.group' },
         data: [
           { finder: 'llmGateway.billing', as: 'billing' },
           { finder: 'llmGateway.usage', as: 'usage' },
@@ -974,14 +1039,14 @@ const frontend: FrontendPackage = {
         path: '/gateway/pricing',
         component: 'account/gateway-pricing',
         permission: 'llm-gateway.use',
-        nav: { label: '模型定价', group: '模型服务' },
+        nav: { labelKey: 'nav.pricing', groupKey: 'nav.group' },
         data: [{ finder: 'llmGateway.prices', as: 'prices' }],
       },
       {
         path: '/gateway/keys',
         component: 'account/gateway-keys',
         permission: 'llm-gateway.use',
-        nav: { label: 'API 密钥', group: '模型服务' },
+        nav: { labelKey: 'nav.keys', groupKey: 'nav.group' },
         data: [
           { finder: 'llmGateway.billing', as: 'billing' },
           { finder: 'llmGateway.keys', as: 'keys' },
@@ -991,6 +1056,7 @@ const frontend: FrontendPackage = {
     accountWidgets: [
       {
         id: 'llm-gateway',
+        titleKey: 'widget.title',
         title: '模型服务',
         component: 'account/gateway',
         permission: 'llm-gateway.use',

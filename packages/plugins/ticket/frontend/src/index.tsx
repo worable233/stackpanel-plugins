@@ -12,6 +12,8 @@ import Link from 'next/link';
 import { z } from 'zod';
 
 import { ArrowUpRight, Inbox } from 'lucide-react';
+import { ticketWorkspaceLabels } from './ticket-workspace-labels.js';
+import { messages, t } from './i18n.js';
 
 /* ------------------------------------------------------------------ */
 /* Types & schemas                                                     */
@@ -86,29 +88,29 @@ const ticketDetailSchema = z.object({
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-const STATUS_META: Record<string, { label: string; cls: string }> = {
+/** Status code → catalog key + tone. Codes are API values, not copy. */
+const STATUS_META: Record<string, { messageKey: string; cls: string }> = {
   OPEN: {
-    label: '待处理',
+    messageKey: 'status.OPEN',
     cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
   },
   IN_PROGRESS: {
-    label: '处理中',
+    messageKey: 'status.IN_PROGRESS',
     cls: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
   },
   RESOLVED: {
-    label: '已解决',
+    messageKey: 'status.RESOLVED',
     cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
   },
-  CLOSED: { label: '已关闭', cls: 'bg-muted text-muted-foreground' },
+  CLOSED: { messageKey: 'status.CLOSED', cls: 'bg-muted text-muted-foreground' },
 };
 
-function statusMeta(status: string) {
-  return (
-    STATUS_META[status] ?? {
-      label: status,
-      cls: 'bg-muted text-muted-foreground',
-    }
-  );
+function statusMeta(status: string, tr: (key: string) => string) {
+  const meta = STATUS_META[status];
+  return {
+    label: meta ? tr(meta.messageKey) : status,
+    cls: meta?.cls ?? 'bg-muted text-muted-foreground',
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -117,7 +119,12 @@ function statusMeta(status: string) {
 
 function TicketAccountListPage(props: AccountPageComponentProps): ReactElement {
   return (
-    <TicketWorkspace mode="list" tickets={(props.data.tickets as Ticket[] | undefined) ?? []} />
+    <TicketWorkspace
+      mode="list"
+      tickets={(props.data.tickets as Ticket[] | undefined) ?? []}
+      locale={props.locale}
+      labels={ticketWorkspaceLabels(props.locale)}
+    />
   );
 }
 
@@ -127,6 +134,8 @@ function TicketNewPage(props: AccountPageComponentProps): ReactElement {
       mode="new"
       tickets={(props.data.tickets as Ticket[] | undefined) ?? []}
       create={props.actions['ticket.create']}
+      locale={props.locale}
+      labels={ticketWorkspaceLabels(props.locale)}
     />
   );
 }
@@ -138,11 +147,14 @@ function TicketAccountDetailPage(props: AccountPageComponentProps): ReactElement
       tickets={(props.data.tickets as Ticket[] | undefined) ?? []}
       ticket={props.data.ticket as TicketDetail | undefined}
       reply={props.actions['ticket.reply']}
+      locale={props.locale}
+      labels={ticketWorkspaceLabels(props.locale)}
     />
   );
 }
 
-function TicketAccountWidget(_props: AccountWidgetProps): ReactElement {
+function TicketAccountWidget(props: AccountWidgetProps): ReactElement {
+  const tr = t(props.locale);
   return (
     <Link
       href="/account/tickets"
@@ -151,8 +163,8 @@ function TicketAccountWidget(_props: AccountWidgetProps): ReactElement {
       <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <Inbox className="size-5" />
       </span>
-      <p className="mt-4 text-sm font-semibold">服务工单</p>
-      <p className="mt-1.5 text-sm text-muted-foreground">查看已提交的服务请求。</p>
+      <p className="mt-4 text-sm font-semibold">{tr('accountWidget.title')}</p>
+      <p className="mt-1.5 text-sm text-muted-foreground">{tr('accountWidget.description')}</p>
     </Link>
   );
 }
@@ -161,7 +173,8 @@ function TicketAccountWidget(_props: AccountWidgetProps): ReactElement {
 /* Admin widget                                                        */
 /* ------------------------------------------------------------------ */
 
-function TicketAdminWidget(_props: AdminWidgetProps): ReactElement {
+function TicketAdminWidget(props: AdminWidgetProps): ReactElement {
+  const tr = t(props.locale);
   return (
     <Link
       href="/admin/plugin/ticket/tickets"
@@ -171,8 +184,10 @@ function TicketAdminWidget(_props: AdminWidgetProps): ReactElement {
         <Inbox className="size-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">工单管理</span>
-        <span className="mt-1 block text-xs text-muted-foreground">查看并跟进服务请求</span>
+        <span className="block text-sm font-semibold">{tr('adminWidget.title')}</span>
+        <span className="mt-1 block text-xs text-muted-foreground">
+          {tr('adminWidget.description')}
+        </span>
       </span>
       <ArrowUpRight className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
     </Link>
@@ -184,25 +199,26 @@ function TicketAdminWidget(_props: AdminWidgetProps): ReactElement {
 /* ------------------------------------------------------------------ */
 
 function SupportOverview(props: AccountPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const summary = props.data.summary as { total: number; tickets: Ticket[] } | undefined;
   return (
     <FeatureOverview
-      title="概览"
-      description="查看你的工单与最近处理状态。"
+      title={tr('overview.accountTitle')}
+      description={tr('overview.accountDescription')}
       unavailable={!summary}
-      metrics={[{ label: '工单总数', value: summary?.total ?? '—' }]}
+      metrics={[{ label: tr('overview.total'), value: summary?.total ?? '—' }]}
       links={[
         {
-          label: '我的工单',
-          description: '查看回复和处理进度。',
+          label: tr('overview.myTicketsLink'),
+          description: tr('overview.myTicketsLinkDescription'),
           href: '/account/tickets',
         },
       ]}
       activity={{
-        title: '最近工单',
+        title: tr('overview.recent'),
         items: (summary?.tickets ?? []).map((ticket) => ({
           label: ticket.subject,
-          detail: statusMeta(ticket.status).label,
+          detail: statusMeta(ticket.status, tr).label,
           href: `/account/tickets/${ticket.id}`,
         })),
       }}
@@ -312,6 +328,8 @@ const ticketActions: PluginActionDefinition[] = [
 ];
 
 export const frontend: FrontendPackage = {
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  messages,
   finders: ticketFinders,
   ui: {
     actions: ticketActions,
@@ -321,14 +339,14 @@ export const frontend: FrontendPackage = {
         path: '/support',
         component: 'account/support-overview',
         permission: 'ticket.view',
-        nav: { label: '概览', group: '支持', order: 0 },
+        nav: { labelKey: 'nav.overview', groupKey: 'nav.group', order: 0 },
         data: [{ finder: 'ticket.mySummary', as: 'summary' }],
       },
       {
         path: '/tickets',
         component: 'account/tickets',
         permission: 'ticket.view',
-        nav: { label: '我的工单', group: '支持', order: 10 },
+        nav: { labelKey: 'nav.myTickets', groupKey: 'nav.group', order: 10 },
         data: [{ finder: 'ticket.myTickets', as: 'tickets' }],
       },
       {
@@ -352,14 +370,14 @@ export const frontend: FrontendPackage = {
         path: '/overview',
         component: 'admin/summary',
         permission: 'ticket.admin',
-        nav: { label: '概览', group: '支持', order: 0 },
+        nav: { labelKey: 'nav.overview', groupKey: 'nav.group', order: 0 },
         data: [{ finder: 'ticket.adminSummary', as: 'summary' }],
       },
       {
         path: '/tickets',
         component: 'admin/tickets',
         permission: 'ticket.admin',
-        nav: { label: '工单', group: '支持', order: 10 },
+        nav: { labelKey: 'nav.adminTickets', groupKey: 'nav.group', order: 10 },
         data: [{ finder: 'ticket.adminTickets', as: 'tickets' }],
       },
       {
@@ -369,7 +387,9 @@ export const frontend: FrontendPackage = {
         data: [{ finder: 'ticket.adminTicket', as: 'ticket', input: { id: ':id' } }],
       },
     ],
-    accountWidgets: [{ id: 'tickets', title: '服务工单', component: 'account/tickets' }],
+    accountWidgets: [
+      { id: 'tickets', titleKey: 'accountWidget.title', component: 'account/tickets' },
+    ],
     accountPages: {
       'account/support-overview': SupportOverview,
       'account/tickets': TicketAccountListPage,

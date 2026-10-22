@@ -45,18 +45,20 @@ import {
   type CmsRedirectList,
   type CmsRevisionList,
   formatDateTime,
-  kindLabel,
+  kindKey,
   listQuery,
   readErrorMessage,
   slugify,
   statusMeta,
+  type Translate,
 } from './shared.js';
+import { t } from './i18n.js';
 
 /* ------------------------------------------------------------------ */
 /* BFF client                                                          */
 /* ------------------------------------------------------------------ */
 
-async function bff<T>(path: string, init?: RequestInit): Promise<T> {
+async function bff<T>(path: string, tr: Translate, init?: RequestInit): Promise<T> {
   const response = await fetch(`${CMS_API_BASE}${path}`, {
     ...init,
     cache: 'no-store',
@@ -65,7 +67,7 @@ async function bff<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   });
-  if (!response.ok) throw new Error(await readErrorMessage(response));
+  if (!response.ok) throw new Error(await readErrorMessage(response, tr));
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
@@ -73,22 +75,23 @@ async function bff<T>(path: string, init?: RequestInit): Promise<T> {
 function fetchList(
   kind: CmsKind,
   params: { status: string; q: string; page: number },
+  tr: Translate,
 ): Promise<CmsList> {
-  return bff<CmsList>(`/cms/admin/content/${kind}?${listQuery(params)}`);
+  return bff<CmsList>(`/cms/admin/content/${kind}?${listQuery(params)}`, tr);
 }
 
 /* ------------------------------------------------------------------ */
 /* Small presentational helpers                                        */
 /* ------------------------------------------------------------------ */
 
-function StatusPill({ status }: { status: string }): ReactElement {
+function StatusPill({ status, tr }: { status: string; tr: Translate }): ReactElement {
   const meta = statusMeta(status);
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.className}`}
     >
       <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
-      {meta.label}
+      {tr(meta.messageKey)}
     </span>
   );
 }
@@ -122,22 +125,22 @@ function Pager({
   pageSize,
   total,
   onPage,
+  tr,
 }: {
   page: number;
   pageSize: number;
   total: number;
   onPage: (page: number) => void;
+  tr: Translate;
 }): ReactElement | null {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (pages <= 1) return null;
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
-      <span className="text-muted-foreground">
-        共 {total} 条 · 第 {page} / {pages} 页
-      </span>
+      <span className="text-muted-foreground">{tr('pager.summary', { total, page, pages })}</span>
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-          上一页
+          {tr('pager.prev')}
         </Button>
         <Button
           variant="outline"
@@ -145,7 +148,7 @@ function Pager({
           disabled={page >= pages}
           onClick={() => onPage(page + 1)}
         >
-          下一页
+          {tr('pager.next')}
         </Button>
       </div>
     </div>
@@ -160,14 +163,15 @@ async function mutate(
   kind: CmsKind,
   id: string,
   op: 'publish' | 'unpublish' | 'revert',
+  tr: Translate,
 ): Promise<void> {
-  await bff(`/cms/admin/content/${kind}/${encodeURIComponent(id)}/${op}`, {
+  await bff(`/cms/admin/content/${kind}/${encodeURIComponent(id)}/${op}`, tr, {
     method: 'POST',
   });
 }
 
-async function removeContent(kind: CmsKind, id: string): Promise<void> {
-  await bff(`/cms/admin/content/${kind}/${encodeURIComponent(id)}`, {
+async function removeContent(kind: CmsKind, id: string, tr: Translate): Promise<void> {
+  await bff(`/cms/admin/content/${kind}/${encodeURIComponent(id)}`, tr, {
     method: 'DELETE',
   });
 }
@@ -179,10 +183,12 @@ async function removeContent(kind: CmsKind, id: string): Promise<void> {
 interface ContentListPageProps {
   kind: CmsKind;
   initial: CmsList | null;
+  locale?: string;
 }
 
-function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement {
-  const label = kindLabel(kind);
+function ContentListPage({ kind, initial, locale }: ContentListPageProps): ReactElement {
+  const tr = t(locale);
+  const label = tr(kindKey(kind));
   const [items, setItems] = useState<CmsList | null>(initial);
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
@@ -196,9 +202,9 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
       setLoading(true);
       setError(null);
       try {
-        setItems(await fetchList(kind, next));
+        setItems(await fetchList(kind, next, tr));
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : '加载失败');
+        setError(loadError instanceof Error ? loadError.message : tr('error.loadFailed'));
       } finally {
         setLoading(false);
       }
@@ -218,10 +224,10 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
     setPending(id);
     setError(null);
     try {
-      await mutate(kind, id, op);
+      await mutate(kind, id, op, tr);
       await reload({ status, q: search.trim(), page });
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : '操作失败');
+      setError(actionError instanceof Error ? actionError.message : tr('error.actionFailed'));
     } finally {
       setPending(null);
     }
@@ -231,10 +237,10 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
     setPending(id);
     setError(null);
     try {
-      await removeContent(kind, id);
+      await removeContent(kind, id, tr);
       await reload({ status, q: search.trim(), page });
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : '删除失败');
+      setError(actionError instanceof Error ? actionError.message : tr('error.deleteFailed'));
     } finally {
       setPending(null);
     }
@@ -245,7 +251,7 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
   return (
     <main className="w-full space-y-6">
       <PageHeader
-        title={label === '文章' ? '文章' : '页面'}
+        title={label}
         actions={
           <Button
             nativeButton={false}
@@ -253,7 +259,7 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
             className="gap-1.5"
           >
             <Plus className="size-4" />
-            新建{label}
+            {tr('list.newContent', { kind: label })}
           </Button>
         }
       />
@@ -267,9 +273,9 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
               setSearch(event.target.value);
               setPage(1);
             }}
-            placeholder={`搜索${label}标题`}
+            placeholder={tr('list.searchPlaceholder', { kind: label })}
             className="pl-8"
-            aria-label={`搜索${label}标题`}
+            aria-label={tr('list.searchPlaceholder', { kind: label })}
           />
         </div>
         <Select
@@ -279,13 +285,13 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
             setPage(1);
           }}
           className="w-36"
-          aria-label="按状态筛选"
+          aria-label={tr('list.filterAria')}
         >
-          <option value="">全部状态</option>
-          <option value="draft">草稿</option>
-          <option value="scheduled">定时</option>
-          <option value="published">已发布</option>
-          <option value="archived">已归档</option>
+          <option value="">{tr('list.allStatuses')}</option>
+          <option value="draft">{tr('status.draft')}</option>
+          <option value="scheduled">{tr('status.scheduled')}</option>
+          <option value="published">{tr('status.published')}</option>
+          <option value="archived">{tr('status.archived')}</option>
         </Select>
         {loading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : null}
       </div>
@@ -297,14 +303,16 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40 text-left text-muted-foreground">
               <tr>
-                <th className="px-4 py-2.5 font-medium">标题</th>
-                <th className="px-4 py-2.5 font-medium">状态</th>
+                <th className="px-4 py-2.5 font-medium">{tr('list.colTitle')}</th>
+                <th className="px-4 py-2.5 font-medium">{tr('list.colStatus')}</th>
                 <th className="hidden px-4 py-2.5 font-medium sm:table-cell">slug</th>
-                <th className="hidden px-4 py-2.5 font-medium md:table-cell">语言</th>
-                <th className="hidden px-4 py-2.5 text-right font-medium lg:table-cell">
-                  更新时间
+                <th className="hidden px-4 py-2.5 font-medium md:table-cell">
+                  {tr('list.colLocale')}
                 </th>
-                <th className="px-4 py-2.5 text-right font-medium">操作</th>
+                <th className="hidden px-4 py-2.5 text-right font-medium lg:table-cell">
+                  {tr('list.colUpdatedAt')}
+                </th>
+                <th className="px-4 py-2.5 text-right font-medium">{tr('list.colActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -315,7 +323,7 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
                       href={`/admin/plugin/cms/${kind === 'post' ? 'posts' : 'pages'}/${item.id}`}
                       className="font-medium text-primary hover:underline"
                     >
-                      {item.title || '（无标题）'}
+                      {item.title || tr('list.untitled')}
                     </Link>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                       <span>r{item.currentRevisionNumber}</span>
@@ -328,13 +336,13 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
                     </div>
                   </td>
                   <td className="px-4 py-2.5">
-                    <StatusPill status={item.status} />
+                    <StatusPill status={item.status} tr={tr} />
                   </td>
                   <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
                     {item.slug || '—'}
                   </td>
                   <td className="hidden px-4 py-2.5 text-muted-foreground md:table-cell">
-                    {item.locale ?? '默认'}
+                    {item.locale ?? tr('list.defaultLocale')}
                   </td>
                   <td className="hidden px-4 py-2.5 text-right text-xs text-muted-foreground lg:table-cell">
                     {formatDateTime(item.updatedAt)}
@@ -347,6 +355,7 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
                         onPublish={() => void runAction(item.id, 'publish')}
                         onUnpublish={() => void runAction(item.id, 'unpublish')}
                         onDelete={() => void runDelete(item.id)}
+                        tr={tr}
                       />
                       <Button
                         variant="ghost"
@@ -355,7 +364,7 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
                         render={
                           <Link
                             href={`/admin/plugin/cms/${kind === 'post' ? 'posts' : 'pages'}/${item.id}`}
-                            aria-label="编辑"
+                            aria-label={tr('list.editAria')}
                           />
                         }
                       >
@@ -369,20 +378,26 @@ function ContentListPage({ kind, initial }: ContentListPageProps): ReactElement 
           </table>
         </div>
       ) : (
-        <Empty text={`还没有${label}`}>
+        <Empty text={tr('list.empty', { kind: label })}>
           <Button
             nativeButton={false}
             render={<Link href={`/admin/plugin/cms/${kind === 'post' ? 'posts' : 'pages'}/new`} />}
             className="gap-1.5"
           >
             <Plus className="size-4" />
-            新建{label}
+            {tr('list.newContent', { kind: label })}
           </Button>
         </Empty>
       )}
 
       {items ? (
-        <Pager page={items.page} pageSize={items.pageSize} total={items.total} onPage={setPage} />
+        <Pager
+          page={items.page}
+          pageSize={items.pageSize}
+          total={items.total}
+          onPage={setPage}
+          tr={tr}
+        />
       ) : null}
     </main>
   );
@@ -394,23 +409,37 @@ function RowAction({
   onPublish,
   onUnpublish,
   onDelete,
+  tr,
 }: {
   item: CmsContent;
   pending: boolean;
   onPublish: () => void;
   onUnpublish: () => void;
   onDelete: () => void;
+  tr: Translate;
 }): ReactElement {
   const [confirmDelete, setConfirmDelete] = useState(false);
   if (pending) return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
   return (
     <>
       {item.published ? (
-        <Button variant="ghost" size="icon-sm" onClick={onUnpublish} aria-label="下架" title="下架">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onUnpublish}
+          aria-label={tr('row.unpublish')}
+          title={tr('row.unpublish')}
+        >
           <Undo2 className="size-3.5" />
         </Button>
       ) : (
-        <Button variant="ghost" size="icon-sm" onClick={onPublish} aria-label="发布" title="发布">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onPublish}
+          aria-label={tr('row.publish')}
+          title={tr('row.publish')}
+        >
           <Send className="size-3.5" />
         </Button>
       )}
@@ -418,8 +447,8 @@ function RowAction({
         variant="ghost"
         size="icon-sm"
         onClick={() => setConfirmDelete(true)}
-        aria-label="删除"
-        title="删除"
+        aria-label={tr('row.delete')}
+        title={tr('row.delete')}
       >
         <Trash2 className="size-3.5 text-destructive" />
       </Button>
@@ -427,14 +456,14 @@ function RowAction({
         <Dialog open onOpenChange={(open) => !open && setConfirmDelete(false)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>删除「{item.title || '（无标题）'}」？</DialogTitle>
-              <DialogDescription>
-                删除后内容与修订版本将移除；已发布的 slug 会保留 301 重定向。此操作不可撤销。
-              </DialogDescription>
+              <DialogTitle>
+                {tr('delete.title', { title: item.title || tr('list.untitled') })}
+              </DialogTitle>
+              <DialogDescription>{tr('delete.description')}</DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmDelete(false)}>
-                取消
+                {tr('delete.cancel')}
               </Button>
               <Button
                 variant="destructive"
@@ -443,7 +472,7 @@ function RowAction({
                   onDelete();
                 }}
               >
-                确定删除
+                {tr('delete.confirm')}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -462,10 +491,13 @@ type EditorTab = 'write' | 'preview' | 'history';
 interface EditorPageProps {
   kind: CmsKind;
   id: string | null;
+  /** Interface locale; distinct from the content's own `locale` field. */
+  uiLocale?: string;
 }
 
-function EditorPage({ kind, id }: EditorPageProps): ReactElement {
-  const label = kindLabel(kind);
+function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
+  const tr = t(uiLocale);
+  const label = tr(kindKey(kind));
   const listHref = `/admin/plugin/cms/${kind === 'post' ? 'posts' : 'pages'}`;
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -495,6 +527,7 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
       try {
         const content = await bff<CmsContent>(
           `/cms/admin/content/${kind}/${encodeURIComponent(id)}`,
+          tr,
         );
         if (!active) return;
         setTitle(content.title);
@@ -508,7 +541,8 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
         setPublishAt(content.publishAt ? toLocalInput(content.publishAt) : '');
         setSlugTouched(true);
       } catch (loadError) {
-        if (active) setError(loadError instanceof Error ? loadError.message : '加载失败');
+        if (active)
+          setError(loadError instanceof Error ? loadError.message : tr('error.loadFailed'));
       } finally {
         if (active) setLoaded(true);
       }
@@ -516,7 +550,7 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
     return () => {
       active = false;
     };
-  }, [id, kind]);
+  }, [id, kind, tr]);
 
   const effectiveSlug = useMemo(() => slug.trim(), [slug]);
 
@@ -536,20 +570,16 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
     setError(null);
     setNotice(null);
     if (!title.trim()) {
-      setError('请填写标题');
+      setError(tr('editor.error.titleRequired'));
       return null;
     }
     const finalSlug = effectiveSlug || slugify(title);
     if (!finalSlug) {
-      setError(
-        effectiveSlug
-          ? 'slug 只能包含小写字母、数字和连字符'
-          : '请填写 slug：标题没有可用于自动生成 slug 的字符',
-      );
+      setError(effectiveSlug ? tr('editor.error.slugInvalid') : tr('editor.error.slugRequired'));
       return null;
     }
     if (status === 'scheduled' && !publishAt) {
-      setError('定时发布需要选择时间');
+      setError(tr('editor.error.publishAtRequired'));
       return null;
     }
     setSaving(true);
@@ -561,11 +591,11 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
         payload['publishAt'] = new Date(publishAt).getTime();
       }
       const saved = id
-        ? await bff<CmsContent>(`/cms/admin/content/${kind}/${encodeURIComponent(id)}`, {
+        ? await bff<CmsContent>(`/cms/admin/content/${kind}/${encodeURIComponent(id)}`, tr, {
             method: 'PATCH',
             body: JSON.stringify(payload),
           })
-        : await bff<CmsContent>(`/cms/admin/content/${kind}`, {
+        : await bff<CmsContent>(`/cms/admin/content/${kind}`, tr, {
             method: 'POST',
             body: JSON.stringify(payload),
           });
@@ -575,10 +605,10 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
         window.location.href = `${listHref}/${saved.id}`;
         return saved;
       }
-      setNotice('已保存');
+      setNotice(tr('editor.notice.saved'));
       return saved;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : '保存失败');
+      setError(saveError instanceof Error ? saveError.message : tr('error.saveFailed'));
       return null;
     } finally {
       setSaving(false);
@@ -593,13 +623,14 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
     try {
       const result = await bff<CmsContent>(
         `/cms/admin/content/${kind}/${encodeURIComponent(saved.id)}/publish`,
+        tr,
         { method: 'POST' },
       );
       setStatus(result.status);
       setPublished(result.published);
-      setNotice('已发布');
+      setNotice(tr('editor.notice.published'));
     } catch (publishError) {
-      setError(publishError instanceof Error ? publishError.message : '发布失败');
+      setError(publishError instanceof Error ? publishError.message : tr('error.publishFailed'));
     } finally {
       setSaving(false);
     }
@@ -612,13 +643,16 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
     try {
       const result = await bff<CmsContent>(
         `/cms/admin/content/${kind}/${encodeURIComponent(id)}/unpublish`,
+        tr,
         { method: 'POST' },
       );
       setStatus(result.status);
       setPublished(result.published);
-      setNotice('已下架');
+      setNotice(tr('editor.notice.unpublished'));
     } catch (unpublishError) {
-      setError(unpublishError instanceof Error ? unpublishError.message : '下架失败');
+      setError(
+        unpublishError instanceof Error ? unpublishError.message : tr('error.unpublishFailed'),
+      );
     } finally {
       setSaving(false);
     }
@@ -631,10 +665,11 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
       setRevisions(
         await bff<CmsRevisionList>(
           `/cms/admin/content/${kind}/${encodeURIComponent(id)}/revisions?page=1&pageSize=50`,
+          tr,
         ),
       );
     } catch (historyError) {
-      setError(historyError instanceof Error ? historyError.message : '版本加载失败');
+      setError(historyError instanceof Error ? historyError.message : tr('error.revisionsFailed'));
     }
   }
 
@@ -645,13 +680,14 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
     try {
       const result = await bff<CmsContent>(
         `/cms/admin/content/${kind}/${encodeURIComponent(id)}/publish`,
+        tr,
         { method: 'POST', body: JSON.stringify({ revisionNumber }) },
       );
       setStatus(result.status);
       setPublished(result.published);
-      setNotice(`已发布版本 r${revisionNumber}`);
+      setNotice(tr('editor.notice.revisionPublished', { revision: revisionNumber }));
     } catch (revisionError) {
-      setError(revisionError instanceof Error ? revisionError.message : '发布失败');
+      setError(revisionError instanceof Error ? revisionError.message : tr('error.publishFailed'));
     } finally {
       setSaving(false);
     }
@@ -661,7 +697,7 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
     return (
       <main className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
-        加载中…
+        {tr('editor.loading')}
       </main>
     );
   }
@@ -670,23 +706,25 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
     <main className="w-full space-y-5">
       <PageHeader
         backHref={listHref}
-        backLabel={`返回${label}列表`}
-        title={id ? `编辑${label}` : `新建${label}`}
+        backLabel={tr('editor.backToList', { kind: label })}
+        title={
+          id ? tr('editor.title.edit', { kind: label }) : tr('editor.title.new', { kind: label })
+        }
         actions={
           <>
             {id ? (
               <Button variant="outline" onClick={() => void loadRevisions()} className="gap-1.5">
                 <History className="size-4" />
-                版本
+                {tr('editor.revisions')}
               </Button>
             ) : null}
             {published ? (
               <Button variant="outline" onClick={() => void unpublishNow()} disabled={saving}>
-                下架
+                {tr('editor.unpublish')}
               </Button>
             ) : null}
             <Button variant="outline" onClick={() => void save()} disabled={saving}>
-              保存草稿
+              {tr('editor.saveDraft')}
             </Button>
             <Button
               onClick={() => void (status === 'scheduled' ? save() : publishNow())}
@@ -694,7 +732,7 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
               className="gap-1.5"
             >
               {status === 'scheduled' ? <Clock className="size-4" /> : <Send className="size-4" />}
-              {status === 'scheduled' ? '保存定时' : '发布'}
+              {status === 'scheduled' ? tr('editor.saveScheduled') : tr('editor.publish')}
             </Button>
           </>
         }
@@ -715,14 +753,14 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
               onClick={() => setTab('write')}
               icon={<Pencil className="size-3.5" />}
             >
-              编写
+              {tr('editor.tab.write')}
             </TabButton>
             <TabButton
               active={tab === 'preview'}
               onClick={() => setTab('preview')}
               icon={<Eye className="size-3.5" />}
             >
-              预览
+              {tr('editor.tab.preview')}
             </TabButton>
             {id ? (
               <TabButton
@@ -730,7 +768,7 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
                 onClick={() => void loadRevisions()}
                 icon={<History className="size-3.5" />}
               >
-                版本历史
+                {tr('editor.tab.history')}
               </TabButton>
             ) : null}
           </div>
@@ -739,9 +777,9 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
             <textarea
               value={body}
               onChange={(event) => setBody(event.target.value)}
-              placeholder="用 Markdown 撰写正文…"
+              placeholder={tr('editor.bodyPlaceholder')}
               spellCheck={false}
-              aria-label="正文"
+              aria-label={tr('editor.bodyAria')}
               className="min-h-[28rem] w-full resize-y rounded-2xl border bg-card p-4 font-mono text-sm leading-6 outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
           ) : null}
@@ -751,7 +789,7 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
               {body.trim() ? (
                 renderMarkdown(body)
               ) : (
-                <p className="text-sm text-muted-foreground">还没有内容，切换到「编写」开始。</p>
+                <p className="text-sm text-muted-foreground">{tr('editor.previewEmpty')}</p>
               )}
             </div>
           ) : null}
@@ -762,15 +800,16 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
               onPublish={publishRevision}
               busy={saving}
               current={status === 'published'}
+              tr={tr}
             />
           ) : null}
         </div>
 
         <aside className="space-y-4">
           <div className="space-y-3 rounded-2xl border bg-card p-4">
-            <SectionTitle>基础</SectionTitle>
+            <SectionTitle>{tr('editor.sectionBasic')}</SectionTitle>
             <div className="space-y-1.5">
-              <Label htmlFor="cms-title">标题</Label>
+              <Label htmlFor="cms-title">{tr('editor.field.title')}</Label>
               <Input
                 id="cms-title"
                 value={title}
@@ -778,7 +817,7 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
                   setTitle(event.target.value);
                   if (!slugTouched) setSlug(slugify(event.target.value));
                 }}
-                placeholder={`${label}标题`}
+                placeholder={tr('editor.field.titlePlaceholder', { kind: label })}
               />
             </div>
             <div className="space-y-1.5">
@@ -793,40 +832,40 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
                 onBlur={() => setSlug((current) => slugify(current))}
                 placeholder="lowercase-with-hyphens"
               />
-              <p className="text-xs text-muted-foreground">仅小写字母、数字和连字符。</p>
+              <p className="text-xs text-muted-foreground">{tr('editor.field.slugHint')}</p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cms-excerpt">摘要</Label>
+              <Label htmlFor="cms-excerpt">{tr('editor.field.excerpt')}</Label>
               <textarea
                 id="cms-excerpt"
                 value={excerpt}
                 onChange={(event) => setExcerpt(event.target.value)}
                 rows={3}
-                placeholder="列表与 SEO 使用的简短描述"
+                placeholder={tr('editor.field.excerptPlaceholder')}
                 className="w-full resize-y rounded-lg border bg-transparent px-2.5 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
               />
             </div>
           </div>
 
           <div className="space-y-3 rounded-2xl border bg-card p-4">
-            <SectionTitle>发布</SectionTitle>
+            <SectionTitle>{tr('editor.sectionPublish')}</SectionTitle>
             <div className="space-y-1.5">
-              <Label htmlFor="cms-status">状态</Label>
+              <Label htmlFor="cms-status">{tr('editor.field.status')}</Label>
               <Select
                 id="cms-status"
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
               >
-                <option value="draft">草稿</option>
-                <option value="scheduled">定时发布</option>
+                <option value="draft">{tr('editor.status.draft')}</option>
+                <option value="scheduled">{tr('editor.status.scheduled')}</option>
               </Select>
               {published ? (
-                <p className="text-xs text-muted-foreground">当前已发布；保存不会改动线上内容。</p>
+                <p className="text-xs text-muted-foreground">{tr('editor.publishedHint')}</p>
               ) : null}
             </div>
             {status === 'scheduled' ? (
               <div className="space-y-1.5">
-                <Label htmlFor="cms-publish-at">发布时间</Label>
+                <Label htmlFor="cms-publish-at">{tr('editor.field.publishAt')}</Label>
                 <Input
                   id="cms-publish-at"
                   type="datetime-local"
@@ -838,23 +877,23 @@ function EditorPage({ kind, id }: EditorPageProps): ReactElement {
           </div>
 
           <div className="space-y-3 rounded-2xl border bg-card p-4">
-            <SectionTitle>多语言</SectionTitle>
+            <SectionTitle>{tr('editor.sectionLocale')}</SectionTitle>
             <div className="space-y-1.5">
-              <Label htmlFor="cms-locale">语言</Label>
+              <Label htmlFor="cms-locale">{tr('editor.field.locale')}</Label>
               <Input
                 id="cms-locale"
                 value={locale}
                 onChange={(event) => setLocale(event.target.value)}
-                placeholder="zh-CN（留空为默认）"
+                placeholder={tr('editor.field.localePlaceholder')}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cms-translation">翻译分组</Label>
+              <Label htmlFor="cms-translation">{tr('editor.field.translation')}</Label>
               <Input
                 id="cms-translation"
                 value={translationKey}
                 onChange={(event) => setTranslationKey(event.target.value)}
-                placeholder="同一内容的多语言共用"
+                placeholder={tr('editor.field.translationPlaceholder')}
               />
             </div>
           </div>
@@ -904,22 +943,24 @@ function HistoryPanel({
   onPublish,
   busy,
   current,
+  tr,
 }: {
   revisions: CmsRevisionList | null;
   onPublish: (revisionNumber: number) => void;
   busy: boolean;
   current: boolean;
+  tr: Translate;
 }): ReactElement {
   if (!revisions) {
     return (
       <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
-        加载版本…
+        {tr('history.loading')}
       </div>
     );
   }
   if (revisions.items.length === 0) {
-    return <p className="py-8 text-sm text-muted-foreground">还没有修订版本。</p>;
+    return <p className="py-8 text-sm text-muted-foreground">{tr('history.empty')}</p>;
   }
   return (
     <ol className="space-y-2">
@@ -946,15 +987,11 @@ function HistoryPanel({
             className="gap-1.5"
           >
             <RotateCcw className="size-3.5" />
-            发布此版本
+            {tr('history.publish')}
           </Button>
         </li>
       ))}
-      {!current ? (
-        <p className="pt-2 text-xs text-muted-foreground">
-          提示：发布某个版本会把该版本内容设为线上内容。
-        </p>
-      ) : null}
+      {!current ? <p className="pt-2 text-xs text-muted-foreground">{tr('history.hint')}</p> : null}
     </ol>
   );
 }
@@ -963,20 +1000,32 @@ function HistoryPanel({
 /* Redirects                                                           */
 /* ------------------------------------------------------------------ */
 
-function RedirectsPage({ initial }: { initial: CmsRedirectList | null }): ReactElement {
+function RedirectsPage({
+  initial,
+  locale,
+}: {
+  initial: CmsRedirectList | null;
+  locale?: string;
+}): ReactElement {
+  const tr = t(locale);
   const [items, setItems] = useState<CmsRedirectList | null>(initial);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
 
-  const reload = useCallback(async (nextPage: number): Promise<void> => {
-    setError(null);
-    try {
-      setItems(await bff<CmsRedirectList>(`/cms/admin/redirects?page=${nextPage}&pageSize=20`));
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : '加载失败');
-    }
-  }, []);
+  const reload = useCallback(
+    async (nextPage: number): Promise<void> => {
+      setError(null);
+      try {
+        setItems(
+          await bff<CmsRedirectList>(`/cms/admin/redirects?page=${nextPage}&pageSize=20`, tr),
+        );
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : tr('error.loadFailed'));
+      }
+    },
+    [tr],
+  );
 
   useEffect(() => {
     void reload(page);
@@ -986,12 +1035,12 @@ function RedirectsPage({ initial }: { initial: CmsRedirectList | null }): ReactE
     setPending(id);
     setError(null);
     try {
-      await bff(`/cms/admin/redirects/${encodeURIComponent(id)}`, {
+      await bff(`/cms/admin/redirects/${encodeURIComponent(id)}`, tr, {
         method: 'DELETE',
       });
       await reload(page);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : '删除失败');
+      setError(deleteError instanceof Error ? deleteError.message : tr('error.deleteFailed'));
     } finally {
       setPending(null);
     }
@@ -1001,19 +1050,19 @@ function RedirectsPage({ initial }: { initial: CmsRedirectList | null }): ReactE
 
   return (
     <main className="w-full space-y-6">
-      <PageHeader title="重定向" />
+      <PageHeader title={tr('redirects.title')} />
       <ErrorBanner message={error} />
       {rows.length > 0 ? (
         <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40 text-left text-muted-foreground">
               <tr>
-                <th className="px-4 py-2.5 font-medium">原路径</th>
-                <th className="px-4 py-2.5 font-medium">类型</th>
+                <th className="px-4 py-2.5 font-medium">{tr('redirects.colFrom')}</th>
+                <th className="px-4 py-2.5 font-medium">{tr('redirects.colKind')}</th>
                 <th className="hidden px-4 py-2.5 text-right font-medium sm:table-cell">
-                  创建时间
+                  {tr('redirects.colCreatedAt')}
                 </th>
-                <th className="px-4 py-2.5 text-right font-medium">操作</th>
+                <th className="px-4 py-2.5 text-right font-medium">{tr('redirects.colActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1021,7 +1070,7 @@ function RedirectsPage({ initial }: { initial: CmsRedirectList | null }): ReactE
                 <tr key={row.id} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="px-4 py-2.5 font-mono text-xs">{row.fromPath}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">
-                    {row.resourceKind === 'cms/post' ? '文章' : '页面'}
+                    {tr(row.resourceKind === 'cms/post' ? 'kind.post' : 'kind.page')}
                   </td>
                   <td className="hidden px-4 py-2.5 text-right text-xs text-muted-foreground sm:table-cell">
                     {formatDateTime(row.createdAt)}
@@ -1032,8 +1081,8 @@ function RedirectsPage({ initial }: { initial: CmsRedirectList | null }): ReactE
                       size="icon-sm"
                       disabled={pending === row.id}
                       onClick={() => void remove(row.id)}
-                      aria-label="删除"
-                      title="删除"
+                      aria-label={tr('row.delete')}
+                      title={tr('row.delete')}
                     >
                       <Trash2 className="size-3.5 text-destructive" />
                     </Button>
@@ -1044,10 +1093,16 @@ function RedirectsPage({ initial }: { initial: CmsRedirectList | null }): ReactE
           </table>
         </div>
       ) : (
-        <Empty text="还没有重定向记录。" />
+        <Empty text={tr('redirects.empty')} />
       )}
       {items ? (
-        <Pager page={items.page} pageSize={items.pageSize} total={items.total} onPage={setPage} />
+        <Pager
+          page={items.page}
+          pageSize={items.pageSize}
+          total={items.total}
+          onPage={setPage}
+          tr={tr}
+        />
       ) : null}
     </main>
   );
@@ -1064,27 +1119,27 @@ function asList(value: unknown): CmsList | null {
 }
 
 function PostsPage(props: AdminPageComponentProps): ReactElement {
-  return <ContentListPage kind="post" initial={asList(props.data.list)} />;
+  return <ContentListPage kind="post" initial={asList(props.data.list)} locale={props.locale} />;
 }
 
 function PagesPage(props: AdminPageComponentProps): ReactElement {
-  return <ContentListPage kind="page" initial={asList(props.data.list)} />;
+  return <ContentListPage kind="page" initial={asList(props.data.list)} locale={props.locale} />;
 }
 
-function NewPostPage(): ReactElement {
-  return <EditorPage kind="post" id={null} />;
+function NewPostPage(props: AdminPageComponentProps): ReactElement {
+  return <EditorPage kind="post" id={null} uiLocale={props.locale} />;
 }
 
 function EditPostPage(props: AdminPageComponentProps): ReactElement {
-  return <EditorPage kind="post" id={props.params['id'] ?? null} />;
+  return <EditorPage kind="post" id={props.params['id'] ?? null} uiLocale={props.locale} />;
 }
 
-function NewPagePage(): ReactElement {
-  return <EditorPage kind="page" id={null} />;
+function NewPagePage(props: AdminPageComponentProps): ReactElement {
+  return <EditorPage kind="page" id={null} uiLocale={props.locale} />;
 }
 
 function EditPagePage(props: AdminPageComponentProps): ReactElement {
-  return <EditorPage kind="page" id={props.params['id'] ?? null} />;
+  return <EditorPage kind="page" id={props.params['id'] ?? null} uiLocale={props.locale} />;
 }
 
 function RedirectsRoute(props: AdminPageComponentProps): ReactElement {
@@ -1093,11 +1148,12 @@ function RedirectsRoute(props: AdminPageComponentProps): ReactElement {
     value && typeof value === 'object' && Array.isArray((value as CmsRedirectList).items)
       ? (value as CmsRedirectList)
       : null;
-  return <RedirectsPage initial={initial} />;
+  return <RedirectsPage initial={initial} locale={props.locale} />;
 }
 
 /** Component ids referenced by `adminRoutes` in `index.tsx`. */
 function CmsOverview(props: import('@stackpanel/sdk').AdminPageComponentProps) {
+  const tr = t(props.locale);
   type ContentList = {
     total: number;
     items: Array<{ id: string; title: string; published?: boolean }>;
@@ -1107,36 +1163,36 @@ function CmsOverview(props: import('@stackpanel/sdk').AdminPageComponentProps) {
   const redirects = props.data.redirects as { total: number } | undefined;
   return (
     <FeatureOverview
-      title="概览"
-      description="管理站点内容与访问路径。"
+      title={tr('overview.title')}
+      description={tr('overview.description')}
       unavailable={!posts || !pages || !redirects}
       metrics={[
-        { label: '文章', value: posts?.total ?? '—' },
-        { label: '页面', value: pages?.total ?? '—' },
-        { label: '重定向', value: redirects?.total ?? '—' },
+        { label: tr('overview.posts'), value: posts?.total ?? '—' },
+        { label: tr('overview.pages'), value: pages?.total ?? '—' },
+        { label: tr('overview.redirects'), value: redirects?.total ?? '—' },
       ]}
       links={[
         {
-          label: '文章',
-          description: '撰写与发布文章。',
+          label: tr('overview.posts'),
+          description: tr('overview.postsLink'),
           href: '/admin/plugin/cms/posts',
         },
         {
-          label: '页面',
-          description: '维护站点独立页面。',
+          label: tr('overview.pages'),
+          description: tr('overview.pagesLink'),
           href: '/admin/plugin/cms/pages',
         },
         {
-          label: '重定向',
-          description: '管理内容迁移后的访问路径。',
+          label: tr('overview.redirects'),
+          description: tr('overview.redirectsLink'),
           href: '/admin/plugin/cms/redirects',
         },
       ]}
       activity={{
-        title: '最近文章',
+        title: tr('overview.recent'),
         items: (posts?.items ?? []).slice(0, 5).map((item) => ({
           label: item.title,
-          detail: item.published ? '已发布' : '草稿',
+          detail: tr(item.published ? 'status.published' : 'status.draft'),
           href: `/admin/plugin/cms/posts/${item.id}`,
         })),
       }}

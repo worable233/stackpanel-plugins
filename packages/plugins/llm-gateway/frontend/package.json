@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "dependencies": {
+    "recharts": "^3.10.1",
     "zod": "^4.4.3"
   }
 }

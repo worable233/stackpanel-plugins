@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "revision": "37dab51687ca",
+  "revision": "7a8943bbe459",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
@@ -16,8 +16,8 @@
       "component": "admin/categories",
       "permission": "catalog.admin",
       "nav": {
-        "label": "商品分类",
-        "group": "商店",
+        "labelKey": "nav.label",
+        "groupKey": "nav.group",
         "order": 20
       },
       "data": [
@@ -35,6 +35,9 @@
       "method": "POST",
       "path": "/catalog/admin/categories",
       "permission": "catalog.admin",
+      "successFeedback": {
+        "messageKey": "feedback.created"
+      },
       "input": [
         {
           "name": "name",
@@ -66,6 +69,9 @@
       "method": "PATCH",
       "path": "/catalog/admin/categories/:id",
       "permission": "catalog.admin",
+      "successFeedback": {
+        "messageKey": "feedback.updated"
+      },
       "input": [
         {
           "name": "id",
@@ -101,6 +107,7 @@
       "method": "POST",
       "path": "/catalog/admin/categories/reorder",
       "permission": "catalog.admin",
+      "silent": true,
       "input": [
         {
           "name": "ids",
@@ -121,6 +128,9 @@
       "method": "DELETE",
       "path": "/catalog/admin/categories/:id",
       "permission": "catalog.admin",
+      "successFeedback": {
+        "messageKey": "feedback.deleted"
+      },
       "input": [
         {
           "name": "id",
@@ -135,6 +145,9 @@
       "method": "PATCH",
       "path": "/catalog/admin/products/:productId",
       "permission": "catalog.admin",
+      "successFeedback": {
+        "messageKey": "feedback.updated"
+      },
       "input": [
         {
           "name": "productId",
@@ -174,5 +187,112 @@
     "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
-  ]
+  ],
+  "locales": ["zh-CN", "zh-TW", "zh-HK", "en-US"],
+  "messages": {
+    "zh-CN": {
+      "nav.label": "商品分类",
+      "nav.group": "商店",
+      "page.title": "商品分类",
+      "page.saveOrder": "保存排序",
+      "page.newCategory": "新建分类",
+      "page.empty": "暂无分类",
+      "row.dragAria": "拖拽排序",
+      "row.edit": "编辑",
+      "row.delete": "删除",
+      "emoji.label": "图标",
+      "dialog.name": "名称",
+      "dialog.cancel": "取消",
+      "dialog.create.title": "新建分类",
+      "dialog.create.description": "创建后可在列表中拖拽调整层级与顺序。",
+      "dialog.create.submit": "创建",
+      "dialog.edit.title": "编辑分类",
+      "dialog.edit.description": "修改分类名称与图标。",
+      "dialog.edit.submit": "保存",
+      "dialog.delete.title": "删除分类",
+      "dialog.delete.description": "删除后，该分类下的商品将变为未分类。确定删除？",
+      "dialog.delete.submit": "删除",
+      "feedback.created": "已创建",
+      "feedback.updated": "已保存",
+      "feedback.deleted": "已删除"
+    },
+    "zh-TW": {
+      "nav.label": "商品分類",
+      "nav.group": "商店",
+      "page.title": "商品分類",
+      "page.saveOrder": "儲存排序",
+      "page.newCategory": "新建分類",
+      "page.empty": "暫無分類",
+      "row.dragAria": "拖拽排序",
+      "row.edit": "編輯",
+      "row.delete": "刪除",
+      "emoji.label": "圖示",
+      "dialog.name": "名稱",
+      "dialog.cancel": "取消",
+      "dialog.create.title": "新建分類",
+      "dialog.create.description": "建立後可在列表中拖拽調整層級與順序。",
+      "dialog.create.submit": "建立",
+      "dialog.edit.title": "編輯分類",
+      "dialog.edit.description": "修改分類名稱與圖示。",
+      "dialog.edit.submit": "儲存",
+      "dialog.delete.title": "刪除分類",
+      "dialog.delete.description": "刪除後，該分類下的商品將變為未分類。確定刪除？",
+      "dialog.delete.submit": "刪除",
+      "feedback.created": "已建立",
+      "feedback.updated": "已儲存",
+      "feedback.deleted": "已刪除"
+    },
+    "zh-HK": {
+      "nav.label": "商品分類",
+      "nav.group": "商店",
+      "page.title": "商品分類",
+      "page.saveOrder": "儲存排序",
+      "page.newCategory": "新建分類",
+      "page.empty": "暫無分類",
+      "row.dragAria": "拖拽排序",
+      "row.edit": "編輯",
+      "row.delete": "刪除",
+      "emoji.label": "圖示",
+      "dialog.name": "名稱",
+      "dialog.cancel": "取消",
+      "dialog.create.title": "新建分類",
+      "dialog.create.description": "建立後可在列表中拖拽調整層級與順序。",
+      "dialog.create.submit": "建立",
+      "dialog.edit.title": "編輯分類",
+      "dialog.edit.description": "修改分類名稱與圖示。",
+      "dialog.edit.submit": "儲存",
+      "dialog.delete.title": "刪除分類",
+      "dialog.delete.description": "刪除後，該分類下的商品將變為未分類。確定刪除？",
+      "dialog.delete.submit": "刪除",
+      "feedback.created": "已建立",
+      "feedback.updated": "已儲存",
+      "feedback.deleted": "已刪除"
+    },
+    "en-US": {
+      "nav.label": "Product categories",
+      "nav.group": "Shop",
+      "page.title": "Product categories",
+      "page.saveOrder": "Save order",
+      "page.newCategory": "New category",
+      "page.empty": "No categories yet",
+      "row.dragAria": "Drag to reorder",
+      "row.edit": "Edit",
+      "row.delete": "Delete",
+      "emoji.label": "Icon",
+      "dialog.name": "Name",
+      "dialog.cancel": "Cancel",
+      "dialog.create.title": "New category",
+      "dialog.create.description": "After creating it, drag it in the list to change its level and order.",
+      "dialog.create.submit": "Create",
+      "dialog.edit.title": "Edit category",
+      "dialog.edit.description": "Change the category name and icon.",
+      "dialog.edit.submit": "Save",
+      "dialog.delete.title": "Delete category",
+      "dialog.delete.description": "Products in this category will become uncategorized. Delete it?",
+      "dialog.delete.submit": "Delete",
+      "feedback.created": "Created",
+      "feedback.updated": "Saved",
+      "feedback.deleted": "Deleted"
+    }
+  }
 }

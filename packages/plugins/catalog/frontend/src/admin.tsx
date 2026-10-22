@@ -27,6 +27,7 @@ import {
 } from '@stackpanel/ui';
 import EmojiPickerLib, { EmojiStyle } from 'emoji-picker-react';
 import { FolderTree, Plus } from 'lucide-react';
+import { t } from './i18n.js';
 
 interface CategoryNode {
   id: string;
@@ -43,9 +44,10 @@ interface CategoryNode {
 interface EmojiPickerProps {
   value: string | null;
   onChange: (emoji: string) => void;
+  label: string;
 }
 
-function EmojiPicker({ value, onChange }: EmojiPickerProps): ReactElement {
+function EmojiPicker({ value, onChange, label }: EmojiPickerProps): ReactElement {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState<{
@@ -96,7 +98,7 @@ function EmojiPicker({ value, onChange }: EmojiPickerProps): ReactElement {
     <>
       <Button ref={buttonRef} type="button" variant="outline" onClick={() => setOpen((v) => !v)}>
         <span className="text-base leading-none">{value ?? '🙂'}</span>
-        <span className="text-xs text-muted-foreground">图标</span>
+        <span className="text-xs text-muted-foreground">{label}</span>
       </Button>
       {open && position && typeof window !== 'undefined'
         ? createPortal(picker, document.body)
@@ -167,6 +169,7 @@ function buildTree(
 
 /** 分类管理页：拖拽树 + emoji + 编辑/删除。 */
 export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const data = props.data as {
     categories?: CategoryNode[];
     productCounts?: Record<string, number>;
@@ -355,18 +358,18 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
   return (
     <main className="w-full space-y-6">
       <PageHeader
-        title="商品分类"
+        title={tr('page.title')}
         actions={
           <>
             {reorderAction && pendingFlat ? (
               <Button variant="outline" onClick={submitReorder}>
-                保存排序
+                {tr('page.saveOrder')}
               </Button>
             ) : null}
             {createAction ? (
               <Button onClick={() => setCreateOpen(true)} className="gap-1.5">
                 <Plus className="size-4" />
-                新建分类
+                {tr('page.newCategory')}
               </Button>
             ) : null}
           </>
@@ -388,6 +391,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
                   key={item.id}
                   node={node}
                   depth={depthOf(item.id, flat)}
+                  tr={tr}
                   dragging={dragId === item.id}
                   dropIndicator={dropIndicator?.id === item.id ? dropIndicator.position : null}
                   onEditStart={() => {
@@ -413,7 +417,7 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
           </DragOverlay>
         </DndContext>
       ) : (
-        <Empty text="暂无分类" />
+        <Empty text={tr('page.empty')} />
       )}
       {/* 触发 server action 的重排表单（由拖拽后提交） */}
       <input type="hidden" value={reorderToken} onChange={() => undefined} aria-hidden />
@@ -431,15 +435,15 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
         >
           <DialogContent className="!left-auto !right-0 !top-0 !h-dvh !max-h-dvh !max-w-md !translate-x-0 !translate-y-0 !rounded-none !border-y-0 !border-r-0 data-open:slide-in-from-right data-closed:slide-out-to-right">
             <DialogHeader>
-              <DialogTitle>新建分类</DialogTitle>
-              <DialogDescription>创建后可在列表中拖拽调整层级与顺序。</DialogDescription>
+              <DialogTitle>{tr('dialog.create.title')}</DialogTitle>
+              <DialogDescription>{tr('dialog.create.description')}</DialogDescription>
             </DialogHeader>
             <form action={createAction} className="grid gap-4 py-2">
               <input name="icon" type="hidden" value={draftIcon ?? ''} onChange={() => undefined} />
               <div className="flex items-end gap-3">
-                <EmojiPicker value={draftIcon} onChange={setDraftIcon} />
+                <EmojiPicker value={draftIcon} onChange={setDraftIcon} label={tr('emoji.label')} />
                 <div className="grid flex-1 gap-1.5">
-                  <Label htmlFor="create-category-name">名称</Label>
+                  <Label htmlFor="create-category-name">{tr('dialog.name')}</Label>
                   <Input
                     id="create-category-name"
                     name="name"
@@ -451,9 +455,9 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
               </div>
               <DialogFooter className="flex-row justify-end">
                 <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
-                  取消
+                  {tr('dialog.cancel')}
                 </Button>
-                <Button type="submit">创建</Button>
+                <Button type="submit">{tr('dialog.create.submit')}</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -469,16 +473,16 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
         >
           <DialogContent className="!left-auto !right-0 !top-0 !h-dvh !max-h-dvh !max-w-md !translate-x-0 !translate-y-0 !rounded-none !border-y-0 !border-r-0 data-open:slide-in-from-right data-closed:slide-out-to-right">
             <DialogHeader>
-              <DialogTitle>编辑分类</DialogTitle>
-              <DialogDescription>修改分类名称与图标。</DialogDescription>
+              <DialogTitle>{tr('dialog.edit.title')}</DialogTitle>
+              <DialogDescription>{tr('dialog.edit.description')}</DialogDescription>
             </DialogHeader>
             <form action={updateAction} className="grid gap-4 py-2">
               <input type="hidden" name="id" value={editingId} />
               <input type="hidden" name="icon" value={editIcon ?? ''} onChange={() => undefined} />
               <div className="flex items-end gap-3">
-                <EmojiPicker value={editIcon} onChange={setEditIcon} />
+                <EmojiPicker value={editIcon} onChange={setEditIcon} label={tr('emoji.label')} />
                 <div className="grid flex-1 gap-1.5">
-                  <Label htmlFor="edit-category-name">名称</Label>
+                  <Label htmlFor="edit-category-name">{tr('dialog.name')}</Label>
                   <Input
                     id="edit-category-name"
                     name="name"
@@ -490,9 +494,9 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
               </div>
               <DialogFooter className="flex-row justify-end">
                 <Button type="button" variant="ghost" onClick={() => setEditingId(null)}>
-                  取消
+                  {tr('dialog.cancel')}
                 </Button>
-                <Button type="submit">保存</Button>
+                <Button type="submit">{tr('dialog.edit.submit')}</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -508,15 +512,15 @@ export function CatalogAdminPage(props: AdminPageComponentProps): ReactElement {
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>删除分类</DialogTitle>
-              <DialogDescription>删除后，该分类下的商品将变为未分类。确定删除？</DialogDescription>
+              <DialogTitle>{tr('dialog.delete.title')}</DialogTitle>
+              <DialogDescription>{tr('dialog.delete.description')}</DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex-row justify-end">
               <Button type="button" variant="ghost" onClick={() => setConfirmDelete(null)}>
-                取消
+                {tr('dialog.cancel')}
               </Button>
               <Button type="submit" variant="destructive" form={`delete-category-${confirmDelete}`}>
-                删除
+                {tr('dialog.delete.submit')}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -549,6 +553,7 @@ function depthOf(
 function SortableRow({
   node,
   depth,
+  tr,
   dragging,
   dropIndicator,
   onEditStart,
@@ -557,6 +562,7 @@ function SortableRow({
 }: {
   node: CategoryNode;
   depth: number;
+  tr: (key: string) => string;
   dragging: boolean;
   dropIndicator: 'before' | 'inside' | 'after' | null;
   onEditStart: () => void;
@@ -607,7 +613,7 @@ function SortableRow({
           size="icon"
           {...attributes}
           {...listeners}
-          aria-label="拖拽排序"
+          aria-label={tr('row.dragAria')}
           className="cursor-grab text-muted-foreground"
         >
           <span className="text-sm leading-none">⠿</span>
@@ -623,10 +629,10 @@ function SortableRow({
         ) : null}
         <div className="flex shrink-0 items-center gap-1">
           <Button type="button" variant="ghost" size="sm" onClick={onEditStart}>
-            编辑
+            {tr('row.edit')}
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={onDeleteRequest}>
-            删除
+            {tr('row.delete')}
           </Button>
         </div>
       </div>

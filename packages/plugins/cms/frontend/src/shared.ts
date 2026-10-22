@@ -81,26 +81,27 @@ export const CMS_API_BASE = '/api/plugins';
 export type CmsKind = 'post' | 'page';
 
 export interface StatusMeta {
-  label: string;
+  /** Message id in the package catalog (ADR-0016 §5). */
+  messageKey: string;
   /** Tailwind classes for a small pill. */
   className: string;
 }
 
 const STATUS_META: Record<CmsStatus, StatusMeta> = {
   draft: {
-    label: '草稿',
+    messageKey: 'status.draft',
     className: 'bg-muted text-muted-foreground',
   },
   scheduled: {
-    label: '定时',
+    messageKey: 'status.scheduled',
     className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   },
   published: {
-    label: '已发布',
+    messageKey: 'status.published',
     className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   },
   archived: {
-    label: '已归档',
+    messageKey: 'status.archived',
     className: 'bg-slate-200 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300',
   },
 };
@@ -108,6 +109,9 @@ const STATUS_META: Record<CmsStatus, StatusMeta> = {
 export function statusMeta(status: string): StatusMeta {
   return STATUS_META[status as CmsStatus] ?? STATUS_META.draft;
 }
+
+/** Minimal translator shape, so this module stays free of React and the SDK. */
+export type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 /** `2026-10-04T12:00:00.000Z` → `2026-10-04 12:00`. */
 export function formatDateTime(value: string | number | null | undefined): string {
@@ -120,8 +124,9 @@ export function formatDateTime(value: string | number | null | undefined): strin
   )}:${pad(date.getMinutes())}`;
 }
 
-export function kindLabel(kind: CmsKind): string {
-  return kind === 'post' ? '文章' : '页面';
+/** Message id for a content kind; resolve it with the package translator. */
+export function kindKey(kind: CmsKind): string {
+  return kind === 'post' ? 'kind.post' : 'kind.page';
 }
 
 /** Turn a title into a slug accepted by the backend (`[a-z0-9-]+`). */
@@ -151,12 +156,13 @@ export function listQuery(params: {
   return search.toString();
 }
 
-/** Parse a JSON error body into a human message. */
-export async function readErrorMessage(response: Response): Promise<string> {
+/** Parse a JSON error body into a human message in the caller's locale. */
+export async function readErrorMessage(response: Response, tr: Translate): Promise<string> {
+  const fallback = tr('error.requestFailed', { status: response.status });
   try {
     const body = (await response.json()) as { error?: string; detail?: string; message?: string };
-    return body.error ?? body.detail ?? body.message ?? `请求失败（${response.status}）`;
+    return body.error ?? body.detail ?? body.message ?? fallback;
   } catch {
-    return `请求失败（${response.status}）`;
+    return fallback;
   }
 }

@@ -1,0 +1,21 @@
+{
+  "nav.label": "Announcements",
+  "nav.group": "Content",
+  "page.title": "Site announcements",
+  "page.empty": "No announcements yet.",
+  "admin.title": "Site announcements",
+  "admin.field.title": "Title",
+  "admin.field.content": "Content",
+  "admin.field.sortOrder": "Order (lower first)",
+  "admin.field.status": "Status",
+  "admin.state.published": "Published",
+  "admin.state.draft": "Draft",
+  "admin.badge.published": "Published",
+  "admin.badge.draft": "Draft",
+  "admin.submit": "Publish announcement",
+  "admin.unpublish": "Unpublish",
+  "admin.delete": "Delete",
+  "admin.empty": "No announcements yet. Publish the first one.",
+  "feedback.created": "Notice published",
+  "feedback.deleted": "Notice deleted"
+}

@@ -4,6 +4,7 @@ import type { AdminPageComponentProps } from '@stackpanel/sdk';
 import { PageHeader } from '@stackpanel/ui';
 import type { ReactElement } from 'react';
 import { Megaphone } from 'lucide-react';
+import { t } from './i18n.js';
 
 interface Announcement {
   id: string;
@@ -21,6 +22,7 @@ interface AnnouncementList {
 
 /** Admin overview page: create + manage announcements. */
 function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const result = props.data.announcements as AnnouncementList | undefined;
   const announcements = result?.announcements ?? [];
   const create = props.actions['notice.create'];
@@ -28,13 +30,13 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
   const del = props.actions['notice.delete'];
   return (
     <main className="w-full space-y-8">
-      <PageHeader title="站点公告" />
+      <PageHeader title={tr('admin.title')} />
 
       {create ? (
         <form action={create} className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-2">
-          <Field label="标题" name="title" required />
+          <Field label={tr('admin.field.title')} name="title" required />
           <label className="grid gap-1 text-sm sm:col-span-2">
-            <span>内容</span>
+            <span>{tr('admin.field.content')}</span>
             <textarea
               name="content"
               rows={4}
@@ -42,23 +44,29 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
               className="h-auto rounded-lg border bg-background px-3 py-2"
             />
           </label>
-          <Field label="排序（小值在前）" name="sortOrder" type="number" min="0" defaultValue="0" />
+          <Field
+            label={tr('admin.field.sortOrder')}
+            name="sortOrder"
+            type="number"
+            min="0"
+            defaultValue="0"
+          />
           <label className="grid gap-1 text-sm">
-            <span>状态</span>
+            <span>{tr('admin.field.status')}</span>
             <select
               name="published"
               defaultValue="true"
               className="h-9 rounded-lg border bg-background px-3"
             >
-              <option value="true">发布</option>
-              <option value="false">草稿</option>
+              <option value="true">{tr('admin.state.published')}</option>
+              <option value="false">{tr('admin.state.draft')}</option>
             </select>
           </label>
           <button
             type="submit"
             className="h-9 w-fit rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground sm:col-span-2"
           >
-            发布公告
+            {tr('admin.submit')}
           </button>
         </form>
       ) : null}
@@ -87,7 +95,9 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
                         type="submit"
                         className="h-8 rounded-lg border bg-background px-2.5 text-xs hover:bg-muted"
                       >
-                        {announcement.published ? '下架' : '发布'}
+                        {announcement.published
+                          ? tr('admin.unpublish')
+                          : tr('admin.state.published')}
                       </button>
                     </form>
                   ) : null}
@@ -95,7 +105,7 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
                     <form action={del}>
                       <input type="hidden" name="id" value={announcement.id} />
                       <button type="submit" className="text-xs text-destructive hover:underline">
-                        删除
+                        {tr('admin.delete')}
                       </button>
                     </form>
                   ) : null}
@@ -109,7 +119,7 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
                 }`}
               >
                 <span className="size-1.5 rounded-full bg-current" />
-                {announcement.published ? '已发布' : '草稿'}
+                {announcement.published ? tr('admin.badge.published') : tr('admin.badge.draft')}
               </span>
             </li>
           ))}
@@ -119,7 +129,7 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
           <span className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
             <Megaphone className="size-5" />
           </span>
-          <p className="mt-4 text-sm text-muted-foreground">还没有公告，先发布第一条。</p>
+          <p className="mt-4 text-sm text-muted-foreground">{tr('admin.empty')}</p>
         </div>
       )}
     </main>

@@ -89,5 +89,8 @@
   "admin.records.colState": "状态",
   "admin.records.colTime": "时间",
   "admin.records.empty": "暂无归因记录。",
-  "admin.adjust.note": "备注"
+  "admin.adjust.note": "备注",
+  "feedback.codeCreated": "邀请码已创建",
+  "feedback.configSaved": "配置已保存",
+  "feedback.adjusted": "余额已调整"
 }

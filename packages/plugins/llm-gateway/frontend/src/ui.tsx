@@ -108,11 +108,17 @@ export const PROTOCOL_OPTIONS = [
   { value: 'gemini', label: 'Google Gemini' },
 ] as const;
 
-/** 概览页时间范围选项。 */
+/**
+ * 概览页时间范围选项。
+ *
+ * Labels are message ids resolved against the package catalog by the caller, so
+ * the shared layer stays free of a translator instance and can live in both the
+ * server and client bundles.
+ */
 export const RANGE_OPTIONS = [
-  { value: 'today', label: '今天' },
-  { value: '7d', label: '近 7 天' },
-  { value: '30d', label: '近 30 天' },
+  { value: 'today', labelKey: 'common.rangeToday' },
+  { value: '7d', labelKey: 'common.range7d' },
+  { value: '30d', labelKey: 'common.range30d' },
 ] as const;
 
 export function protocolLabel(value: string): string {
@@ -121,15 +127,29 @@ export function protocolLabel(value: string): string {
 
 /** 模型能力标记（自由文本，与后端 capabilities 对齐）。 */
 export const CAPABILITY_OPTIONS = [
-  { value: 'reasoning', label: '推理' },
-  { value: 'image', label: '图像' },
-  { value: 'pdf', label: 'PDF' },
-  { value: 'tools', label: '工具' },
-  { value: 'text', label: '文本' },
+  { value: 'reasoning', labelKey: 'capability.reasoning' },
+  { value: 'image', labelKey: 'capability.image' },
+  { value: 'pdf', labelKey: 'capability.pdf' },
+  { value: 'tools', labelKey: 'capability.tools' },
+  { value: 'text', labelKey: 'capability.text' },
 ] as const;
 
-export function capabilityLabel(value: string): string {
-  return CAPABILITY_OPTIONS.find((option) => option.value === value)?.label ?? value;
+export function capabilityLabel(value: string, tr: Translator): string {
+  const key = CAPABILITY_OPTIONS.find((option) => option.value === value)?.labelKey;
+  return key ? tr(key) : value;
+}
+
+/** Package translator shape (`createPackageTranslator`), kept structural here. */
+export type Translator = (key: string, params?: Record<string, string | number>) => string;
+
+export function rangeLabel(value: UsageRange, tr: Translator): string {
+  const key = RANGE_OPTIONS.find((option) => option.value === value)?.labelKey;
+  return key ? tr(key) : '';
+}
+
+/** The fallback row `*` display name. */
+export function modelDisplayName(model: string, tr: Translator): string {
+  return model === '*' ? tr('pricing.fallbackModel') : model;
 }
 
 export const priceSchema = z.object({
@@ -196,9 +216,9 @@ export const publicPricesSchema = z.object({
   ),
 });
 
-/** 单位：minor / 百万 token → 「¥x.xx / 百万 token」。 */
-export function unitPrice(minorPerMillion: number): string {
-  return `${money(minorPerMillion)} / 百万`;
+/** 单位：minor / 百万 token → 「¥x.xx / 百万」。 */
+export function unitPrice(minorPerMillion: number, tr: Translator): string {
+  return `${money(minorPerMillion)} / ${tr('unit.perMillion')}`;
 }
 
 /* -------------------------------- 格式化 -------------------------------- */
@@ -207,9 +227,9 @@ export function money(minor: number): string {
   return `¥${(minor / 100).toFixed(2)}`;
 }
 
-export function shortTime(value: string | null): string {
+export function shortTime(value: string | null, locale: string): string {
   if (!value) return '—';
-  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+  return new Date(value).toLocaleString(locale, { hour12: false });
 }
 
 /** 紧凑数字：1200 → 1.2k，3_400_000 → 3.4M。 */
@@ -220,9 +240,9 @@ export function formatTokens(value: number): string {
   return String(value);
 }
 
-export function modelsText(value: unknown): string {
+export function modelsText(value: unknown, tr: Translator): string {
   if (Array.isArray(value) && value.length > 0) return value.join(', ');
-  return '不限';
+  return tr('common.unlimited');
 }
 
 /* ------------------------------- 通用样式件 ------------------------------ */

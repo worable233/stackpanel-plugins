@@ -12,6 +12,7 @@ import {
   FieldGroup,
   StatusBadge,
 } from '@stackpanel/ui';
+import { t } from './i18n.js';
 
 interface Instance {
   id: string;
@@ -35,15 +36,20 @@ interface Inventory {
   accounts: { id: string; name: string; enabled: boolean }[];
   errors: { sourceName: string; message: string }[];
 }
-const states: Record<string, string> = {
-  ACTIVE: '已开通',
-  SUSPENDED: '已暂停',
-  PROVISIONING: '开通中',
-  PENDING_PROVISION: '待开通',
-  TERMINATED: '已终止',
-  FAILED: '开通失败',
+
+/** Instance status → message id; unknown statuses fall back to the raw value. */
+const STATE_KEYS: Record<string, string> = {
+  ACTIVE: 'status.active',
+  SUSPENDED: 'status.suspended',
+  PROVISIONING: 'status.provisioning',
+  PENDING_PROVISION: 'status.pendingProvision',
+  TERMINATED: 'status.terminated',
+  FAILED: 'status.failed',
 };
+
 export function UpstreamInstancesPage(props: AdminPageComponentProps) {
+  const tr = t(props.locale);
+  const locale = props.locale ?? 'zh-CN';
   const [refreshed, setRefreshed] = useState<Inventory | null>(null);
   const [refreshError, setRefreshError] = useState('');
   const data = refreshed ?? (props.data.inventory as Inventory | undefined);
@@ -74,10 +80,15 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
         .includes(query.trim().toLowerCase()),
   );
   const current = Math.min(page, Math.max(1, Math.ceil(rows.length / 25)));
+  const statusText = (item: Instance): string => {
+    if (item.statusLabel) return item.statusLabel;
+    const key = item.status ? STATE_KEYS[item.status] : undefined;
+    return key ? tr(key) : tr('status.unknown');
+  };
   return (
     <main className="flex min-w-0 flex-col gap-6">
       <PageHeader
-        title="上游实例"
+        title={tr('instances.title')}
         actions={
           <Button
             variant="outline"
@@ -100,12 +111,12 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                   setRefreshed(result);
                   setPage(1);
                 } catch {
-                  setRefreshError('刷新失败，当前仍显示上次结果，请重试。');
+                  setRefreshError(tr('instances.refreshFailed'));
                 }
               })
             }
           >
-            {pending ? '刷新中…' : '刷新实例'}
+            {pending ? tr('instances.refreshing') : tr('instances.refresh')}
           </Button>
         }
       />
@@ -114,11 +125,9 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
           {refreshError}
         </p>
       ) : null}
-      <p className="text-sm text-muted-foreground">
-        展示所有已配置上游账号的已有实例，包括未关联本地商品的实例。刷新只读取资产，不会创建订单或开通实例。
-      </p>
+      <p className="text-sm text-muted-foreground">{tr('instances.description')}</p>
       {!data ? (
-        <p role="alert">实例加载失败，请刷新重试。</p>
+        <p role="alert">{tr('instances.loadFailed')}</p>
       ) : (
         <>
           {data.errors.map((error, index) => (
@@ -127,12 +136,12 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
               role="alert"
               className="text-sm text-destructive"
             >
-              {error.sourceName}：{error.message}
+              {tr('instances.errorLine', { source: error.sourceName, message: error.message })}
             </p>
           ))}
           <FieldGroup className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Field>
-              <Label htmlFor="instance-lifecycle">实例状态</Label>
+              <Label htmlFor="instance-lifecycle">{tr('filter.lifecycle')}</Label>
               <Select
                 id="instance-lifecycle"
                 value={lifecycle}
@@ -141,16 +150,16 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                   setPage(1);
                 }}
               >
-                <option value="current">当前实例</option>
-                <option value="history">已取消 / 已终止</option>
-                <option value="all">全部记录</option>
+                <option value="current">{tr('filter.lifecycleCurrent')}</option>
+                <option value="history">{tr('filter.lifecycleHistory')}</option>
+                <option value="all">{tr('filter.lifecycleAll')}</option>
               </Select>
             </Field>
             <Field>
-              <Label htmlFor="instance-search">搜索实例</Label>
+              <Label htmlFor="instance-search">{tr('filter.search')}</Label>
               <Input
                 id="instance-search"
-                placeholder="名称、IP、实例编号或商品"
+                placeholder={tr('filter.searchPlaceholder')}
                 value={query}
                 onChange={(event) => {
                   setQuery(event.target.value);
@@ -159,7 +168,7 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
               />
             </Field>
             <Field>
-              <Label htmlFor="instance-source">上游账号</Label>
+              <Label htmlFor="instance-source">{tr('filter.source')}</Label>
               <Select
                 id="instance-source"
                 value={source}
@@ -168,17 +177,17 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                   setPage(1);
                 }}
               >
-                <option value="all">全部账号</option>
+                <option value="all">{tr('filter.sourceAll')}</option>
                 {data.accounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
-                    {account.enabled ? '' : '（已停用）'}
+                    {account.enabled ? '' : tr('filter.sourceDisabled')}
                   </option>
                 ))}
               </Select>
             </Field>
             <Field>
-              <Label htmlFor="instance-mapping">本地商品关联</Label>
+              <Label htmlFor="instance-mapping">{tr('filter.mapping')}</Label>
               <Select
                 id="instance-mapping"
                 value={mapping}
@@ -187,30 +196,30 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                   setPage(1);
                 }}
               >
-                <option value="all">全部实例</option>
-                <option value="mapped">已关联商品</option>
-                <option value="unmapped">未关联商品</option>
+                <option value="all">{tr('filter.mappingAll')}</option>
+                <option value="mapped">{tr('filter.mappingMapped')}</option>
+                <option value="unmapped">{tr('filter.mappingUnmapped')}</option>
               </Select>
             </Field>
           </FieldGroup>
           <p aria-live="polite" className="text-sm text-muted-foreground">
-            共 {data.instances.length} 个实例，当前筛选 {rows.length} 个
-            {data.errors.length ? ' · 部分连接读取失败' : ''}
+            {tr('table.summary', { total: data.instances.length, shown: rows.length })}
+            {data.errors.length ? tr('table.summaryPartial') : ''}
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <caption className="sr-only">上游已有实例及商品和用户绑定状态</caption>
+              <caption className="sr-only">{tr('table.caption')}</caption>
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
                   {[
-                    '实例 / IP',
-                    '上游账号',
-                    '上游商品',
-                    '本地商品',
-                    '状态',
-                    '开通时间',
-                    '到期时间',
-                    '用户归属',
+                    tr('table.colInstance'),
+                    tr('table.colSource'),
+                    tr('table.colUpstreamProduct'),
+                    tr('table.colLocalProduct'),
+                    tr('table.colStatus'),
+                    tr('table.colOpenedAt'),
+                    tr('table.colExpiresAt'),
+                    tr('table.colOwner'),
                   ].map((title) => (
                     <th key={title} scope="col" className="px-3 py-3 font-medium whitespace-nowrap">
                       {title}
@@ -233,29 +242,26 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                     </td>
                     <td className="px-3 py-4">{item.sourceName}</td>
                     <td className="px-3 py-4">
-                      {item.productName ?? '未知商品'}
+                      {item.productName ?? tr('table.unknownProduct')}
                       <p className="text-xs text-muted-foreground">
-                        {item.productId ? `#${item.productId}` : '上游未返回商品编号'}
+                        {item.productId ? `#${item.productId}` : tr('table.noProductId')}
                       </p>
                     </td>
                     <td className="px-3 py-4">
                       {item.products.length ? (
                         item.products.map((product) => <p key={product.id}>{product.name}</p>)
                       ) : (
-                        <StatusBadge tone="neutral">未关联商品</StatusBadge>
+                        <StatusBadge tone="neutral">{tr('table.unmapped')}</StatusBadge>
                       )}
                     </td>
                     <td className="px-3 py-4">
                       <StatusBadge tone={item.status === 'ACTIVE' ? 'ok' : 'neutral'}>
-                        {item.statusLabel ??
-                          states[item.status ?? ''] ??
-                          item.statusLabel ??
-                          '未知'}
+                        {statusText(item)}
                       </StatusBadge>
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap">
                       {item.openedAt && Number.isFinite(Date.parse(item.openedAt))
-                        ? new Date(item.openedAt).toLocaleString('zh-CN', {
+                        ? new Date(item.openedAt).toLocaleString(locale, {
                             year: 'numeric',
                             month: '2-digit',
                             day: '2-digit',
@@ -267,7 +273,7 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap">
                       {item.expiresAt && Number.isFinite(Date.parse(item.expiresAt))
-                        ? new Date(item.expiresAt).toLocaleString('zh-CN', {
+                        ? new Date(item.expiresAt).toLocaleString(locale, {
                             year: 'numeric',
                             month: '2-digit',
                             day: '2-digit',
@@ -279,16 +285,16 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                     </td>
                     <td className="px-3 py-4">
                       {!item.bindingKnown ? (
-                        '归属读取不可用'
+                        tr('table.bindingUnavailable')
                       ) : item.boundUserId ? (
                         <Link
                           className="underline underline-offset-4"
                           href={`/admin/users/${encodeURIComponent(item.boundUserId)}`}
                         >
-                          查看绑定用户
+                          {tr('table.viewBoundUser')}
                         </Link>
                       ) : (
-                        '未绑定用户'
+                        tr('table.unbound')
                       )}
                     </td>
                   </tr>
@@ -296,7 +302,7 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                 {rows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                      {data.errors.length ? '已成功读取的连接中没有匹配实例' : '暂无匹配实例'}
+                      {data.errors.length ? tr('table.noMatchPartial') : tr('table.noMatch')}
                     </td>
                   </tr>
                 )}
@@ -310,7 +316,7 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                 disabled={current === 1}
                 onClick={() => setPage(current - 1)}
               >
-                上一页
+                {tr('pager.prev')}
               </Button>
               <span className="text-sm">
                 {current} / {Math.ceil(rows.length / 25)}
@@ -320,7 +326,7 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
                 disabled={current * 25 >= rows.length}
                 onClick={() => setPage(current + 1)}
               >
-                下一页
+                {tr('pager.next')}
               </Button>
             </div>
           )}

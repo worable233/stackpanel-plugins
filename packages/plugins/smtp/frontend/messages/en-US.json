@@ -1,0 +1,23 @@
+{
+  "admin.systemSettings": "SMTP email",
+  "page.title": "SMTP email",
+  "page.description": "Sends sign-up verification codes, password security notices and site notification emails.",
+  "page.noSecrets": "The platform encryption key is not configured, so the SMTP password cannot be saved.",
+  "field.host": "SMTP host",
+  "field.port": "Port",
+  "field.from": "Sender address",
+  "field.fromName": "Sender name",
+  "field.user": "Username",
+  "field.password": "Password",
+  "field.secure": "Implicit TLS (usually port 465)",
+  "field.startTls": "STARTTLS (usually port 587)",
+  "action.save": "Save settings",
+  "action.saving": "Saving…",
+  "test.title": "Send a test email",
+  "test.placeholder": "Recipient address",
+  "test.submit": "Send test",
+  "test.sent": "Test email sent",
+  "notice.saved": "SMTP settings saved",
+  "error.saveFailed": "Saving failed",
+  "error.sendFailed": "Sending failed"
+}

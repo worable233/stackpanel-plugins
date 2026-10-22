@@ -5,6 +5,7 @@ import { FeatureOverview, PageHeader } from '@stackpanel/ui';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, type ChangeEvent, type ReactElement } from 'react';
 import { toast } from 'sonner';
+import { t } from './i18n.js';
 
 interface EpayStatus {
   configured: boolean;
@@ -31,6 +32,7 @@ interface ProblemDetails {
  * 未受控输入。这里用受控组件，失败时保留已填内容并以 toast 提示。
  */
 function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const status = props.data.status as EpayStatus | undefined;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -59,39 +61,41 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
           body: JSON.stringify(payload),
         });
         if (!response.ok) {
-          toast.error(await readErrorMessage(response));
+          toast.error(await readErrorMessage(response, tr));
           return;
         }
-        toast.success('易支付配置已保存。');
+        toast.success(tr('notice.saved'));
         router.refresh();
       } catch {
-        toast.error('保存失败，请稍后重试。');
+        toast.error(tr('notice.saveFailed'));
       }
     });
   }
 
   return (
     <main className="w-full space-y-8">
-      <PageHeader title="配置" />
+      <PageHeader title={tr('page.title')} />
       {status?.secretsEnabled === false ? (
         <p className="rounded-lg border border-destructive/35 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          未配置平台加密密钥，无法保存商户私钥。
+          {tr('page.noSecrets')}
         </p>
       ) : null}
       {status?.configured ? (
         <section className="rounded-lg border bg-card p-4 text-sm">
           <dl className="grid gap-3 sm:grid-cols-3">
             <div>
-              <dt className="text-muted-foreground">网关地址</dt>
+              <dt className="text-muted-foreground">{tr('summary.gateway')}</dt>
               <dd className="mt-1 break-all">{status.baseUrl}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">商户 PID</dt>
+              <dt className="text-muted-foreground">{tr('summary.pid')}</dt>
               <dd className="mt-1 font-mono">{status.pid}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">支付方式</dt>
-              <dd className="mt-1">{status.methods?.map((method) => method.label).join('、')}</dd>
+              <dt className="text-muted-foreground">{tr('summary.methods')}</dt>
+              <dd className="mt-1">
+                {status.methods?.map((method) => method.label).join(tr('summary.join'))}
+              </dd>
             </div>
           </dl>
         </section>
@@ -101,16 +105,16 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
         className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2"
       >
         <Field
-          label="网关地址"
+          label={tr('field.baseUrl')}
           name="baseUrl"
           placeholder="https://pay.example.com"
           value={baseUrl}
           onChange={setBaseUrl}
           required
         />
-        <Field label="商户 PID" name="pid" value={pid} onChange={setPid} required />
+        <Field label={tr('field.pid')} name="pid" value={pid} onChange={setPid} required />
         <Field
-          label="商户 RSA 私钥"
+          label={tr('field.privateKey')}
           name="privateKey"
           textarea
           value={privateKey}
@@ -118,7 +122,7 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
           required
         />
         <Field
-          label="平台 RSA 公钥"
+          label={tr('field.platformPublicKey')}
           name="platformPublicKey"
           textarea
           value={platformPublicKey}
@@ -126,7 +130,7 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
           required
         />
         <Field
-          label="支付方式"
+          label={tr('field.methods')}
           name="methods"
           placeholder="alipay,wxpay,qqpay"
           value={methods}
@@ -138,7 +142,7 @@ function EpayAdminPage(props: AdminPageComponentProps): ReactElement {
           disabled={pending}
           className="h-9 w-fit rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60 sm:col-span-2"
         >
-          {pending ? '保存中…' : '保存配置'}
+          {pending ? tr('action.saving') : tr('action.save')}
         </button>
       </form>
     </main>
@@ -190,46 +194,55 @@ function Field({
 }
 
 /** Render a kernel problem-details response into a single user-facing message. */
-async function readErrorMessage(response: Response): Promise<string> {
-  if (response.status === 401) return '登录状态已失效，请重新登录。';
-  if (response.status === 403) return '无权执行此操作。';
+async function readErrorMessage(
+  response: Response,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): Promise<string> {
+  if (response.status === 401) return tr('error.unauthenticated');
+  if (response.status === 403) return tr('error.forbidden');
   try {
     const body = (await response.json()) as ProblemDetails;
     const detail = typeof body.detail === 'string' ? body.detail.trim() : '';
     if (detail) return detail;
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     if (title) return title;
-    if (typeof body.code === 'string' && body.code.trim()) return `保存失败（${body.code}）。`;
+    if (typeof body.code === 'string' && body.code.trim()) {
+      return tr('error.withCode', { code: body.code });
+    }
   } catch {
     // Non-JSON error body; fall through to a generic message.
   }
-  return `保存失败（HTTP ${response.status}）。`;
+  return tr('error.withStatus', { status: response.status });
 }
 
 function EpayOverview(props: AdminPageComponentProps) {
+  const tr = t(props.locale);
   const status = props.data.status as EpayStatus | undefined;
   return (
     <FeatureOverview
-      title="概览"
-      description="查看支付网关的配置状态与支持的支付方式。"
+      title={tr('overview.title')}
+      description={tr('overview.description')}
       unavailable={!status}
       metrics={[
-        { label: '网关状态', value: status?.configured ? '已配置' : '未配置' },
-        { label: '支付方式', value: status?.methods?.length ?? 0 },
         {
-          label: '密钥存储',
-          value: status?.secretsEnabled ? '可用' : '未启用',
+          label: tr('overview.gatewayState'),
+          value: status?.configured ? tr('overview.configured') : tr('overview.notConfigured'),
+        },
+        { label: tr('overview.methods'), value: status?.methods?.length ?? 0 },
+        {
+          label: tr('overview.secretStorage'),
+          value: status?.secretsEnabled ? tr('overview.available') : tr('overview.disabled'),
         },
       ]}
       links={[
         {
-          label: '配置',
-          description: '设置网关地址、商户信息与密钥。',
+          label: tr('overview.settingsLink'),
+          description: tr('overview.settingsLinkDescription'),
           href: '/admin/plugin/epay/settings',
         },
       ]}
       activity={{
-        title: '支付方式',
+        title: tr('overview.activity'),
         items: (status?.methods ?? []).map((method) => ({
           label: method.label,
           detail: method.id,

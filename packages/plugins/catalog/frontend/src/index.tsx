@@ -1,5 +1,6 @@
 import type { FinderProvider, FrontendPackage } from '@stackpanel/sdk';
 import { z } from 'zod';
+import { messages } from './i18n.js';
 
 interface CategoryNode {
   id: string;
@@ -109,6 +110,8 @@ function coercePositiveInt(value: unknown, fallback: number): string {
 }
 
 export const frontend: FrontendPackage = {
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  messages,
   finders: catalogFinders,
   ui: {
     actions: [
@@ -117,6 +120,7 @@ export const frontend: FrontendPackage = {
         method: 'POST',
         path: '/catalog/admin/categories',
         permission: 'catalog.admin',
+        successFeedback: { messageKey: 'feedback.created' },
         input: [
           { name: 'name', type: 'string', required: true, maxLength: 191 },
           { name: 'icon', type: 'string', maxLength: 32 },
@@ -129,6 +133,7 @@ export const frontend: FrontendPackage = {
         method: 'PATCH',
         path: '/catalog/admin/categories/:id',
         permission: 'catalog.admin',
+        successFeedback: { messageKey: 'feedback.updated' },
         input: [
           { name: 'id', type: 'string', required: true, maxLength: 191 },
           { name: 'name', type: 'string', maxLength: 191 },
@@ -142,6 +147,8 @@ export const frontend: FrontendPackage = {
         method: 'POST',
         path: '/catalog/admin/categories/reorder',
         permission: 'catalog.admin',
+        // The new order is already visible; a toast per drag would spam.
+        silent: true,
         input: [
           { name: 'ids', type: 'ids' },
           { name: 'parentIds', type: 'ids' },
@@ -153,6 +160,7 @@ export const frontend: FrontendPackage = {
         method: 'DELETE',
         path: '/catalog/admin/categories/:id',
         permission: 'catalog.admin',
+        successFeedback: { messageKey: 'feedback.deleted' },
         input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
       },
       {
@@ -160,6 +168,7 @@ export const frontend: FrontendPackage = {
         method: 'PATCH',
         path: '/catalog/admin/products/:productId',
         permission: 'catalog.admin',
+        successFeedback: { messageKey: 'feedback.updated' },
         input: [
           { name: 'productId', type: 'string', required: true, maxLength: 191 },
           { name: 'categoryIds', type: 'ids' },
@@ -174,7 +183,7 @@ export const frontend: FrontendPackage = {
         path: '/categories',
         component: 'admin/categories',
         permission: 'catalog.admin',
-        nav: { label: '商品分类', group: '商店', order: 20 },
+        nav: { labelKey: 'nav.label', groupKey: 'nav.group', order: 20 },
         data: [{ finder: 'catalog.adminCategories', as: 'categories' }],
       },
     ],
