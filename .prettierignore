@@ -12,3 +12,7 @@ packages/plugins/*/frontend/manifest.json
 
 # 从内核迁出的集成测试，跟随内核仓库的风格维护。
 packages/plugins/*/kernel-tests/
+
+# 签名目录快照：由发布流程生成并按签名逐字节校验，重排会让签名失效。
+catalog.json
+channels.json
