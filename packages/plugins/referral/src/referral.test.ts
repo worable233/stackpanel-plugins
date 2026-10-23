@@ -5,7 +5,7 @@ import type {
   ExtensionInstance,
   PluginContext,
 } from '@stackpanel/sdk';
-import { ExtensionUniqueViolation, ExtensionVersionConflict } from '@stackpanel/sdk';
+import { ExtensionUniqueViolation, ExtensionVersionConflict, WalletError } from '@stackpanel/sdk';
 import { attributeRegistration } from './attribution';
 import { bindContext, resetContext } from './context';
 import {
@@ -16,7 +16,13 @@ import {
   type ReferralConfig,
   type ReferralRecord,
 } from './data';
-import { awardInvitee, awardInviter, qualifyByOrder, REFERRAL_REFERENCE_TYPE } from './rewards';
+import {
+  awardInvitee,
+  awardInviter,
+  clawbackByRefund,
+  qualifyByOrder,
+  REFERRAL_REFERENCE_TYPE,
+} from './rewards';
 
 interface Stored {
   name: string;
@@ -174,6 +180,9 @@ function createFakeExtensions() {
     all(kind: string): Stored[] {
       return [...table(kind).values()];
     },
+    get(kind: string, name: string): Stored | undefined {
+      return table(kind).get(name);
+    },
   };
 }
 
@@ -182,6 +191,7 @@ interface FakeWorld {
   fake: ReturnType<typeof createFakeExtensions>;
   ledger: LedgerRow[];
   credits: LedgerRow[];
+  debits: LedgerRow[];
 }
 
 /**
@@ -194,6 +204,38 @@ function makeWorld(): FakeWorld {
   const fake = createFakeExtensions();
   const ledger: LedgerRow[] = [];
   const credits: LedgerRow[] = [];
+  const debits: LedgerRow[] = [];
+  const debit = async (
+    userId: string,
+    amount: number,
+    currency: string,
+    meta: {
+      type: string;
+      referenceType: string;
+      referenceId: string;
+      note: string;
+    },
+  ) => {
+    const key = `${meta.referenceType}:${meta.referenceId}`;
+    if (ledger.some((row) => `${row.referenceType}:${row.referenceId}` === key)) {
+      const conflict = new Error('unique constraint') as Error & { code: string };
+      conflict.code = 'P2002';
+      throw conflict;
+    }
+    const balance = credits
+      .filter((row) => row.userId === userId)
+      .reduce((sum, row) => sum + row.amount, 0);
+    if (balance < amount) {
+      // 用 SDK 真实类：插件侧判据是 `isWalletError`（跨模块品牌），
+      // 手搓的 `Error` 带 code 字段不会被识别，会把「余额不足」误判成
+      // 未知异常而向上抛。
+      throw new WalletError(409, '钱包余额不足');
+    }
+    const row: LedgerRow = { userId, amount: -amount, currency, ...meta };
+    ledger.push(row);
+    debits.push(row);
+    return { id: `${ledger.length}`, ...row };
+  };
   const credit = async (
     userId: string,
     amount: number,
@@ -217,7 +259,7 @@ function makeWorld(): FakeWorld {
     return { id: `${ledger.length}`, ...row };
   };
   const tx = (async (fn: (tx: unknown) => Promise<unknown>) =>
-    fn({ extensions: fake.client, wallet: { credit } })) as PluginContext['tx'];
+    fn({ extensions: fake.client, wallet: { credit, debit } })) as PluginContext['tx'];
   const ctx = {
     manifest: { id: 'referral', name: '推广插件', version: '0.1.0' },
     logger: { info: () => {}, warn: () => {}, error: () => {} },
@@ -236,7 +278,7 @@ function makeWorld(): FakeWorld {
       remove: async () => {},
     },
     payments: {} as never,
-    wallet: { credit } as never,
+    wallet: { credit, debit } as never,
     fx: {} as never,
     auth: {} as never,
     notifications: {} as never,
@@ -254,7 +296,7 @@ function makeWorld(): FakeWorld {
     getExtensions: () => [],
     getExtensionsWithOwner: () => [],
   } as unknown as PluginContext;
-  return { ctx, fake, ledger, credits };
+  return { ctx, fake, ledger, credits, debits };
 }
 
 function baseConfig(overrides: Partial<ReferralConfig> = {}): ReferralConfig {
@@ -484,5 +526,174 @@ describe('referral rewards', () => {
     expect(parsed.trigger).toBe('first_order');
     expect(parsed.currency).toBe('CNY');
     expect(parsed.sameIpLimit).toBe(1);
+  });
+});
+
+/**
+ * 退款追回（#11「退款追回」）。
+ *
+ * 关键不是「能扣钱」，而是三条边界：
+ *  - 只有**整单**退款才追回；
+ *  - 追回用**独立幂等键**，否则第二次投递会被当成「已入账」而静默跳过；
+ *  - 余额不足时**不阻断退款**，记录仍标 clawed_back（金额记实际扣到的 0），
+ *    由后台人工补扣 —— 否则用户把钱花掉就能让退款永远失败。
+ */
+describe('referral clawback on refund', () => {
+  beforeEach(() => {
+    resetContext();
+  });
+
+  function worldWithPaidInviter(): FakeWorld {
+    const world = makeWorld();
+    bindContext(world.ctx);
+    seedCode(world.fake);
+    return world;
+  }
+
+  /** 直接造一条「已发奖」的记录，避免每个用例都走完整归因流程。 */
+  function seedPaidRecord(world: FakeWorld, overrides: Record<string, unknown> = {}) {
+    return world.fake.seed(
+      recordModel.kind,
+      {
+        code: CODE,
+        inviterId: INVITER,
+        inviteeId: 'user-invitee',
+        inviteeEmail: 'invitee@example.com',
+        trigger: 'first_order',
+        inviterState: 'paid',
+        inviteeState: 'paid',
+        freezeUntil: 0,
+        rewardAmount: 500,
+        inviteeRewardAmount: 200,
+        registerIp: '1.1.1.1',
+        qualifiedOrderId: 'order-1',
+        qualifiedAt: new Date().toISOString(),
+        paidAt: new Date().toISOString(),
+        clawedBackAtMs: 0,
+        clawedBackAmount: 0,
+        clawedBackOrderId: null,
+        ...overrides,
+      } as Record<string, unknown>,
+      'user-invitee',
+    );
+  }
+
+  it('整单退款：扣回推广人奖励，状态转 clawed_back 并记录实际金额', async () => {
+    const world = worldWithPaidInviter();
+    seedPaidRecord(world);
+    // 先让推广人账上有钱，debit 才能成功。
+    world.credits.push({
+      userId: INVITER,
+      amount: 500,
+      currency: 'CNY',
+      type: 'REFERRAL_REWARD',
+      referenceType: REFERRAL_REFERENCE_TYPE,
+      referenceId: 'user-invitee:inviter',
+      note: '',
+    });
+
+    const record = world.fake.get(recordModel.kind, 'user-invitee');
+    const result = await clawbackByRefund({
+      record: record as never,
+      orderId: 'order-1',
+      currency: 'CNY',
+    });
+
+    expect(result.inviter).toBe('clawed');
+    expect(world.debits).toHaveLength(1);
+    expect(world.debits[0]!.amount).toBe(-500);
+    // 独立幂等键：不能复用入账那次，否则第二次会被当成「已存在」。
+    expect(world.debits[0]!.referenceId).toBe('user-invitee:inviter:clawback');
+    const after = world.fake.get(recordModel.kind, 'user-invitee');
+    expect(after?.spec.inviterState).toBe('clawed_back');
+    expect(after?.spec.clawedBackAmount).toBe(500);
+    expect(after?.spec.clawedBackOrderId).toBe('order-1');
+  });
+
+  it('余额不足：不抛出，标记 clawed_back 且金额记 0（待人工补扣）', async () => {
+    const world = worldWithPaidInviter();
+    seedPaidRecord(world);
+
+    const record = world.fake.get(recordModel.kind, 'user-invitee');
+    const result = await clawbackByRefund({
+      record: record as never,
+      orderId: 'order-1',
+      currency: 'CNY',
+    });
+
+    expect(result.inviter).toBe('insufficient-balance');
+    expect(world.debits).toHaveLength(0);
+    const after = world.fake.get(recordModel.kind, 'user-invitee');
+    // 状态表示「应当追回」，金额表示「真正追回多少」——账面不说谎。
+    expect(after?.spec.inviterState).toBe('clawed_back');
+    expect(after?.spec.clawedBackAmount).toBe(0);
+  });
+
+  it('幂等：重复追回不会再扣钱，状态保持 clawed_back', async () => {
+    const world = worldWithPaidInviter();
+    seedPaidRecord(world, { inviterState: 'clawed_back', clawedBackAmount: 500 });
+    world.credits.push({
+      userId: INVITER,
+      amount: 500,
+      currency: 'CNY',
+      type: 'REFERRAL_REWARD',
+      referenceType: REFERRAL_REFERENCE_TYPE,
+      referenceId: 'user-invitee:inviter',
+      note: '',
+    });
+
+    const record = world.fake.get(recordModel.kind, 'user-invitee');
+    const result = await clawbackByRefund({
+      record: record as never,
+      orderId: 'order-1',
+      currency: 'CNY',
+    });
+
+    expect(result.inviter).toBe('nothing-to-claw');
+    expect(world.debits).toHaveLength(0);
+  });
+
+  it('未发奖（pending）的记录不追回', async () => {
+    const world = worldWithPaidInviter();
+    seedPaidRecord(world, { inviterState: 'pending' });
+
+    const record = world.fake.get(recordModel.kind, 'user-invitee');
+    const result = await clawbackByRefund({
+      record: record as never,
+      orderId: 'order-1',
+      currency: 'CNY',
+    });
+
+    expect(result.inviter).toBe('nothing-to-claw');
+    expect(world.debits).toHaveLength(0);
+    expect(world.fake.get(recordModel.kind, 'user-invitee')?.spec.inviterState).toBe('pending');
+  });
+
+  it('被邀请人奖励不追回：注册事实未因退款消失', async () => {
+    const world = worldWithPaidInviter();
+    seedPaidRecord(world);
+    world.credits.push({
+      userId: INVITER,
+      amount: 500,
+      currency: 'CNY',
+      type: 'REFERRAL_REWARD',
+      referenceType: REFERRAL_REFERENCE_TYPE,
+      referenceId: 'user-invitee:inviter',
+      note: '',
+    });
+
+    const record = world.fake.get(recordModel.kind, 'user-invitee');
+    const result = await clawbackByRefund({
+      record: record as never,
+      orderId: 'order-1',
+      currency: 'CNY',
+    });
+
+    expect(result.invitee).toBe('not-applicable');
+    // 只扣了推广人那一笔，被邀请人那 200 分仍在账上。
+    expect(world.debits).toHaveLength(1);
+    expect(world.debits[0]!.userId).toBe(INVITER);
+    const after = world.fake.get(recordModel.kind, 'user-invitee');
+    expect(after?.spec.inviteeState).toBe('paid');
   });
 });

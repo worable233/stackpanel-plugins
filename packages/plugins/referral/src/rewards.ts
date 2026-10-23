@@ -1,4 +1,4 @@
-import type { ExtensionInstance } from '@stackpanel/sdk';
+import { formatMinorCurrency, isWalletError, type ExtensionInstance } from '@stackpanel/sdk';
 import { context } from './context';
 import { recordModel, type ReferralCode, type ReferralConfig, type ReferralRecord } from './data';
 
@@ -13,6 +13,8 @@ export const REFERRAL_REFERENCE_TYPE = 'REFERRAL';
 /** 流水展示类型；钱包明细页对未知 type 会回退显示 note。 */
 const LEDGER_TYPE_INVITER = 'REFERRAL_REWARD';
 const LEDGER_TYPE_INVITEE = 'REFERRAL_INVITEE_REWARD';
+/** 追回流水的展示类型：与奖励入账分开，用户账单上能一眼看出是「收回」。 */
+const LEDGER_TYPE_CLAWBACK_INVITER = 'REFERRAL_REWARD_CLAWBACK';
 
 /** Prisma 把唯一索引冲突报成 P2002。 */
 function isUniqueViolation(error: unknown): boolean {
@@ -67,6 +69,11 @@ async function settleRecord(
         });
       }
     });
+    // 奖励入账是「钱」的事实，必须回执。幂等键绑定 referenceId：钱包账本的唯一索引
+    // 已保证只入账一次，通知同样只应出现一次（重放命中 P2002 时不会走到这里）。
+    if (payout && payout.amount > 0) {
+      await notifyPayout(pluginCtx, payout);
+    }
     return 'paid';
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
@@ -84,14 +91,7 @@ async function settleRecord(
   }
 }
 
-/**
- * 取记录的最新版本。
- *
- * 调用方手里的 `record` 可能是几步之前读到的快照（例如归因流程先发被邀请人
- * 奖励、再发推广人奖励，中间记录版本已经 +1）。直接用陈旧 version 走
- * `extensions.update` 必然触发乐观锁冲突。这里统一在写之前重读一次，让
- * 「读-改-写」始终基于最新版本。
- */
+/** 取记录的最新版本。 */
 async function latestRecord(record: RecordInstance): Promise<RecordInstance> {
   const fresh = await context().extensions.get<ReferralRecord>(recordModel, record.name);
   return fresh ?? record;
@@ -182,4 +182,131 @@ export async function qualifyByOrder(
   const latest = await pluginCtx.extensions.get<ReferralRecord>(recordModel, record.name);
   if (!latest) return;
   await awardInviter(latest, code, config);
+}
+
+/** 追回一侧奖励的结果。 */
+export type ClawbackOutcome = 'clawed' | 'nothing-to-claw' | 'insufficient-balance';
+
+/**
+ * 追回一侧奖励。
+ *
+ * 三个刻意的设计决定：
+ *
+ * 1. **扣回失败不阻断退款**。`wallet.debit` 在余额不足时抛 409。这笔钱可能已经被
+ *    用户花掉，此时让退款整体失败是错的 —— 退款是商店对用户的承诺，推广追回是
+ *    平台与推广人之间的账。所以余额不足时**仍然**把记录标成 `clawed_back`，
+ *    但记 `clawedBackAmount` 为实际扣到的金额（这里是 0），由后台人工补扣。
+ *    这样账不会说谎：状态表示「应当追回」，金额表示「真正追回了多少」。
+ *
+ * 2. **扣回用独立 referenceId**（`:inviter:clawback`）。账本幂等键是
+ *    `(referenceType, referenceId)`，若复用入账时的 id，第二次投递会被当成
+ *    「已存在」而静默跳过；独立 id 让「入账」与「扣回」各自幂等。
+ *
+ * 3. **只处理 paid 状态**。`pending` 还没发钱，`rejected` 从来没发过，
+ *    `clawed_back` 已追回过 —— 三种都无需动作，天然幂等。
+ */
+async function clawbackSide(input: {
+  record: RecordInstance;
+  userId: string;
+  amount: number;
+  currency: string;
+  referenceId: string;
+  ledgerType: string;
+  note: string;
+}): Promise<ClawbackOutcome> {
+  if (input.amount <= 0) return 'nothing-to-claw';
+  const pluginCtx = context();
+  try {
+    await pluginCtx.wallet.debit(input.userId, input.amount, input.currency, {
+      type: input.ledgerType,
+      referenceType: REFERRAL_REFERENCE_TYPE,
+      referenceId: input.referenceId,
+      note: input.note,
+    });
+    return 'clawed';
+  } catch (error) {
+    // 账本幂等命中：这笔已经扣过了。对调用方而言结果相同。
+    if (isUniqueViolation(error)) return 'clawed';
+    if (isWalletError(error) && error.code === 'wallet.insufficient_balance') {
+      pluginCtx.logger.warn(
+        `referral: 追回失败（余额不足），已标记待追回 ${input.userId} ${input.amount}`,
+      );
+      return 'insufficient-balance';
+    }
+    throw error;
+  }
+}
+
+/**
+ * 整单退款后追回推广奖励。
+ *
+ * 触发语义：**只有整单撤销**才追回。部分退款按比例扣佣金会把规则变成一团算术，
+ * 且无法向用户解释「退了 30% 为什么佣金扣 31%」；整单撤销才是「这笔交易没发生」。
+ *
+ * 被邀请人奖励**不追回**：它是「注册」的对价，注册事实并未因退款消失。这是刻意的
+ * 产品判断，不是遗漏 —— 若将来要追回，应作为独立的配置项，而不是默认行为。
+ */
+export async function clawbackByRefund(input: {
+  record: RecordInstance;
+  orderId: string;
+  currency: string;
+}): Promise<{ inviter: ClawbackOutcome; invitee: 'not-applicable' }> {
+  const current = await latestRecord(input.record);
+  if (current.spec.inviterState !== 'paid') {
+    return { inviter: 'nothing-to-claw', invitee: 'not-applicable' };
+  }
+  const amount = current.spec.rewardAmount;
+  const outcome = await clawbackSide({
+    record: current,
+    userId: current.spec.inviterId,
+    amount,
+    currency: input.currency,
+    referenceId: `${current.name}:inviter:clawback`,
+    ledgerType: LEDGER_TYPE_CLAWBACK_INVITER,
+    note: `推广奖励追回（订单 ${input.orderId} 整单退款）`,
+  });
+  const pluginCtx = context();
+  await pluginCtx.extensions.update<ReferralRecord>(
+    recordModel,
+    current.name,
+    {
+      ...current.spec,
+      inviterState: 'clawed_back',
+      // 实际扣到多少就记多少：余额不足时为 0，后台据此人工补扣。
+      clawedBackAmount: outcome === 'clawed' ? amount : 0,
+      clawedBackAtMs: Date.now(),
+      clawedBackOrderId: input.orderId,
+    },
+    { expectedVersion: current.version },
+  );
+  return { inviter: outcome, invitee: 'not-applicable' };
+}
+
+/** 奖励入账回执（best-effort）：失败只告警，绝不回滚已入账的钱。 */
+async function notifyPayout(
+  pluginCtx: ReturnType<typeof context>,
+  payout: { userId: string; amount: number; currency: string; referenceId: string; note: string },
+): Promise<void> {
+  try {
+    await pluginCtx.notifications.upsert({
+      userId: payout.userId,
+      dedupeKey: `referral:reward:${payout.referenceId}`,
+      type: 'referral.reward.paid',
+      title: '推广奖励已到账',
+      body: `${payout.note}：${formatMinorCurrency(payout.amount, payout.currency, 'zh-CN')} 已存入你的钱包。`,
+      link: '/account/balance',
+      data: {
+        amount: payout.amount,
+        currency: payout.currency,
+        referenceId: payout.referenceId,
+      },
+      status: 'success',
+    });
+  } catch (error) {
+    pluginCtx.logger.warn(
+      `referral: reward notification failed for ${payout.userId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }

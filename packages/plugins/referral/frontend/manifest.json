@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "revision": "ffb98ed56433",
+  "revision": "1aa23767b635",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
@@ -297,7 +297,8 @@
       "admin.adjust.note": "备注",
       "feedback.codeCreated": "邀请码已创建",
       "feedback.configSaved": "配置已保存",
-      "feedback.adjusted": "余额已调整"
+      "feedback.adjusted": "余额已调整",
+      "state.clawedBack": "已追回（退款）"
     },
     "zh-TW": {
       "trigger.register": "註冊即發",
@@ -393,7 +394,8 @@
       "admin.adjust.note": "備註",
       "feedback.codeCreated": "邀請碼已建立",
       "feedback.configSaved": "配置已儲存",
-      "feedback.adjusted": "餘額已調整"
+      "feedback.adjusted": "餘額已調整",
+      "state.clawedBack": "已追回（退款）"
     },
     "zh-HK": {
       "trigger.register": "註冊即發",
@@ -489,7 +491,8 @@
       "admin.adjust.note": "備註",
       "feedback.codeCreated": "邀請碼已建立",
       "feedback.configSaved": "配置已儲存",
-      "feedback.adjusted": "餘額已調整"
+      "feedback.adjusted": "餘額已調整",
+      "state.clawedBack": "已追回（退款）"
     },
     "en-US": {
       "trigger.register": "Pay on sign-up",
@@ -585,7 +588,8 @@
       "admin.adjust.note": "Note",
       "feedback.codeCreated": "Invite code created",
       "feedback.configSaved": "Settings saved",
-      "feedback.adjusted": "Balance adjusted"
+      "feedback.adjusted": "Balance adjusted",
+      "state.clawedBack": "Clawed back (refund)"
     }
   }
 }
