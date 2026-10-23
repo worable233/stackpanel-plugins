@@ -27,6 +27,12 @@ interface Ticket {
   createdAt: string;
   updatedAt: string;
   userEmail?: string | null;
+  category?: string | null;
+  departmentId?: string | null;
+  relatedType?: string | null;
+  relatedId?: string | null;
+  reminderCount?: number;
+  closedBy?: string | null;
 }
 
 interface TicketMessage {
@@ -54,6 +60,12 @@ const ticketListItemSchema = z.object({
   updatedAt: z.string(),
   userEmail: z.string().nullable().optional(),
   assigneeEmail: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  departmentId: z.string().nullable().optional(),
+  relatedType: z.string().nullable().optional(),
+  relatedId: z.string().nullable().optional(),
+  reminderCount: z.number().optional(),
+  closedBy: z.string().nullable().optional(),
 });
 
 const ticketListSchema = z.object({
@@ -72,6 +84,12 @@ const ticketDetailSchema = z.object({
   assigneeId: z.string().nullable().optional(),
   assigneeEmail: z.string().nullable().optional(),
   viewerId: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  departmentId: z.string().nullable().optional(),
+  relatedType: z.string().nullable().optional(),
+  relatedId: z.string().nullable().optional(),
+  reminderCount: z.number().optional(),
+  closedBy: z.string().nullable().optional(),
   messages: z.array(
     z.object({
       id: z.string(),
@@ -79,6 +97,7 @@ const ticketDetailSchema = z.object({
       authorId: z.string(),
       authorEmail: z.string().nullable().optional(),
       authorRole: z.string().nullable().optional(),
+      internal: z.boolean().optional(),
       createdAt: z.string(),
     }),
   ),
@@ -97,6 +116,10 @@ const STATUS_META: Record<string, { messageKey: string; cls: string }> = {
   IN_PROGRESS: {
     messageKey: 'status.IN_PROGRESS',
     cls: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+  },
+  PENDING_USER: {
+    messageKey: 'status.PENDING_USER',
+    cls: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
   },
   RESOLVED: {
     messageKey: 'status.RESOLVED',
@@ -140,13 +163,60 @@ function TicketNewPage(props: AccountPageComponentProps): ReactElement {
   );
 }
 
+/**
+ * 用户侧工单操作：催单 + 关闭。
+ *
+ * 共享组件只提供挂载点（`extraActions`），业务动词与文案留在插件里 ——
+ * 内核的 `@stackpanel/ui` 不应承载某个插件的工单语义。
+ */
+function TicketUserActions({
+  props,
+  ticket,
+}: {
+  props: AccountPageComponentProps;
+  ticket: TicketDetail;
+}): ReactElement | null {
+  const tr = t(props.locale);
+  if (ticket.status === 'CLOSED') return null;
+  const remind = props.actions['ticket.remind'];
+  const close = props.actions['ticket.close'];
+  return (
+    <>
+      {remind ? (
+        <form action={remind}>
+          <input type="hidden" name="id" value={ticket.id} />
+          <button
+            type="submit"
+            className="h-8 rounded-lg border bg-background px-2.5 text-xs font-medium hover:bg-muted"
+          >
+            {tr('workspace.remind')}
+          </button>
+        </form>
+      ) : null}
+      {close ? (
+        <form action={close}>
+          <input type="hidden" name="id" value={ticket.id} />
+          <button
+            type="submit"
+            className="h-8 rounded-lg border bg-background px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
+            {tr('workspace.close')}
+          </button>
+        </form>
+      ) : null}
+    </>
+  );
+}
+
 function TicketAccountDetailPage(props: AccountPageComponentProps): ReactElement {
+  const ticket = props.data.ticket as TicketDetail | undefined;
   return (
     <TicketWorkspace
       mode="detail"
       tickets={(props.data.tickets as Ticket[] | undefined) ?? []}
-      ticket={props.data.ticket as TicketDetail | undefined}
+      {...(ticket ? { ticket } : {})}
       reply={props.actions['ticket.reply']}
+      extraActions={ticket ? <TicketUserActions props={props} ticket={ticket} /> : undefined}
       locale={props.locale}
       labels={ticketWorkspaceLabels(props.locale)}
     />
@@ -301,6 +371,9 @@ const ticketActions: PluginActionDefinition[] = [
     input: [
       { name: 'subject', type: 'string', required: true, maxLength: 191 },
       { name: 'body', type: 'string', required: true, maxLength: 10000 },
+      { name: 'category', type: 'string', maxLength: 64 },
+      { name: 'relatedType', type: 'string', maxLength: 16 },
+      { name: 'relatedId', type: 'string', maxLength: 191 },
     ],
   },
   {
@@ -311,7 +384,26 @@ const ticketActions: PluginActionDefinition[] = [
     input: [
       { name: 'id', type: 'string', required: true, maxLength: 191 },
       { name: 'body', type: 'string', required: true, maxLength: 10000 },
+      // 仅管理员可置 true（后端会拒绝非管理员）：内部备注对用户不可见。
+      { name: 'internal', type: 'boolean' },
     ],
+  },
+  {
+    id: 'ticket.close',
+    method: 'POST',
+    path: '/tickets/:id/close',
+    permission: 'ticket.create',
+    input: [
+      { name: 'id', type: 'string', required: true, maxLength: 191 },
+      { name: 'reason', type: 'string', maxLength: 10000 },
+    ],
+  },
+  {
+    id: 'ticket.remind',
+    method: 'POST',
+    path: '/tickets/:id/remind',
+    permission: 'ticket.create',
+    input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
   },
   {
     id: 'ticket.update',
@@ -323,6 +415,8 @@ const ticketActions: PluginActionDefinition[] = [
       { name: 'status', type: 'string', maxLength: 32 },
       { name: 'priority', type: 'string', maxLength: 32 },
       { name: 'assigneeId', type: 'string', maxLength: 191 },
+      { name: 'category', type: 'string', maxLength: 64 },
+      { name: 'departmentId', type: 'string', maxLength: 191 },
     ],
   },
 ];

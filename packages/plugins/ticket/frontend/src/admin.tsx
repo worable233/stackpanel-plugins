@@ -17,6 +17,11 @@ interface Ticket {
   updatedAt: string;
   userEmail?: string | null;
   assigneeEmail?: string | null;
+  category?: string | null;
+  departmentId?: string | null;
+  relatedType?: string | null;
+  relatedId?: string | null;
+  reminderCount?: number;
 }
 
 interface TicketDetail extends Ticket {
@@ -26,6 +31,7 @@ interface TicketDetail extends Ticket {
     authorId: string;
     authorEmail?: string | null;
     authorRole?: string | null;
+    internal?: boolean;
     createdAt: string;
   }>;
   assigneeId?: string | null;
@@ -71,9 +77,38 @@ function AdminTicketDetailPage(props: AdminPageComponentProps): ReactElement {
       ticket={ticket}
       update={props.actions['ticket.update']}
       reply={props.actions['ticket.reply']}
+      extraActions={<AdminAcceptAction props={props} ticket={ticket} />}
       locale={props.locale}
       labels={ticketWorkspaceLabels(props.locale)}
     />
+  );
+}
+
+/**
+ * 「接单」不是独立接口：把它建模成「指派给自己」的一次 PATCH，从而只有一条
+ * 写入路径 —— 两套写状态的接口迟早会给出不一致的 assignee/status 组合。
+ */
+function AdminAcceptAction({
+  props,
+  ticket,
+}: {
+  props: AdminPageComponentProps;
+  ticket: TicketDetail;
+}): ReactElement | null {
+  const tr = t(props.locale);
+  const update = props.actions['ticket.update'];
+  if (!update || ticket.status === 'CLOSED' || ticket.assigneeId === ticket.viewerId) return null;
+  return (
+    <form action={update}>
+      <input type="hidden" name="id" value={ticket.id} />
+      <input type="hidden" name="assigneeId" value={ticket.viewerId ?? ''} />
+      <button
+        type="submit"
+        className="h-8 rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground"
+      >
+        {tr('workspace.accept')}
+      </button>
+    </form>
   );
 }
 
