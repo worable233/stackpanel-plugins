@@ -61,6 +61,9 @@ export async function attributeRegistration(input: {
       qualifiedOrderId: null,
       qualifiedAt: null,
       paidAt: null,
+      clawedBackAtMs: 0,
+      clawedBackAmount: 0,
+      clawedBackOrderId: null,
     };
 
     let record: ExtensionInstance<ReferralRecord>;

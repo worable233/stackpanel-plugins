@@ -1,5 +1,11 @@
 import type { ExtensionInstance, HttpReply, HttpRequest, JobContext } from '@stackpanel/sdk';
-import { PluginError, WALLET_CURRENCY, definePlugin } from '@stackpanel/sdk';
+import {
+  EXTENSION_POINTS,
+  PluginError,
+  WALLET_CURRENCY,
+  definePlugin,
+  type NotificationTypeDefinition,
+} from '@stackpanel/sdk';
 import { z } from 'zod';
 import { attributeRegistration } from './attribution';
 import { createCode, listCodes, updateCode } from './codes';
@@ -14,7 +20,24 @@ import {
   type ReferralRecord,
 } from './data';
 import { ReferralPluginError } from './errors';
-import { awardInviter, qualifyByOrder } from './rewards';
+import { awardInviter, clawbackByRefund, qualifyByOrder } from './rewards';
+
+/**
+ * 本插件发出的通知类型。
+ *
+ * 必须显式声明：内核的偏好目录只认已声明的类型，未声明的类型一律「永远投递、
+ * 用户无法关闭」。奖励到账这类钱相关通知尤其不能被静默吞掉，也不该绕开用户的
+ * 通知偏好设置。
+ */
+const REFERRAL_NOTIFICATION_TYPES: NotificationTypeDefinition[] = [
+  {
+    type: 'referral.reward.paid',
+    category: 'referral',
+    label: '推广奖励已到账',
+    description: '推广人或被邀请人收到余额奖励时通知。',
+    order: 10,
+  },
+];
 
 /** 冻结到期扫描的周期：一小时一次足够，冻结以天计。 */
 const UNFREEZE_SWEEP_INTERVAL_MS = 3_600_000;
@@ -23,17 +46,28 @@ const UNFREEZE_JOB = 'unfreeze-sweep';
 /** 单页最多返回的归因记录数。 */
 const ADMIN_PAGE_SIZE = 200;
 
-const createCodeSchema = z.object({
-  label: z.string().max(40).optional(),
-  rewardAmount: z.number().int().min(0).max(2_000_000_000).nullable().optional(),
-});
+/**
+ * 用户端建码/改码的输入。
+ *
+ * **不接受 `rewardAmount`**，这是有意的：奖励金额是平台级运营策略，由管理员在
+ * `/store/admin/referrals/config` 设定。若允许用户自带金额，任何人都能给自己开
+ * 一个 1e9 分的推广码，然后自导自演把钱从平台钱包套走。历史记录里的
+ * `rewardAmount` 字段仍然保留（老码可能带值），但用户端不能再写它 —— 用
+ * `.strict()` 让多传的字段直接 400，而不是被 Zod 默默剥掉、调用方误以为生效了。
+ */
+const createCodeSchema = z
+  .object({
+    label: z.string().max(40).optional(),
+  })
+  .strict();
 
-const updateCodeSchema = z.object({
-  id: z.string().max(191),
-  label: z.string().max(40).optional(),
-  state: z.enum(['active', 'disabled']).optional(),
-  rewardAmount: z.number().int().min(0).max(2_000_000_000).nullable().optional(),
-});
+const updateCodeSchema = z
+  .object({
+    id: z.string().max(191),
+    label: z.string().max(40).optional(),
+    state: z.enum(['active', 'disabled']).optional(),
+  })
+  .strict();
 
 const configInputSchema = z.object({
   enabled: z.boolean(),
@@ -145,7 +179,6 @@ const postCode = async (req: HttpRequest): Promise<unknown> => {
   const config = await loadConfig();
   const created = await createCode(ownerId, {
     ...(parsed.data.label === undefined ? {} : { label: parsed.data.label }),
-    ...(parsed.data.rewardAmount === undefined ? {} : { rewardAmount: parsed.data.rewardAmount }),
   });
   return { code: toCodeView(created, config) };
 };
@@ -159,7 +192,6 @@ const patchCode = async (req: HttpRequest): Promise<unknown> => {
   const updated = await updateCode(ownerId, id, {
     ...(parsed.data.label === undefined ? {} : { label: parsed.data.label }),
     ...(parsed.data.state === undefined ? {} : { state: parsed.data.state }),
-    ...(parsed.data.rewardAmount === undefined ? {} : { rewardAmount: parsed.data.rewardAmount }),
   });
   return { code: toCodeView(updated, config) };
 };
@@ -267,6 +299,42 @@ async function onOrderPaid(payload: unknown): Promise<void> {
 }
 
 /**
+ * 整单退款后追回推广奖励。
+ *
+ * 只处理 `full === true`：部分退款按比例扣佣金会把规则变成无法解释的算术，
+ * 而且与「注册奖励是注册的对价」这一判断冲突。`full` 由 store 的
+ * `order.refunded` 载荷提供（本次同时补上了该字段）。
+ *
+ * 追回失败（用户已把钱花掉）**不抛出**：退款是商店对用户的承诺，不能因为
+ * 平台与推广人之间的账而失败；记录会标成 `clawed_back` 且金额为实际扣到的数，
+ * 供后台人工补扣。
+ */
+async function onOrderRefunded(payload: unknown): Promise<void> {
+  const event = payload as { orderId?: string; userId?: string; full?: boolean } | null;
+  if (!event?.orderId || !event.userId) return;
+  if (event.full !== true) return;
+  try {
+    const extensions = context().extensions;
+    // 归因记录以被邀请人 userId 为实例名（见 attribution.ts）。
+    const record = await extensions.get<ReferralRecord>(recordModel, event.userId);
+    if (!record) return;
+    if (record.spec.qualifiedOrderId !== event.orderId) return;
+    const config = await loadConfig();
+    const result = await clawbackByRefund({
+      record,
+      orderId: event.orderId,
+      currency: config.currency,
+    });
+    context().logger.info(
+      `referral: 退款追回 ${record.name}（订单 ${event.orderId}）→ ${result.inviter}`,
+    );
+  } catch (error) {
+    // 事件订阅者的 Promise 不被内核 await，异常必须就地吞掉。
+    context().logger.error(`referral: 退款追回失败 ${String(error)}`);
+  }
+}
+
+/**
  * 冻结档位解冻：扫描冻结到期仍 pending 的记录，逐条发奖。
  *
  * 逐条 try/catch：一条记录失败不能拖垮整轮扫描。
@@ -362,6 +430,12 @@ export const referralPlugin = definePlugin({
         void onOrderPaid(payload);
       },
     },
+    {
+      topic: 'order.refunded',
+      handler: (payload) => {
+        void onOrderRefunded(payload);
+      },
+    },
   ],
   routes: [
     {
@@ -416,6 +490,9 @@ export const referralPlugin = definePlugin({
   ],
   onActivate: (ctx) => {
     bindContext(ctx);
+    for (const definition of REFERRAL_NOTIFICATION_TYPES) {
+      ctx.registerExtension(EXTENSION_POINTS.notificationType, definition);
+    }
     startUnfreezeSchedule(ctx.jobs);
     ctx.logger.info('referral: activated');
   },
