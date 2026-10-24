@@ -1,6 +1,5 @@
 {
   "version": "0.1.0",
-  "revision": "c35df8d5d840",
   "entry": "frontend/dist/index.js",
   "pages": [
     {
@@ -8,14 +7,16 @@
       "component": "notice/index",
       "data": [
         {
-          "finder": "notice.list",
+          "fetch": {
+            "path": "/notices"
+          },
           "as": "announcements"
         }
       ]
     }
   ],
   "layouts": [],
-  "finders": ["notice.list", "notice.adminList"],
+  "finders": [],
   "adminRoutes": [
     {
       "path": "/overview",
@@ -28,7 +29,9 @@
       },
       "data": [
         {
-          "finder": "notice.adminList",
+          "fetch": {
+            "path": "/notice/admin/announcements"
+          },
           "as": "announcements"
         }
       ]

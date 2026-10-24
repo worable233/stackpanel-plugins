@@ -151,6 +151,9 @@ for (const dataDir of dataDirs) {
 // kernel admits it, so an unlisted plugin renders its account pages with empty
 // data. Admin pages are client-rendered and fetch their own data, so they work
 // either way — which makes the account-page symptom easy to misread as a bug.
+//
+// A package that declares every page requirement as `fetch` has no finders and
+// therefore needs no admission at all; this notice stays silent for those.
 if (!builtin) {
   const frontendManifest = join(pluginDir, 'frontend', 'manifest.json');
   const finders = existsSync(frontendManifest)
@@ -160,7 +163,8 @@ if (!builtin) {
     console.log(
       `[install-into-kernel] ${id} declares ${finders.length} finder(s). Account pages need them ` +
         `to be admitted to the web process; add "${id}" to STACKPANEL_FRONTEND_SERVER_EXEC ` +
-        `(see .env.example) or those pages will render with empty data.`,
+        `(see .env.example) or those pages will render with empty data. Converting them to ` +
+        `declarative "fetch" requirements removes the dependency entirely.`,
     );
   }
 }

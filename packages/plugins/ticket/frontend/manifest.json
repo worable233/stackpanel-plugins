@@ -1,9 +1,9 @@
 {
   "version": "0.1.0",
-  "revision": "fe7c58223f17",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
+  "finders": [],
   "adminRoutes": [
     {
       "path": "/overview",

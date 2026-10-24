@@ -1,10 +1,9 @@
 {
   "version": "0.1.0",
-  "revision": "81055171a3da",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
-  "finders": ["zjmf-upstream.instances", "zjmf-upstream.upstreams"],
+  "finders": [],
   "adminRoutes": [
     {
       "path": "/instances",
@@ -17,7 +16,9 @@
       },
       "data": [
         {
-          "finder": "zjmf-upstream.instances",
+          "fetch": {
+            "path": "/zjmf-upstream/admin/instances"
+          },
           "as": "inventory"
         }
       ]
@@ -33,7 +34,9 @@
       },
       "data": [
         {
-          "finder": "zjmf-upstream.upstreams",
+          "fetch": {
+            "path": "/zjmf-upstream/admin/upstreams"
+          },
           "as": "upstreams"
         }
       ]
@@ -49,7 +52,9 @@
       },
       "data": [
         {
-          "finder": "zjmf-upstream.upstreams",
+          "fetch": {
+            "path": "/zjmf-upstream/admin/upstreams"
+          },
           "as": "upstreams"
         }
       ]

@@ -2,7 +2,6 @@ import { defineFrontend } from '@stackpanel/sdk';
 import type {
   AccountPageComponentProps,
   AccountWidgetProps,
-  FinderProvider,
   FrontendPackage,
 } from '@stackpanel/sdk';
 import type { ReactElement } from 'react';
@@ -72,34 +71,10 @@ import { messages, t } from './i18n.js';
  * 模型服务（llm-gateway）前端包（服务端 bundle）。
  *
  * - 用户：账户中心「模型服务」——创建/管理密钥、查看用量。
- * - finders：提供账户页与 admin 页所需的数据。
+ * - 页面数据由宿主按 `fetch` 声明代为请求，不需要内嵌 finder 代码。
  *
  * 管理端交互页面在 `admin.tsx`（客户端 bundle，构建为 dist/admin.js）。
  */
-
-const finders: Record<string, FinderProvider> = {
-  'llmGateway.keys': {
-    handler: async (_input, ctx) => ctx.api.get('/llm-gateway/keys', keysSchema),
-  },
-  'llmGateway.billing': {
-    handler: async (_input, ctx) => ctx.api.get('/llm-gateway/billing', billingSchema),
-  },
-  'llmGateway.prices': {
-    handler: async (_input, ctx) => ctx.api.get('/llm-gateway/prices', publicPricesSchema),
-  },
-  'llmGateway.usage': {
-    handler: async (_input, ctx) => ctx.api.get('/llm-gateway/usage', usageSchema),
-  },
-  'llmGateway.adminOverview': {
-    handler: async (_input, ctx) => ctx.api.get('/llm-gateway/admin/overview', adminOverviewSchema),
-  },
-  'llmGateway.adminAccounts': {
-    handler: async (_input, ctx) => ctx.api.get('/llm-gateway/admin/accounts', adminAccountsSchema),
-  },
-  'llmGateway.adminPrices': {
-    handler: async (_input, ctx) => ctx.api.get('/llm-gateway/admin/prices', adminPricesSchema),
-  },
-};
 
 /* --------------------------------- 用户页 --------------------------------- */
 
@@ -838,7 +813,6 @@ export function GatewayAccountWidget(props: AccountWidgetProps): ReactElement {
 const frontend: FrontendPackage = {
   locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
   messages,
-  finders,
   ui: {
     actions: [
       {
@@ -976,27 +950,27 @@ const frontend: FrontendPackage = {
         component: 'admin/overview',
         permission: 'llm-gateway.admin',
         nav: { labelKey: 'nav.overview', groupKey: 'nav.group', order: 0 },
-        data: [{ finder: 'llmGateway.adminOverview', as: 'overview' }],
+        data: [{ fetch: { path: '/llm-gateway/admin/overview' }, as: 'overview' }],
       },
       {
         path: '/accounts/new',
         component: 'admin/account-editor',
         permission: 'llm-gateway.admin',
-        data: [{ finder: 'llmGateway.adminAccounts', as: 'accounts' }],
+        data: [{ fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' }],
       },
       {
         path: '/accounts/:id/edit',
         component: 'admin/account-editor',
         permission: 'llm-gateway.admin',
-        data: [{ finder: 'llmGateway.adminAccounts', as: 'accounts' }],
+        data: [{ fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' }],
       },
       {
         path: '/prices/new',
         component: 'admin/price-editor',
         permission: 'llm-gateway.admin',
         data: [
-          { finder: 'llmGateway.adminAccounts', as: 'accounts' },
-          { finder: 'llmGateway.adminPrices', as: 'prices' },
+          { fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' },
+          { fetch: { path: '/llm-gateway/admin/prices' }, as: 'prices' },
         ],
       },
       {
@@ -1004,8 +978,8 @@ const frontend: FrontendPackage = {
         component: 'admin/price-editor',
         permission: 'llm-gateway.admin',
         data: [
-          { finder: 'llmGateway.adminAccounts', as: 'accounts' },
-          { finder: 'llmGateway.adminPrices', as: 'prices' },
+          { fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' },
+          { fetch: { path: '/llm-gateway/admin/prices' }, as: 'prices' },
         ],
       },
       {
@@ -1019,8 +993,8 @@ const frontend: FrontendPackage = {
           activePaths: ['/prices'],
         },
         data: [
-          { finder: 'llmGateway.adminAccounts', as: 'accounts' },
-          { finder: 'llmGateway.adminPrices', as: 'prices' },
+          { fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' },
+          { fetch: { path: '/llm-gateway/admin/prices' }, as: 'prices' },
         ],
       },
     ],
@@ -1031,8 +1005,8 @@ const frontend: FrontendPackage = {
         permission: 'llm-gateway.use',
         nav: { labelKey: 'nav.overview', groupKey: 'nav.group' },
         data: [
-          { finder: 'llmGateway.billing', as: 'billing' },
-          { finder: 'llmGateway.usage', as: 'usage' },
+          { fetch: { path: '/llm-gateway/billing' }, as: 'billing' },
+          { fetch: { path: '/llm-gateway/usage' }, as: 'usage' },
         ],
       },
       {
@@ -1040,7 +1014,7 @@ const frontend: FrontendPackage = {
         component: 'account/gateway-pricing',
         permission: 'llm-gateway.use',
         nav: { labelKey: 'nav.pricing', groupKey: 'nav.group' },
-        data: [{ finder: 'llmGateway.prices', as: 'prices' }],
+        data: [{ fetch: { path: '/llm-gateway/prices' }, as: 'prices' }],
       },
       {
         path: '/gateway/keys',
@@ -1048,8 +1022,8 @@ const frontend: FrontendPackage = {
         permission: 'llm-gateway.use',
         nav: { labelKey: 'nav.keys', groupKey: 'nav.group' },
         data: [
-          { finder: 'llmGateway.billing', as: 'billing' },
-          { finder: 'llmGateway.keys', as: 'keys' },
+          { fetch: { path: '/llm-gateway/billing' }, as: 'billing' },
+          { fetch: { path: '/llm-gateway/keys' }, as: 'keys' },
         ],
       },
     ],

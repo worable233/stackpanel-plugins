@@ -1,4 +1,4 @@
-import type { FinderProvider, FrontendPackage, FrontendPageProps } from '@stackpanel/sdk';
+import type { FrontendPackage, FrontendPageProps } from '@stackpanel/sdk';
 import type { ReactElement } from 'react';
 import { z } from 'zod';
 import { messages, t } from './i18n.js';
@@ -53,24 +53,14 @@ function NoticePage(props: FrontendPageProps): ReactElement {
   );
 }
 
-const noticeFinders: Record<string, FinderProvider> = {
-  'notice.list': {
-    handler: async (_input, ctx) => ctx.api.get('/notices', listSchema),
-  },
-  'notice.adminList': {
-    handler: async (_input, ctx) => ctx.api.get('/notice/admin/announcements', listSchema),
-  },
-};
-
 export const frontend: FrontendPackage = {
   locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
   messages,
-  finders: noticeFinders,
   pages: [
     {
       path: '/notice',
       component: 'notice/index',
-      data: [{ finder: 'notice.list', as: 'announcements' }],
+      data: [{ fetch: { path: '/notices' }, as: 'announcements' }],
     },
   ],
   pageComponents: { 'notice/index': NoticePage },
@@ -116,7 +106,7 @@ export const frontend: FrontendPackage = {
         component: 'admin/overview',
         permission: 'notice.admin',
         nav: { labelKey: 'nav.label', groupKey: 'nav.group', order: 40 },
-        data: [{ finder: 'notice.adminList', as: 'announcements' }],
+        data: [{ fetch: { path: '/notice/admin/announcements' }, as: 'announcements' }],
       },
     ],
   },

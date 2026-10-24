@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminPageComponentProps, FinderContext, FrontendPackage } from '@stackpanel/sdk';
+import type { AdminPageComponentProps, FrontendPackage } from '@stackpanel/sdk';
 import { PageHeader } from '@stackpanel/ui';
 import { useState, type ReactElement } from 'react';
 import { toast } from 'sonner';
@@ -197,12 +197,6 @@ function SmtpSettings(props: AdminPageComponentProps): ReactElement {
 const frontend: FrontendPackage = {
   locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
   messages,
-  finders: {
-    'smtp.status': {
-      handler: async (_input: Record<string, unknown>, ctx: FinderContext) =>
-        ctx.api.get('/smtp/admin/config', statusSchema),
-    },
-  },
   ui: {
     adminRoutes: [
       {
@@ -210,7 +204,7 @@ const frontend: FrontendPackage = {
         component: 'admin/settings',
         permission: 'smtp.admin',
         systemSettings: { labelKey: 'admin.systemSettings', order: 130 },
-        data: [{ finder: 'smtp.status', as: 'status' }],
+        data: [{ fetch: { path: '/smtp/admin/config' }, as: 'status' }],
       },
     ],
   },

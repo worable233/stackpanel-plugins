@@ -1,18 +1,9 @@
 {
   "version": "0.1.0",
-  "revision": "725a5ade45dd",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
-  "finders": [
-    "llmGateway.keys",
-    "llmGateway.billing",
-    "llmGateway.prices",
-    "llmGateway.usage",
-    "llmGateway.adminOverview",
-    "llmGateway.adminAccounts",
-    "llmGateway.adminPrices"
-  ],
+  "finders": [],
   "adminRoutes": [
     {
       "path": "/overview",
@@ -25,7 +16,9 @@
       },
       "data": [
         {
-          "finder": "llmGateway.adminOverview",
+          "fetch": {
+            "path": "/llm-gateway/admin/overview"
+          },
           "as": "overview"
         }
       ]
@@ -36,7 +29,9 @@
       "permission": "llm-gateway.admin",
       "data": [
         {
-          "finder": "llmGateway.adminAccounts",
+          "fetch": {
+            "path": "/llm-gateway/admin/accounts"
+          },
           "as": "accounts"
         }
       ]
@@ -47,7 +42,9 @@
       "permission": "llm-gateway.admin",
       "data": [
         {
-          "finder": "llmGateway.adminAccounts",
+          "fetch": {
+            "path": "/llm-gateway/admin/accounts"
+          },
           "as": "accounts"
         }
       ]
@@ -58,11 +55,15 @@
       "permission": "llm-gateway.admin",
       "data": [
         {
-          "finder": "llmGateway.adminAccounts",
+          "fetch": {
+            "path": "/llm-gateway/admin/accounts"
+          },
           "as": "accounts"
         },
         {
-          "finder": "llmGateway.adminPrices",
+          "fetch": {
+            "path": "/llm-gateway/admin/prices"
+          },
           "as": "prices"
         }
       ]
@@ -73,11 +74,15 @@
       "permission": "llm-gateway.admin",
       "data": [
         {
-          "finder": "llmGateway.adminAccounts",
+          "fetch": {
+            "path": "/llm-gateway/admin/accounts"
+          },
           "as": "accounts"
         },
         {
-          "finder": "llmGateway.adminPrices",
+          "fetch": {
+            "path": "/llm-gateway/admin/prices"
+          },
           "as": "prices"
         }
       ]
@@ -94,11 +99,15 @@
       },
       "data": [
         {
-          "finder": "llmGateway.adminAccounts",
+          "fetch": {
+            "path": "/llm-gateway/admin/accounts"
+          },
           "as": "accounts"
         },
         {
-          "finder": "llmGateway.adminPrices",
+          "fetch": {
+            "path": "/llm-gateway/admin/prices"
+          },
           "as": "prices"
         }
       ]
@@ -459,11 +468,15 @@
       },
       "data": [
         {
-          "finder": "llmGateway.billing",
+          "fetch": {
+            "path": "/llm-gateway/billing"
+          },
           "as": "billing"
         },
         {
-          "finder": "llmGateway.usage",
+          "fetch": {
+            "path": "/llm-gateway/usage"
+          },
           "as": "usage"
         }
       ]
@@ -478,7 +491,9 @@
       },
       "data": [
         {
-          "finder": "llmGateway.prices",
+          "fetch": {
+            "path": "/llm-gateway/prices"
+          },
           "as": "prices"
         }
       ]
@@ -493,11 +508,15 @@
       },
       "data": [
         {
-          "finder": "llmGateway.billing",
+          "fetch": {
+            "path": "/llm-gateway/billing"
+          },
           "as": "billing"
         },
         {
-          "finder": "llmGateway.keys",
+          "fetch": {
+            "path": "/llm-gateway/keys"
+          },
           "as": "keys"
         }
       ]

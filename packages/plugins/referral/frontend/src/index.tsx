@@ -1,4 +1,4 @@
-import type { AccountPageComponentProps, FinderProvider, FrontendPackage } from '@stackpanel/sdk';
+import type { AccountPageComponentProps, FrontendPackage } from '@stackpanel/sdk';
 import {
   Button,
   Card,
@@ -276,22 +276,9 @@ function ReferralAccountPage(props: AccountPageComponentProps): ReactElement {
   );
 }
 
-const referralFinders: Record<string, FinderProvider> = {
-  'referral.mine': {
-    handler: async (_input, ctx) => ctx.api.get('/referral/me', mineSchema),
-  },
-  'referral.adminList': {
-    handler: async (_input, ctx) => ctx.api.get('/store/admin/referrals', adminListSchema),
-  },
-  'referral.adminConfig': {
-    handler: async (_input, ctx) => ctx.api.get('/store/admin/referrals/config', adminConfigSchema),
-  },
-};
-
 export const frontend: FrontendPackage = {
   locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
   messages,
-  finders: referralFinders,
   pages: [],
   pageComponents: {},
   ui: {
@@ -356,7 +343,7 @@ export const frontend: FrontendPackage = {
         component: 'account/referral',
         permission: 'store.referral',
         nav: { labelKey: 'nav.label', groupKey: 'nav.group', order: 20 },
-        data: [{ finder: 'referral.mine', as: 'referral' }],
+        data: [{ fetch: { path: '/referral/me' }, as: 'referral' }],
       },
     ],
     adminRoutes: [
@@ -369,8 +356,8 @@ export const frontend: FrontendPackage = {
           order: 120,
         },
         data: [
-          { finder: 'referral.adminList', as: 'referral' },
-          { finder: 'referral.adminConfig', as: 'referralConfig' },
+          { fetch: { path: '/store/admin/referrals' }, as: 'referral' },
+          { fetch: { path: '/store/admin/referrals/config' }, as: 'referralConfig' },
         ],
       },
     ],

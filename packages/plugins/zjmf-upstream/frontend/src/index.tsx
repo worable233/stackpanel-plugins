@@ -1,72 +1,9 @@
-import type { FinderContext, FrontendPackage } from '@stackpanel/sdk';
-import { z } from 'zod';
+import type { FrontendPackage } from '@stackpanel/sdk';
 import { messages } from './i18n.js';
-
-const upstreamListSchema = z.object({
-  secretsEnabled: z.boolean(),
-  upstreams: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      baseUrl: z.string(),
-      downstreamUrl: z.string().optional(),
-      protocol: z.enum(['finance', 'v10']),
-      currency: z.string(),
-      markupBps: z.number(),
-      defaultStock: z.number(),
-      syncIntervalMinutes: z.number(),
-      enabled: z.boolean(),
-      allowUnverifiedV10Routes: z.boolean().optional(),
-      v10Module: z
-        .enum(['auto', 'mf_cloud', 'remf_cloud', 'mf_dcim', 'idcsmart_common'])
-        .optional(),
-      lastSyncedAt: z.string().nullable(),
-      productCount: z.number(),
-      credentialsConfigured: z.boolean(),
-    }),
-  ),
-});
-
-const finders = {
-  'zjmf-upstream.instances': {
-    handler: async (_input: Record<string, unknown>, ctx: FinderContext) =>
-      ctx.api.get(
-        '/zjmf-upstream/admin/instances',
-        z.object({
-          errors: z.array(z.object({ sourceName: z.string(), message: z.string() })),
-          instances: z.array(
-            z.object({
-              id: z.string(),
-              name: z.string(),
-              productName: z.string().nullish(),
-              productId: z.string().nullish(),
-              sourceRef: z.string().nullish(),
-              sourceName: z.string(),
-              status: z.string().nullish(),
-              statusLabel: z.string().nullish(),
-              host: z.string().nullish(),
-              expiresAt: z.string().nullish(),
-              openedAt: z.string().nullish(),
-              products: z.array(z.object({ id: z.string(), name: z.string() })),
-              boundUserId: z.string().nullable(),
-              boundServiceId: z.string().nullable(),
-              bindingKnown: z.boolean(),
-            }),
-          ),
-          accounts: z.array(z.object({ id: z.string(), name: z.string(), enabled: z.boolean() })),
-        }),
-      ),
-  },
-  'zjmf-upstream.upstreams': {
-    handler: async (_input: Record<string, unknown>, ctx: FinderContext) =>
-      ctx.api.get('/zjmf-upstream/admin/upstreams', upstreamListSchema),
-  },
-};
 
 export const frontend: FrontendPackage = {
   locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
   messages,
-  finders,
   ui: {
     actions: [
       {
@@ -158,21 +95,21 @@ export const frontend: FrontendPackage = {
         component: 'admin/instances',
         permission: 'zjmf-upstream.admin',
         nav: { labelKey: 'nav.instances', groupKey: 'nav.group', order: 20 },
-        data: [{ finder: 'zjmf-upstream.instances', as: 'inventory' }],
+        data: [{ fetch: { path: '/zjmf-upstream/admin/instances' }, as: 'inventory' }],
       },
       {
         path: '/overview',
         component: 'admin/summary',
         permission: 'zjmf-upstream.admin',
         nav: { labelKey: 'nav.overview', groupKey: 'nav.group', order: 0 },
-        data: [{ finder: 'zjmf-upstream.upstreams', as: 'upstreams' }],
+        data: [{ fetch: { path: '/zjmf-upstream/admin/upstreams' }, as: 'upstreams' }],
       },
       {
         path: '/connections',
         component: 'admin/overview',
         permission: 'zjmf-upstream.admin',
         nav: { labelKey: 'nav.connections', groupKey: 'nav.group', order: 10 },
-        data: [{ finder: 'zjmf-upstream.upstreams', as: 'upstreams' }],
+        data: [{ fetch: { path: '/zjmf-upstream/admin/upstreams' }, as: 'upstreams' }],
       },
     ],
   },

@@ -1,10 +1,9 @@
 {
   "version": "0.1.0",
-  "revision": "1aa23767b635",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
-  "finders": ["referral.mine", "referral.adminList", "referral.adminConfig"],
+  "finders": [],
   "adminRoutes": [
     {
       "path": "/referrals",
@@ -16,11 +15,15 @@
       },
       "data": [
         {
-          "finder": "referral.adminList",
+          "fetch": {
+            "path": "/store/admin/referrals"
+          },
           "as": "referral"
         },
         {
-          "finder": "referral.adminConfig",
+          "fetch": {
+            "path": "/store/admin/referrals/config"
+          },
           "as": "referralConfig"
         }
       ]
@@ -184,7 +187,9 @@
       },
       "data": [
         {
-          "finder": "referral.mine",
+          "fetch": {
+            "path": "/referral/me"
+          },
           "as": "referral"
         }
       ]

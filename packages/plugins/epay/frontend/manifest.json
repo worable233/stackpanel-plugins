@@ -1,10 +1,9 @@
 {
   "version": "0.1.0",
-  "revision": "46551ac11058",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
-  "finders": ["epay.status"],
+  "finders": [],
   "adminRoutes": [
     {
       "path": "/settings",
@@ -17,7 +16,9 @@
       },
       "data": [
         {
-          "finder": "epay.status",
+          "fetch": {
+            "path": "/epay/admin/config"
+          },
           "as": "status"
         }
       ]
@@ -33,7 +34,9 @@
       },
       "data": [
         {
-          "finder": "epay.status",
+          "fetch": {
+            "path": "/epay/admin/config"
+          },
           "as": "status"
         }
       ]
@@ -88,6 +91,7 @@
     "frontend/dist/admin.js.map",
     "frontend/dist/admin.runtime.js",
     "frontend/dist/admin.runtime.js.map",
+    "frontend/dist/chunk-SJGPEWRC.js",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ],

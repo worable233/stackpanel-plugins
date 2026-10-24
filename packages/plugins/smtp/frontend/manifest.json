@@ -1,10 +1,9 @@
 {
   "version": "0.1.0",
-  "revision": "f9b9dcd7062c",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
-  "finders": ["smtp.status"],
+  "finders": [],
   "adminRoutes": [
     {
       "path": "/settings",
@@ -16,7 +15,9 @@
       },
       "data": [
         {
-          "finder": "smtp.status",
+          "fetch": {
+            "path": "/smtp/admin/config"
+          },
           "as": "status"
         }
       ]
