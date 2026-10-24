@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup src/index.tsx src/admin.tsx --format esm --out-dir dist --platform neutral --clean --external react --external react-dom --external react/jsx-runtime --external next/link --external next/navigation --external @stackpanel/sdk --external @stackpanel/ui --external sonner --external zod --external lucide-react --jsx automatic"
+    "build": "tsup"
   },
   "dependencies": {
     "sonner": "^2.0.8",
