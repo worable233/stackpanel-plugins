@@ -4,15 +4,6 @@
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
-  "finders": [
-    "ticket.adminSummary",
-    "ticket.pendingCount",
-    "ticket.mySummary",
-    "ticket.myTickets",
-    "ticket.ticket",
-    "ticket.adminTickets",
-    "ticket.adminTicket"
-  ],
   "adminRoutes": [
     {
       "path": "/overview",
@@ -25,7 +16,9 @@
       },
       "data": [
         {
-          "finder": "ticket.adminSummary",
+          "fetch": {
+            "path": "/ticket/admin/tickets?page=1&pageSize=5"
+          },
           "as": "summary"
         }
       ]
@@ -41,7 +34,10 @@
       },
       "data": [
         {
-          "finder": "ticket.adminTickets",
+          "fetch": {
+            "path": "/ticket/admin/tickets?page=1&pageSize=50",
+            "select": "tickets"
+          },
           "as": "tickets"
         }
       ]
@@ -52,11 +48,10 @@
       "permission": "ticket.admin",
       "data": [
         {
-          "finder": "ticket.adminTicket",
-          "as": "ticket",
-          "input": {
-            "id": ":id"
-          }
+          "fetch": {
+            "path": "/ticket/admin/tickets/:id"
+          },
+          "as": "ticket"
         }
       ]
     }
@@ -210,7 +205,9 @@
       },
       "data": [
         {
-          "finder": "ticket.mySummary",
+          "fetch": {
+            "path": "/tickets?page=1&pageSize=5"
+          },
           "as": "summary"
         }
       ]
@@ -226,7 +223,10 @@
       },
       "data": [
         {
-          "finder": "ticket.myTickets",
+          "fetch": {
+            "path": "/tickets?all=true",
+            "select": "tickets"
+          },
           "as": "tickets"
         }
       ]
@@ -237,7 +237,10 @@
       "permission": "ticket.create",
       "data": [
         {
-          "finder": "ticket.myTickets",
+          "fetch": {
+            "path": "/tickets?all=true",
+            "select": "tickets"
+          },
           "as": "tickets"
         }
       ]
@@ -248,15 +251,17 @@
       "permission": "ticket.view",
       "data": [
         {
-          "finder": "ticket.myTickets",
+          "fetch": {
+            "path": "/tickets?all=true",
+            "select": "tickets"
+          },
           "as": "tickets"
         },
         {
-          "finder": "ticket.ticket",
-          "as": "ticket",
-          "input": {
-            "id": ":id"
-          }
+          "fetch": {
+            "path": "/tickets/:id"
+          },
+          "as": "ticket"
         }
       ]
     }
@@ -276,7 +281,12 @@
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ],
-  "locales": ["zh-CN", "zh-TW", "zh-HK", "en-US"],
+  "locales": [
+    "zh-CN",
+    "zh-TW",
+    "zh-HK",
+    "en-US"
+  ],
   "messages": {
     "zh-CN": {
       "nav.group": "支持",

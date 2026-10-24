@@ -250,8 +250,23 @@ async function loadMessages(ticketId: string, includeInternal: boolean): Promise
   return visible.map(toMessageView);
 }
 
+/**
+ * The caller's own tickets.
+ *
+ * `all=true` returns the whole (bounded, see `MAX_LIST_ALL`) set in one response.
+ * The account list used to fetch this by looping over `/tickets?page=n` inside a
+ * web-process finder — i.e. running plugin code in the host just to paginate.
+ * A single bounded read here keeps that privilege unnecessary.
+ */
 async function listMyTickets(req: HttpRequest, _reply: HttpReply): Promise<unknown> {
   const userId = requireUser(req);
+  if (req.query['all'] === 'true') {
+    const rows = await extensions().listAll<TicketData>(ticketModel, {
+      where: { userId: { eq: userId } },
+      orderBy: { field: 'createdAt', desc: true },
+    });
+    return { tickets: rows.map(toTicketView), total: rows.length };
+  }
   const { page, pageSize } = parsePagination(req.query);
   const result = await extensions().list<TicketData>(ticketModel, {
     where: { userId: { eq: userId } },

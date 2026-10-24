@@ -52,6 +52,9 @@ describe.skipIf(!dbAvailable)('ticket installs as a non-builtin, isolated plugin
     // No web-process server execution: the admin/user surfaces call the HTTP
     // API like any other client instead of running kernel-side code.
     expect(plugin?.frontendExecutions).toBe('declarative');
+    // Uninstall policy is its own decision, not a consequence of `builtin`.
+    // An installed package is removable; a kernel-shipped one is not.
+    expect(plugin?.removable).toBe(true);
   });
 
   it('is discovered as dynamic and stays disabled until an admin enables it', async () => {
@@ -66,17 +69,22 @@ describe.skipIf(!dbAvailable)('ticket installs as a non-builtin, isolated plugin
         id: string;
         enabled: boolean;
         source: string;
+        /** Independent of `source` (kernel-owned uninstall policy). */
+        removable: boolean;
         frontend?: { available: boolean };
       }>;
     };
     const ticket = body.plugins.find((item) => item.id === 'ticket');
     expect(ticket).toBeDefined();
-    // `source: 'dynamic'` is the admin surface's rendering of `!isBuiltin`, and
-    // it is what makes the uninstall action available.
+    // `source: 'dynamic'` is provenance: the package does not ship with the
+    // kernel image.
     expect(ticket?.source).toBe('dynamic');
+    // Uninstallability is a separate decision; this is what enables the delete
+    // action in the admin UI.
+    expect(ticket?.removable).toBe(true);
     // Optional installations must not switch themselves on.
     expect(ticket?.enabled).toBe(false);
-    // Its admin/user surfaces are still registered declaratively.
+    // Its admin/user surfaces are still registered.
     expect(ticket?.frontend?.available).toBe(true);
   });
 });
