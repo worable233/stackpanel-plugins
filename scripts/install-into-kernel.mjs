@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /**
- * Install the built llm-gateway plugin into the kernel's `data/plugins/`.
+ * Install a built plugin from this repo into a kernel checkout's `data/plugins/`.
  *
- * The plugin lives in the separate `StackPanel-plugins` repo, so the kernel's
- * built-in discovery (which only scans `packages/plugins/`) never sees it. This
- * script bundles the source, then copies `dist/` + a manifest derived from the
- * compiled plugin definition into the kernel package dir.
+ * The plugins live in the separate `StackPanel-plugins` repo, so the kernel's
+ * built-in discovery (which only scans its own `packages/plugins/`) never sees
+ * them. This bundles the source, then copies `dist/` + a manifest derived from
+ * the compiled plugin definition into the kernel package dir.
+ *
+ * The plugin id is taken from the compiled definition, not hard-coded, so the
+ * same script works for every plugin in this repo.
  *
  * Usage (from the plugin package dir):
  *   node ../../../scripts/install-into-kernel.mjs [--kernel /path/to/StackPanel]
@@ -79,16 +82,26 @@ execSync('node ../../../scripts/build-plugin.mjs', {
 // 2) Read the compiled plugin definition's manifest.
 const entry = pathToFileURL(join(pluginDir, 'dist', 'index.js')).href;
 const mod = await import(`${entry}?v=${Date.now()}`);
-const definition = mod.default ?? mod.llmGatewayPlugin;
+const definition = mod.default ?? Object.values(mod).find((value) => value?.manifest);
+
 if (!definition?.manifest) throw new Error('compiled plugin has no manifest');
+const id = definition.manifest.id;
+if (!/^[a-z0-9_-]{1,64}$/.test(id ?? '')) {
+  throw new Error(`插件 id 不合法：${String(id)}`);
+}
 
 // 3) Compose the distribution manifest the kernel expects.
+//    `version` comes from the compiled definition so the installed manifest can
+//    never drift from the plugin source (that drift is what made the previously
+//    installed ticket report 0.3.0 while its source still said 0.2.0).
 const pkg = JSON.parse(readFileSync(join(pluginDir, 'package.json'), 'utf8'));
 const manifest = {
-  id: 'llm-gateway',
-  name: definition.manifest.name ?? 'API 中转',
-  version: pkg.version ?? '0.0.0',
-  ...(pkg.description ? { description: pkg.description } : {}),
+  id,
+  name: definition.manifest.name ?? id,
+  version: definition.manifest.version ?? pkg.version ?? '0.0.0',
+  ...((definition.manifest.description ?? pkg.description)
+    ? { description: definition.manifest.description ?? pkg.description }
+    : {}),
   ...(definition.manifest.permissions ? { permissions: definition.manifest.permissions } : {}),
   ...(definition.manifest.roleTemplates
     ? { roleTemplates: definition.manifest.roleTemplates }
@@ -99,7 +112,7 @@ const manifest = {
 
 // 4) Atomically replace the target package dir in every candidate data dir.
 for (const dataDir of dataDirs) {
-  const target = join(dataDir, 'plugins', 'llm-gateway');
+  const target = join(dataDir, 'plugins', id);
   rmSync(target, { recursive: true, force: true });
   mkdirSync(target, { recursive: true });
   cpSync(join(pluginDir, 'dist'), join(target, 'dist'), { recursive: true });
@@ -117,5 +130,5 @@ for (const dataDir of dataDirs) {
     /* optional */
   }
   writeFileSync(join(target, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`[install-into-kernel] installed llm-gateway -> ${target}`);
+  console.log(`[install-into-kernel] installed ${id}@${manifest.version} -> ${target}`);
 }

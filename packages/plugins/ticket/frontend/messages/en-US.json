@@ -62,5 +62,18 @@
   "priority.LOW": "Low",
   "priority.NORMAL": "Normal",
   "priority.HIGH": "High",
-  "priority.URGENT": "Urgent"
+  "priority.URGENT": "Urgent",
+  "status.PENDING_USER": "Waiting for you",
+  "workspace.internalNoteLabel": "Internal note (hidden from user)",
+  "workspace.remindedTimes": "Reminded {count}×",
+  "workspace.categoryLabel": "Category",
+  "workspace.categoryPlaceholder": "e.g. billing / tech",
+  "workspace.departmentLabel": "Department ID",
+  "workspace.remind": "Remind",
+  "workspace.close": "Close ticket",
+  "workspace.closeReason": "Reason (optional)",
+  "workspace.accept": "Accept",
+  "workspace.transfer": "Transfer",
+  "workspace.relatedOrder": "Related order",
+  "workspace.relatedService": "Related service"
 }

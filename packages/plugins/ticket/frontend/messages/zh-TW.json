@@ -62,5 +62,18 @@
   "priority.LOW": "低",
   "priority.NORMAL": "普通",
   "priority.HIGH": "高",
-  "priority.URGENT": "緊急"
+  "priority.URGENT": "緊急",
+  "status.PENDING_USER": "待使用者回覆",
+  "workspace.internalNoteLabel": "內部備註（使用者不可見）",
+  "workspace.remindedTimes": "已催單 {count} 次",
+  "workspace.categoryLabel": "分類",
+  "workspace.categoryPlaceholder": "例如 billing / tech",
+  "workspace.departmentLabel": "部門 ID",
+  "workspace.remind": "催單",
+  "workspace.close": "關閉工單",
+  "workspace.closeReason": "關閉原因（可選）",
+  "workspace.accept": "接單",
+  "workspace.transfer": "轉交",
+  "workspace.relatedOrder": "關聯訂單",
+  "workspace.relatedService": "關聯服務"
 }
