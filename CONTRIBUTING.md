@@ -16,21 +16,30 @@ corepack enable
 corepack prepare pnpm@11.5.1 --activate
 ```
 
-## 本工作区无法独立安装
+## 依赖并排的内核检出
 
 各插件的 `package.json` 以 `workspace:*` 引用 `@stackpanel/sdk`、`@stackpanel/ui`、
 `@stackpanel/spec`、`@stackpanel/net-guard`，而这些包尚未发布到 npm，因此本仓库
-**不能单独执行 `pnpm install`**。请按下面任一种方式准备依赖：
+**必须与内核检出并排放置**：
 
-1. 把本仓库放到内核仓库的工作区内（例如 `<kernel>/packages/plugins-external/`），
-   并在 `pnpm-workspace.yaml` 中加入该路径，使本目录成为内核工作区的一部分；
-2. 或者在内核仓库构建出这些包后，把本目录的 `node_modules` 指向内核的 `node_modules`。
+```
+<parent>/
+  StackPanel/            # 内核
+  StackPanel-plugins/    # 本仓库
+```
 
-之后即可构建单个插件：
+`pnpm-workspace.yaml` 用 `link:../StackPanel/packages/*` 覆盖这些依赖（以及 `zod`，
+保证跨边界只有一个 schema 实例）。相应地，内核必须先完成：
 
 ```bash
-pnpm --filter @stackpanel/plugin-catalog build
+cd ../StackPanel && pnpm install --frozen-lockfile
+pnpm --filter @stackpanel/spec --filter @stackpanel/sdk \
+  --filter @stackpanel/ui --filter @stackpanel/net-guard build
 ```
+
+之后在本仓库执行 `pnpm dev:setup`（= `pnpm install` + 依赖校验，校验未过会直接报错
+指出缺哪一步）。换成其他布局时依赖解析会静默拿到别的 `zod` 实例，跨边界 schema
+校验失效。
 
 ## 目录约定
 
@@ -45,7 +54,22 @@ pnpm --filter @stackpanel/plugin-catalog build
 ```bash
 pnpm --filter @stackpanel/plugin-<id> typecheck
 pnpm --filter @stackpanel/plugin-<id> build
+# 插件带前端时，前端是独立的工作区项目，不会随 install 构建
+pnpm --filter @stackpanel/plugin-<id>-frontend build
 ```
+
+> **前端必须单独构建**：`frontend/package.json` 只有 `build: tsup`、没有 `prepare`，
+> 所以全新 clone 里没有 `frontend/dist`。安装到内核时只抄了 manifest 而没有产物，
+> 内核会据此判定该包「未就绪」（`GET /ready` 返回 503 且 `pendingFrontends` 里是它）。
+
+### 内核 CI 会安装本仓库的 `main`
+
+内核仓库的 CI 在 `Test` 之前克隆**本仓库默认分支**、对着该内核构建，并把
+`referral` / `ticket` / `invoice` 安装进去，然后跑内核侧集成测试（否则那些套件会
+因为「插件没装」而 skip，等于 CI 绿但没覆盖）。
+
+因此：**本仓库 `main` 一旦不能对内核 HEAD 构建，表现是内核 CI 红。** 提交后请顺带
+看一眼内核最近的 CI 结果。本仓库自身只有 i18n 门禁，没有完整 CI。
 
 `kernel-tests/` 下的文件是从内核仓库迁出的内核侧集成测试，依赖内核测试夹具
 （内核仓库的 `apps/api/tests/**`），只能在准备齐全的内核工作区中运行：
