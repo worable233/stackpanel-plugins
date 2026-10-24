@@ -25,6 +25,9 @@ const INVITER_STATE: Record<string, { key: string; tone: StatusTone }> = {
   pending: { key: 'state.pending', tone: 'warn' },
   paid: { key: 'state.paid', tone: 'ok' },
   rejected: { key: 'state.rejected', tone: 'error' },
+  // 发过又收回：与 `rejected`（从未发放）必须区分，否则对账时分不清
+  // 「没发」和「发了又扣回」。
+  clawed_back: { key: 'state.clawedBack', tone: 'warn' },
 };
 
 const TRIGGER_KEYS: Record<string, string> = {

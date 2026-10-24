@@ -64,9 +64,14 @@ export const recordSchema = z.object({
    * 按当时的规则结清，否则「注册后改配置」会让老记录永远悬着或突然被人领走。
    */
   trigger: z.string().default('first_order'),
-  /** 推广人奖励状态：pending | paid | rejected。 */
+  /**
+   * 推广人奖励状态：pending | paid | rejected | clawed_back。
+   *
+   * `clawed_back` = 奖励已发但被追回（订单整单退款）。它与 `rejected` 必须分开：
+   * `rejected` 是「从未发过」，`clawed_back` 是「发过又收回」，后台对账要能区分。
+   */
   inviterState: z.string().default('pending'),
-  /** 被邀请人奖励状态：none | paid。 */
+  /** 被邀请人奖励状态：none | paid | clawed_back。 */
   inviteeState: z.string().default('none'),
   /**
    * 冻结截止时间（epoch ms）；0 表示不等冻结。
@@ -86,6 +91,11 @@ export const recordSchema = z.object({
   qualifiedOrderId: z.string().nullable().default(null),
   qualifiedAt: z.string().nullable().default(null),
   paidAt: z.string().nullable().default(null),
+  /** 追回时间（epoch ms，0 = 未追回）与追回金额（分）。 */
+  clawedBackAtMs: z.number().int().default(0),
+  clawedBackAmount: z.number().int().default(0),
+  /** 触发追回的订单 id（整单退款的那一单）。 */
+  clawedBackOrderId: z.string().nullable().default(null),
 });
 
 export const recordModel = defineModel({

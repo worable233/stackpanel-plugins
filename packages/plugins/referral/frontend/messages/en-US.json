@@ -92,5 +92,6 @@
   "admin.adjust.note": "Note",
   "feedback.codeCreated": "Invite code created",
   "feedback.configSaved": "Settings saved",
-  "feedback.adjusted": "Balance adjusted"
+  "feedback.adjusted": "Balance adjusted",
+  "state.clawedBack": "Clawed back (refund)"
 }
