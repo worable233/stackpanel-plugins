@@ -145,3 +145,22 @@ for (const dataDir of dataDirs) {
   writeFileSync(join(target, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`[install-into-kernel] installed ${id}@${manifest.version} -> ${target}`);
 }
+
+// Tell the operator about the one thing that will look broken otherwise. A
+// non-builtin plugin's `finders` only execute in the web process when the
+// kernel admits it, so an unlisted plugin renders its account pages with empty
+// data. Admin pages are client-rendered and fetch their own data, so they work
+// either way — which makes the account-page symptom easy to misread as a bug.
+if (!builtin) {
+  const frontendManifest = join(pluginDir, 'frontend', 'manifest.json');
+  const finders = existsSync(frontendManifest)
+    ? (JSON.parse(readFileSync(frontendManifest, 'utf8')).finders ?? [])
+    : [];
+  if (Array.isArray(finders) && finders.length > 0) {
+    console.log(
+      `[install-into-kernel] ${id} declares ${finders.length} finder(s). Account pages need them ` +
+        `to be admitted to the web process; add "${id}" to STACKPANEL_FRONTEND_SERVER_EXEC ` +
+        `(see .env.example) or those pages will render with empty data.`,
+    );
+  }
+}
