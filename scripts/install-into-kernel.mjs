@@ -94,7 +94,19 @@ if (!/^[a-z0-9_-]{1,64}$/.test(id ?? '')) {
 //    `version` comes from the compiled definition so the installed manifest can
 //    never drift from the plugin source (that drift is what made the previously
 //    installed ticket report 0.3.0 while its source still said 0.2.0).
+//    `builtin` is read from the package's own `stackpanel.builtin` flag and
+//    never forced. A plugin from this repo is an ordinary installable package:
+//    marking it builtin would hand it kernel privileges — in-process `trusted`
+//    execution, `frontendExecutions: 'server'`, and protection from uninstall —
+//    which a business plugin must not have.
+//
+//    `execution: 'isolated'` is declared explicitly rather than relying on the
+//    kernel's production-only rule, so development and the integration suite run
+//    the same code path as production. Otherwise the default under
+//    NODE_ENV !== production is `trusted`, and the tests would prove nothing
+//    about isolation.
 const pkg = JSON.parse(readFileSync(join(pluginDir, 'package.json'), 'utf8'));
+const builtin = pkg.stackpanel?.builtin === true;
 const manifest = {
   id,
   name: definition.manifest.name ?? id,
@@ -106,7 +118,8 @@ const manifest = {
   ...(definition.manifest.roleTemplates
     ? { roleTemplates: definition.manifest.roleTemplates }
     : {}),
-  builtin: true,
+  builtin,
+  ...(builtin ? {} : { execution: 'isolated' }),
   apiVersion: '>=0.4.0',
 };
 
