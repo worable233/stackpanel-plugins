@@ -30,7 +30,7 @@
   "accountWidgets": [],
   "files": [
     "frontend/dist/admin.js",
-    "frontend/dist/chunk-ZRC5Q7IN.js",
+    "frontend/dist/chunk-26PV6BQP.js",
     "frontend/dist/index.js"
   ],
   "locales": [
@@ -67,7 +67,12 @@
       "error.unauthenticated": "登录状态已失效，请重新登录。",
       "error.forbidden": "无权执行此操作。",
       "error.withCode": "保存失败（{code}）。",
-      "error.withStatus": "保存失败（HTTP {status}）。"
+      "error.withStatus": "保存失败（HTTP {status}）。",
+      "summary.certificates": "平台证书 {count} 张，最早到期 {expiry}",
+      "action.refreshCertificates": "立即轮换平台证书",
+      "action.refreshing": "轮换中…",
+      "notice.certificatesRefreshed": "平台证书已更新（{count} 张）。",
+      "notice.certificatesRefreshFailed": "平台证书轮换失败，请检查商户配置与网络。"
     },
     "zh-TW": {
       "nav.group": "微信支付",
@@ -96,7 +101,12 @@
       "error.unauthenticated": "登入狀態已失效，請重新登入。",
       "error.forbidden": "無權執行此操作。",
       "error.withCode": "儲存失敗（{code}）。",
-      "error.withStatus": "儲存失敗（HTTP {status}）。"
+      "error.withStatus": "儲存失敗（HTTP {status}）。",
+      "summary.certificates": "平臺證書 {count} 張，最早到期 {expiry}",
+      "action.refreshCertificates": "立即輪換平臺證書",
+      "action.refreshing": "輪換中…",
+      "notice.certificatesRefreshed": "平臺證書已更新（{count} 張）。",
+      "notice.certificatesRefreshFailed": "平臺證書輪換失敗，請檢查商戶配置與網路。"
     },
     "zh-HK": {
       "nav.group": "微信支付",
@@ -125,7 +135,12 @@
       "error.unauthenticated": "登錄狀態已失效，請重新登錄。",
       "error.forbidden": "無權執行此操作。",
       "error.withCode": "儲存失敗（{code}）。",
-      "error.withStatus": "儲存失敗（HTTP {status}）。"
+      "error.withStatus": "儲存失敗（HTTP {status}）。",
+      "summary.certificates": "平臺證書 {count} 張，最早到期 {expiry}",
+      "action.refreshCertificates": "立即輪換平臺證書",
+      "action.refreshing": "輪換中…",
+      "notice.certificatesRefreshed": "平臺證書已更新（{count} 張）。",
+      "notice.certificatesRefreshFailed": "平臺證書輪換失敗，請檢查商戶配置與網絡。"
     },
     "en-US": {
       "nav.group": "WeChat Pay",
@@ -154,7 +169,12 @@
       "error.unauthenticated": "Your session expired. Please sign in again.",
       "error.forbidden": "You are not allowed to do this.",
       "error.withCode": "Save failed ({code}).",
-      "error.withStatus": "Save failed (HTTP {status})."
+      "error.withStatus": "Save failed (HTTP {status}).",
+      "summary.certificates": "{count} platform certificate(s), earliest expiry {expiry}",
+      "action.refreshCertificates": "Refresh platform certificates now",
+      "action.refreshing": "Refreshing…",
+      "notice.certificatesRefreshed": "Platform certificates updated ({count}).",
+      "notice.certificatesRefreshFailed": "Certificate refresh failed. Check the merchant configuration and network."
     }
   }
 }

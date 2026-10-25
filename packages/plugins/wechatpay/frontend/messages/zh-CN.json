@@ -25,5 +25,10 @@
   "error.unauthenticated": "登录状态已失效，请重新登录。",
   "error.forbidden": "无权执行此操作。",
   "error.withCode": "保存失败（{code}）。",
-  "error.withStatus": "保存失败（HTTP {status}）。"
+  "error.withStatus": "保存失败（HTTP {status}）。",
+  "summary.certificates": "平台证书 {count} 张，最早到期 {expiry}",
+  "action.refreshCertificates": "立即轮换平台证书",
+  "action.refreshing": "轮换中…",
+  "notice.certificatesRefreshed": "平台证书已更新（{count} 张）。",
+  "notice.certificatesRefreshFailed": "平台证书轮换失败，请检查商户配置与网络。"
 }

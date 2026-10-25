@@ -25,5 +25,10 @@
   "error.unauthenticated": "登錄狀態已失效，請重新登錄。",
   "error.forbidden": "無權執行此操作。",
   "error.withCode": "儲存失敗（{code}）。",
-  "error.withStatus": "儲存失敗（HTTP {status}）。"
+  "error.withStatus": "儲存失敗（HTTP {status}）。",
+  "summary.certificates": "平臺證書 {count} 張，最早到期 {expiry}",
+  "action.refreshCertificates": "立即輪換平臺證書",
+  "action.refreshing": "輪換中…",
+  "notice.certificatesRefreshed": "平臺證書已更新（{count} 張）。",
+  "notice.certificatesRefreshFailed": "平臺證書輪換失敗，請檢查商戶配置與網絡。"
 }

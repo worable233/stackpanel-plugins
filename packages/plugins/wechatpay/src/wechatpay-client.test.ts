@@ -1,5 +1,6 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { TEST_PLATFORM_CERT_PEM } from './test-fixtures.js';
 import {
   NOTIFICATION_TIMESTAMP_TOLERANCE_S,
   WechatPayError,
@@ -13,6 +14,8 @@ import {
   loadPrivateKey,
   loadPublicKey,
   notificationSignMessage,
+  PlatformKeyring,
+  parseCertificateList,
   parseErrorBody,
   parseNativeOrderResponse,
   requestSignMessage,
@@ -323,5 +326,89 @@ describe('config validation', () => {
     expect(sameAppId('wx1', 'wx1')).toBe(true);
     expect(sameAppId('wx1', 'wx2')).toBe(false);
     expect(sameAppId('wx1', 'wx10')).toBe(false);
+  });
+});
+
+
+describe('platform certificate list', () => {
+  function certificateResponse(options?: { serialNo?: string; expiresAtMs?: number }): string {
+    const nonce = 'abcdefghijkl';
+    const ciphertext = encryptResource({
+      // PEM 就是证书本身；微信把整张证书加密下发，不是只发公钥。
+      plaintext: TEST_PLATFORM_CERT_PEM,
+      nonce,
+      associatedData: 'certificate',
+      apiV3Key: API_V3_KEY,
+    });
+    return JSON.stringify({
+      data: [
+        {
+          serial_no: options?.serialNo ?? 'CERT-SERIAL-1',
+          effective_time: '2026-01-01T00:00:00+08:00',
+          expire_time: '2036-01-01T00:00:00+08:00',
+          encrypt_certificate: {
+            algorithm: 'AEAD_AES_256_GCM',
+            nonce,
+            associated_data: 'certificate',
+            ciphertext,
+          },
+        },
+      ],
+    });
+  }
+
+  it('decrypts the certificate, keeps its serial and real expiry', () => {
+    const [certificate] = parseCertificateList(certificateResponse(), API_V3_KEY);
+    expect(certificate?.serialNo).toBe('CERT-SERIAL-1');
+    // 有效期取自证书本身（X509 validTo），不是应答里的 expire_time 字段。
+    expect(certificate?.expiresAtMs).toBeGreaterThan(Date.now());
+    expect(certificate?.publicKey.asymmetricKeyType).toBe('rsa');
+    expect(certificate?.certificatePem).toContain('BEGIN CERTIFICATE');
+  });
+
+  it('drops certificates that already expired instead of trusting them', () => {
+    // now 放到 2037 年：整张证书都过期，列表为空 ⇒ 明确报错，而不是装一张废证书。
+    expect(() => parseCertificateList(certificateResponse(), API_V3_KEY, Date.parse('2037-01-01T00:00:00Z'))).toThrow(
+      /没有可用证书/,
+    );
+  });
+
+  it('rejects a body that is not the documented envelope', () => {
+    expect(() => parseCertificateList('<html>', API_V3_KEY)).toThrow(/不是 JSON/);
+    expect(() => parseCertificateList('{"data":{}}', API_V3_KEY)).toThrow(/格式无效/);
+  });
+
+  it('fails when the APIv3 key cannot decrypt (wrong merchant key)', () => {
+    expect(() => parseCertificateList(certificateResponse(), 'b'.repeat(32))).toThrow(/解密失败/);
+  });
+
+  it('keyring picks the key named by Wechatpay-Serial, not "the only one"', () => {
+    const fallback = loadPublicKey(platform.publicKey);
+    const keyring = new PlatformKeyring(fallback);
+    const [certificate] = parseCertificateList(certificateResponse(), API_V3_KEY);
+    if (!certificate) throw new Error('fixture missing');
+    keyring.replace([certificate]);
+
+    expect(keyring.size).toBe(1);
+    expect(keyring.forSerial('CERT-SERIAL-1')?.asymmetricKeyType).toBe('rsa');
+    // 未知序列号（轮换窗口里的旧号）退回任一仍有效证书，而不是直接失败。
+    expect(keyring.forSerial('SOMETHING-ELSE')?.asymmetricKeyType).toBe('rsa');
+    // 没有 fallback、也没有有效证书时必须返回 undefined，让调用方拒绝验签。
+    const empty = new PlatformKeyring();
+    expect(empty.forSerial('CERT-SERIAL-1')).toBeUndefined();
+  });
+
+  it('keyring ignores certificates that expired after being loaded', () => {
+    const keyring = new PlatformKeyring(loadPublicKey(platform.publicKey));
+    keyring.replace([
+      {
+        serialNo: 'OLD',
+        certificatePem: TEST_PLATFORM_CERT_PEM,
+        publicKey: loadPublicKey(TEST_PLATFORM_CERT_PEM),
+        expiresAtMs: Date.now() - 1,
+      },
+    ]);
+    expect(keyring.describe()).toEqual([]);
+    expect(keyring.forSerial('OLD')).toBeDefined(); // 退回 fallback，不是抛错
   });
 });

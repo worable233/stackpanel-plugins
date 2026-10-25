@@ -1,4 +1,5 @@
 import {
+  X509Certificate,
   createCipheriv,
   createDecipheriv,
   createPrivateKey,
@@ -333,6 +334,121 @@ export function parseErrorBody(body: string): { code?: string; message?: string 
     };
   } catch {
     return {};
+  }
+}
+
+/** 一张已解密并校验过有效期的微信支付平台证书。 */
+export interface PlatformCertificate {
+  serialNo: string;
+  certificatePem: string;
+  publicKey: KeyObject;
+  /** `X509Certificate.validTo` 的毫秒时间戳；过期即不可用于验签。 */
+  expiresAtMs: number;
+}
+
+/**
+ * 解析 `GET /v3/certificates` 的应答。
+ *
+ * 这一步有个鸡生蛋问题：应答本身要验签，而要验签就得先有平台公钥。所以首次
+ * 必须由管理员贴一张（bootstrap），之后的轮换才由轮换任务接管 —— 这也是配置里
+ * `platformPublicKey` 仍然必填的原因，不是偷懒。
+ *
+ * 解出来的内容是一张 X.509 证书（不是裸公钥），`createPublicKey` 不接受无结构的
+ * 字符串，所以用 `X509Certificate` 解析并顺手拿到有效期：**过期证书不装**，
+ * 否则轮换失败时我们会拿着过期证书继续验签，症状是所有回调突然 401。
+ */
+export function parseCertificateList(
+  body: string,
+  apiV3Key: string,
+  now: number = Date.now(),
+): PlatformCertificate[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new WechatPayError('gateway-error', '平台证书列表不是 JSON', 502, true);
+  }
+  const list = (parsed as { data?: unknown }).data;
+  if (!Array.isArray(list)) {
+    throw new WechatPayError('gateway-error', '平台证书列表格式无效', 502, true);
+  }
+
+  const certificates: PlatformCertificate[] = [];
+  for (const item of list) {
+    const entry = item as {
+      serial_no?: unknown;
+      encrypt_certificate?: { ciphertext?: unknown; nonce?: unknown; associated_data?: unknown };
+    };
+    const serialNo = typeof entry.serial_no === 'string' ? entry.serial_no.trim() : '';
+    const encrypted = entry.encrypt_certificate;
+    if (!serialNo || !encrypted) continue;
+    if (typeof encrypted.ciphertext !== 'string' || typeof encrypted.nonce !== 'string') continue;
+
+    const pem = decryptResource({
+      ciphertext: encrypted.ciphertext,
+      nonce: encrypted.nonce,
+      ...(typeof encrypted.associated_data === 'string'
+        ? { associatedData: encrypted.associated_data }
+        : {}),
+      apiV3Key,
+    });
+    let certificate: X509Certificate;
+    try {
+      certificate = new X509Certificate(pem);
+    } catch {
+      throw new WechatPayError('gateway-error', '平台证书无法解析', 502, true);
+    }
+    const expiresAtMs = Date.parse(certificate.validTo);
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now) continue;
+    certificates.push({
+      serialNo,
+      certificatePem: pem,
+      publicKey: certificate.publicKey,
+      expiresAtMs,
+    });
+  }
+
+  if (certificates.length === 0) {
+    throw new WechatPayError('gateway-error', '平台证书列表里没有可用证书', 502, true);
+  }
+  return certificates;
+}
+
+/**
+ * 平台公钥的按键索引。
+ *
+ * 应答/回调的 `Wechatpay-Serial` 头指出该用哪张证书验签 —— 平台轮换期间新旧并存，
+ * **不能**用「当前唯一一张」。找不到时退回 bootstrap 公钥，再找不到就拒绝验签。
+ */
+export class PlatformKeyring {
+  private readonly keys = new Map<string, PlatformCertificate>();
+
+  constructor(private readonly fallback?: KeyObject) {}
+
+  replace(certificates: PlatformCertificate[]): void {
+    this.keys.clear();
+    for (const certificate of certificates) this.keys.set(certificate.serialNo, certificate);
+  }
+
+  get size(): number {
+    return this.keys.size;
+  }
+
+  /** 按 `Wechatpay-Serial` 取值；未命中且没有有效证书时返回 undefined（调用方必须拒绝）。 */
+  forSerial(serial: string | undefined, now: number = Date.now()): KeyObject | undefined {
+    const direct = serial ? this.keys.get(serial) : undefined;
+    if (direct && direct.expiresAtMs > now) return direct.publicKey;
+    // 轮换窗口内旧序列号可能已下线：任取一张仍然有效的证书，比「验签直接失败」好。
+    for (const certificate of this.keys.values()) {
+      if (certificate.expiresAtMs > now) return certificate.publicKey;
+    }
+    return this.fallback;
+  }
+
+  describe(now: number = Date.now()): Array<{ serialNo: string; expiresAtMs: number }> {
+    return [...this.keys.values()]
+      .filter((certificate) => certificate.expiresAtMs > now)
+      .map((certificate) => ({ serialNo: certificate.serialNo, expiresAtMs: certificate.expiresAtMs }));
   }
 }
 
