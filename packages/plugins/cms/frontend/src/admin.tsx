@@ -1,5 +1,8 @@
 'use client';
-import { SectionTitle } from '@stackpanel/ui';
+import {
+  InlineError,
+  SectionTitle,
+} from '@stackpanel/ui';
 
 import { FeatureOverview } from '@stackpanel/ui';
 
@@ -112,12 +115,9 @@ function Empty({ text, children }: { text: string; children?: ReactNode }): Reac
 function ErrorBanner({ message }: { message: string | null }): ReactElement | null {
   if (!message) return null;
   return (
-    <p
-      role="alert"
-      className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-    >
+    <InlineError className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
       {message}
-    </p>
+    </InlineError>
   );
 }
 

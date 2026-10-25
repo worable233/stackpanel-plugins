@@ -16,6 +16,8 @@
  *      例外：`result.message` / `response.message` 这类已本地化的动作回执（白名单）。
  *   2. **成功必须有回执** — 每个 `POST`/`PATCH`/`DELETE` action 必须
  *      **恰好** 声明 `successFeedback` xor `silent`。
+ *   3. **内联提示走组件** — 不得手写 `<p role="alert|status">`，改用
+ *      `@stackpanel/ui` 的 `InlineError` / `InlineNotice`（role 语义与样式只定义一次）。
  *
  * 用法：
  *   node scripts/check-feedback.mjs          # 报告 + 有违规则 exit 1
@@ -40,6 +42,9 @@ const RAW_MESSAGE_CALL =
 
 /** 已本地化的动作回执，允许出现在反馈通道里。 */
 const ALLOWED_RECEIVER = /\b(result|response|res|data|payload|feedback|body)\?*\.message\b/;
+
+/** 内联提示必须是 `InlineError` / `InlineNotice`，不能手写 role。 */
+const RAW_INLINE_ROLE = /<p[^>]*\brole="(?:alert|status)"/;
 
 /** 测试、夹具、构建产物不是线上反馈代码。 */
 const SKIP_PATH = /(^|\/)(node_modules|dist|\.next|tests?|__tests__|fixtures?)(\/|$)/;
@@ -106,6 +111,26 @@ function checkRawMessages() {
   }
 }
 
+function checkInlineRoles() {
+  for (const src of frontendSources()) {
+    const files = [];
+    walk(src, files);
+    for (const file of files) {
+      const relative = path.relative(root, file);
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .forEach((line, index) => {
+          if (!RAW_INLINE_ROLE.test(line)) return;
+          problems.push({
+            rule: 'inline-role',
+            where: `${relative}:${index + 1}`,
+            detail: line.trim(),
+          });
+        });
+    }
+  }
+}
+
 function checkActionFeedback() {
   for (const file of frontendManifests()) {
     const relative = path.relative(root, file);
@@ -133,6 +158,7 @@ function checkActionFeedback() {
 }
 
 checkRawMessages();
+checkInlineRoles();
 checkActionFeedback();
 
 if (json) {
@@ -141,7 +167,12 @@ if (json) {
   console.log(`ok  ${frontendSources().length} 个前端包：反馈通道无原文、写操作均有回执`);
 } else {
   for (const problem of problems) {
-    const label = problem.rule === 'raw-message' ? 'RAW-MESSAGE' : 'ACTION-FEEDBACK';
+    const label =
+      problem.rule === 'raw-message'
+        ? 'RAW-MESSAGE'
+        : problem.rule === 'inline-role'
+          ? 'INLINE-ROLE'
+          : 'ACTION-FEEDBACK';
     console.error(`${label}  ${problem.where}\n              ${problem.detail}`);
   }
   console.error(

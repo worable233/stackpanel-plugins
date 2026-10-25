@@ -11,6 +11,7 @@ import {
   Field,
   FieldGroup,
   StatusBadge,
+  InlineError,
 } from '@stackpanel/ui';
 import { t } from './i18n.js';
 
@@ -121,23 +122,17 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
         }
       />
       {refreshError ? (
-        <p role="alert" className="text-sm text-destructive">
-          {refreshError}
-        </p>
+        <InlineError>{refreshError}</InlineError>
       ) : null}
       <p className="text-sm text-muted-foreground">{tr('instances.description')}</p>
       {!data ? (
-        <p role="alert">{tr('instances.loadFailed')}</p>
+        <InlineError>{tr('instances.loadFailed')}</InlineError>
       ) : (
         <>
           {data.errors.map((error, index) => (
-            <p
-              key={`${error.sourceName}-${index}`}
-              role="alert"
-              className="text-sm text-destructive"
-            >
+            <InlineError key={`${error.sourceName}-${index}`}>
               {tr('instances.errorLine', { source: error.sourceName, message: error.message })}
-            </p>
+            </InlineError>
           ))}
           <FieldGroup className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Field>
