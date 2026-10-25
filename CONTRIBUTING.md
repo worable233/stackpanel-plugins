@@ -90,6 +90,7 @@ manifest 重建流程见 [docs/package-i18n.md](./docs/package-i18n.md)。
 ```bash
 pnpm i18n:hant     # 重新生成 zh-TW / zh-HK
 pnpm i18n:check    # 目录一致性与繁体同步
+pnpm feedback:check  # 反馈契约：不得显示异常原文、写操作必须有回执
 ```
 
 ## 代码规范
