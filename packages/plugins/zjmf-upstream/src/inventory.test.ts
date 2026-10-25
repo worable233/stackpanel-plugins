@@ -64,6 +64,36 @@ describe('upstream inventory', () => {
     detailSpy.mockRestore();
     spy.mockRestore();
   });
+  it('reports upstream failures as stable codes instead of stored copy', async () => {
+    vi.mocked(listUpstreams).mockResolvedValue([{ id: 'a', name: 'A', enabled: true }] as never);
+    vi.mocked(listBoundProducts).mockResolvedValue([] as never);
+    const service = new ZJMFUpstreamService({
+      getExtensions: () => [],
+    } as unknown as PluginContext);
+    const connect = vi
+      .spyOn(service as never, 'connectionFor' as never)
+      .mockRejectedValue(new Error('upstream said: bad token'));
+    const unreachable = await service.inventory();
+    expect(unreachable.errors).toEqual([
+      { sourceName: 'A', code: 'zjmf.instances_unavailable', detail: null },
+    ]);
+    // ADR-0012: no upstream text and no server-authored sentence in the payload.
+    expect(JSON.stringify(unreachable.errors)).not.toContain('bad token');
+    connect.mockResolvedValue({} as never);
+    const listHosts = vi
+      .spyOn(ZJMFClient.prototype, 'listHosts')
+      .mockResolvedValue([{ id: '42', name: 'Host', productId: '7', status: 'Active' }] as never);
+    const detail = vi
+      .spyOn(ZJMFClient.prototype, 'getService')
+      .mockRejectedValue(new Error('timeout'));
+    const partial = await service.inventory();
+    expect(partial.errors).toEqual([
+      { sourceName: 'A', code: 'zjmf.instance_detail_unavailable', detail: '42' },
+    ]);
+    detail.mockRestore();
+    listHosts.mockRestore();
+    connect.mockRestore();
+  });
   it('protects inventory using the upstream admin permission', () => {
     expect(
       zjmfUpstreamPlugin.routes?.find((route) => route.path === '/zjmf-upstream/admin/instances'),

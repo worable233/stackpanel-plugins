@@ -754,7 +754,7 @@ export class ZJMFUpstreamService {
   async inventory() {
     const accounts = await listUpstreams();
     const hosts: Array<UpstreamServiceItem & { openedAt: string | null }> = [];
-    const errors: Array<{ sourceName: string; message: string }> = [];
+    const errors: Array<{ sourceName: string; code: string; detail: string | null }> = [];
     for (const account of accounts) {
       try {
         const client = new ZJMFClient(await this.connectionFor(account));
@@ -768,9 +768,11 @@ export class ZJMFUpstreamService {
               if (typeof detail['expiresAt'] === 'string') host.expiresAt = detail['expiresAt'];
               if (typeof detail['openedAt'] === 'string') host.openedAt = detail['openedAt'];
             } catch {
+              // ADR-0012: the server answers with a code, the UI owns the copy.
               errors.push({
                 sourceName: account.name,
-                message: `实例 #${host.id} 的时间详情读取失败，请重试`,
+                code: 'zjmf.instance_detail_unavailable',
+                detail: String(host.id),
               });
             }
           },
@@ -789,7 +791,11 @@ export class ZJMFUpstreamService {
             sourceRef: account.id,
           });
       } catch {
-        errors.push({ sourceName: account.name, message: '实例读取失败，请检查连接及凭据后重试' });
+        errors.push({
+          sourceName: account.name,
+          code: 'zjmf.instances_unavailable',
+          detail: null,
+        });
       }
     }
     const products = await listBoundProducts();

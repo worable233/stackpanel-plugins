@@ -32,10 +32,34 @@ interface Instance {
   boundServiceId: string | null;
   bindingKnown: boolean;
 }
+interface InventoryError {
+  sourceName: string;
+  code: string;
+  detail?: string | null;
+}
 interface Inventory {
   instances: Instance[];
   accounts: { id: string; name: string; enabled: boolean }[];
-  errors: { sourceName: string; message: string }[];
+  errors: InventoryError[];
+}
+
+/**
+ * 上游实例读取失败只回稳定 code（ADR-0012），文案由本包 catalog 拥有。
+ * 不要把上游原文或服务端拼好的中文直接上屏。
+ */
+const INVENTORY_ERROR_KEYS: Record<string, string> = {
+  'zjmf.instances_unavailable': 'instances.errorSource',
+  'zjmf.instance_detail_unavailable': 'instances.errorDetail',
+};
+
+type Translator = (key: string, params?: Record<string, string | number>) => string;
+
+function inventoryErrorText(error: InventoryError, tr: Translator) {
+  return tr(INVENTORY_ERROR_KEYS[error.code] ?? 'instances.errorUnknown', {
+    source: error.sourceName,
+    detail: error.detail ?? '',
+    code: error.code,
+  });
 }
 
 /** Instance status → message id; unknown statuses fall back to the raw value. */
@@ -121,9 +145,7 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
           </Button>
         }
       />
-      {refreshError ? (
-        <InlineError>{refreshError}</InlineError>
-      ) : null}
+      {refreshError ? <InlineError>{refreshError}</InlineError> : null}
       <p className="text-sm text-muted-foreground">{tr('instances.description')}</p>
       {!data ? (
         <InlineError>{tr('instances.loadFailed')}</InlineError>
@@ -131,7 +153,7 @@ export function UpstreamInstancesPage(props: AdminPageComponentProps) {
         <>
           {data.errors.map((error, index) => (
             <InlineError key={`${error.sourceName}-${index}`}>
-              {tr('instances.errorLine', { source: error.sourceName, message: error.message })}
+              {inventoryErrorText(error, tr)}
             </InlineError>
           ))}
           <FieldGroup className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
