@@ -1,5 +1,5 @@
 'use client';
-import { SectionTitle } from '@stackpanel/ui';
+import { InlineError, InlineNotice, SectionTitle } from '@stackpanel/ui';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -440,9 +440,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
         }
       />
       {priceId && !editing ? (
-        <p role="alert" className="text-sm text-muted-foreground">
-          {tr('admin.editor.priceMissing')}
-        </p>
+        <InlineNotice>{tr('admin.editor.priceMissing')}</InlineNotice>
       ) : (
         <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <form
@@ -588,9 +586,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
               </CardContent>
             </Card>
             {error ? (
-              <p role="alert" className="text-sm text-destructive sm:col-span-2">
-                {error}
-              </p>
+              <InlineError className="sm:col-span-2">{error}</InlineError>
             ) : null}
           </form>
           <Card className="xl:sticky xl:top-24">
@@ -1035,9 +1031,7 @@ function AccountForm({
       </div>
 
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <InlineError>{error}</InlineError>
       ) : null}
     </form>
   );
