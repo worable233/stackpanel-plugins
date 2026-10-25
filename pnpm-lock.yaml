@@ -31,6 +31,34 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/plugins/alipay:
+    dependencies:
+      '@stackpanel/sdk':
+        specifier: link:../../../../StackPanel/packages/sdk
+        version: link:../../../../StackPanel/packages/sdk
+      zod:
+        specifier: link:../../../../StackPanel/node_modules/zod
+        version: link:../../../../StackPanel/node_modules/zod
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.12(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.27.7))
+
+  packages/plugins/alipay/frontend:
+    dependencies:
+      sonner:
+        specifier: ^2.0.8
+        version: 2.0.8(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      zod:
+        specifier: link:../../../../../StackPanel/node_modules/zod
+        version: link:../../../../../StackPanel/node_modules/zod
+
   packages/plugins/catalog:
     dependencies:
       '@stackpanel/sdk':

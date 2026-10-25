@@ -1,0 +1,140 @@
+{
+  "version": "0.1.0",
+  "entry": "frontend/dist/index.js",
+  "pages": [],
+  "layouts": [],
+  "finders": [],
+  "adminRoutes": [
+    {
+      "path": "/settings",
+      "component": "admin/settings",
+      "permission": "alipay.admin",
+      "nav": {
+        "labelKey": "nav.settings",
+        "groupKey": "nav.group",
+        "order": 30
+      },
+      "data": [
+        {
+          "fetch": {
+            "path": "/alipay/admin/config"
+          },
+          "as": "status"
+        }
+      ]
+    }
+  ],
+  "adminActions": [],
+  "actions": [],
+  "accountRoutes": [],
+  "accountWidgets": [],
+  "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/chunk-66KFN25F.js",
+    "frontend/dist/index.js"
+  ],
+  "locales": [
+    "zh-CN",
+    "zh-TW",
+    "zh-HK",
+    "en-US"
+  ],
+  "messages": {
+    "zh-CN": {
+      "nav.group": "支付宝",
+      "nav.settings": "配置",
+      "page.title": "支付宝当面付",
+      "page.noSecrets": "未配置平台加密密钥，无法保存商户私钥。",
+      "page.callbackHint": "异步通知地址：{path}（需在支付宝开放平台登记为可公网访问的 https 地址）。",
+      "summary.appId": "应用 AppID",
+      "summary.gateway": "网关地址",
+      "summary.methods": "支付方式",
+      "field.appId": "应用 AppID",
+      "field.gatewayUrl": "网关地址",
+      "field.gatewayHint": "正式环境用默认值；沙箱填 {sandbox}。只接受 https 域名。",
+      "field.privateKey": "应用私钥（RSA2）",
+      "field.alipayPublicKey": "支付宝公钥",
+      "field.keyKeep": "已配置，留空则保持不变",
+      "action.save": "保存配置",
+      "action.saving": "保存中…",
+      "notice.saved": "支付宝配置已保存。",
+      "notice.saveFailed": "保存失败，请稍后重试。",
+      "error.unauthenticated": "登录状态已失效，请重新登录。",
+      "error.forbidden": "无权执行此操作。",
+      "error.withCode": "保存失败（{code}）。",
+      "error.withStatus": "保存失败（HTTP {status}）。"
+    },
+    "zh-TW": {
+      "nav.group": "支付寶",
+      "nav.settings": "配置",
+      "page.title": "支付寶當面付",
+      "page.noSecrets": "未配置平臺加密金鑰，無法儲存商戶私鑰。",
+      "page.callbackHint": "非同步通知地址：{path}（需在支付寶開放平臺登記為可公網訪問的 https 地址）。",
+      "summary.appId": "應用 AppID",
+      "summary.gateway": "閘道器地址",
+      "summary.methods": "支付方式",
+      "field.appId": "應用 AppID",
+      "field.gatewayUrl": "閘道器地址",
+      "field.gatewayHint": "正式環境用預設值；沙箱填 {sandbox}。只接受 https 域名。",
+      "field.privateKey": "應用私鑰（RSA2）",
+      "field.alipayPublicKey": "支付寶公鑰",
+      "field.keyKeep": "已配置，留空則保持不變",
+      "action.save": "儲存配置",
+      "action.saving": "儲存中…",
+      "notice.saved": "支付寶配置已儲存。",
+      "notice.saveFailed": "儲存失敗，請稍後重試。",
+      "error.unauthenticated": "登入狀態已失效，請重新登入。",
+      "error.forbidden": "無權執行此操作。",
+      "error.withCode": "儲存失敗（{code}）。",
+      "error.withStatus": "儲存失敗（HTTP {status}）。"
+    },
+    "zh-HK": {
+      "nav.group": "支付寶",
+      "nav.settings": "配置",
+      "page.title": "支付寶當面付",
+      "page.noSecrets": "未配置平臺加密金鑰，無法儲存商戶私鑰。",
+      "page.callbackHint": "非同步通知地址：{path}（需在支付寶開放平臺登記為可公網訪問的 https 地址）。",
+      "summary.appId": "應用 AppID",
+      "summary.gateway": "閘道器地址",
+      "summary.methods": "支付方式",
+      "field.appId": "應用 AppID",
+      "field.gatewayUrl": "閘道器地址",
+      "field.gatewayHint": "正式環境用默認值；沙箱填 {sandbox}。只接受 https 域名。",
+      "field.privateKey": "應用私鑰（RSA2）",
+      "field.alipayPublicKey": "支付寶公鑰",
+      "field.keyKeep": "已配置，留空則保持不變",
+      "action.save": "儲存配置",
+      "action.saving": "儲存中…",
+      "notice.saved": "支付寶配置已儲存。",
+      "notice.saveFailed": "儲存失敗，請稍後重試。",
+      "error.unauthenticated": "登錄狀態已失效，請重新登錄。",
+      "error.forbidden": "無權執行此操作。",
+      "error.withCode": "儲存失敗（{code}）。",
+      "error.withStatus": "儲存失敗（HTTP {status}）。"
+    },
+    "en-US": {
+      "nav.group": "Alipay",
+      "nav.settings": "Settings",
+      "page.title": "Alipay Face-to-Face",
+      "page.noSecrets": "Platform encryption keys are not configured, so the merchant private key cannot be stored.",
+      "page.callbackHint": "Async notification URL: {path} (register it on the Alipay open platform as a publicly reachable https address).",
+      "summary.appId": "App ID",
+      "summary.gateway": "Gateway",
+      "summary.methods": "Payment methods",
+      "field.appId": "App ID",
+      "field.gatewayUrl": "Gateway URL",
+      "field.gatewayHint": "Keep the default for production; use {sandbox} for the sandbox. Only https hosts are accepted.",
+      "field.privateKey": "App private key (RSA2)",
+      "field.alipayPublicKey": "Alipay public key",
+      "field.keyKeep": "Already configured — leave empty to keep it",
+      "action.save": "Save",
+      "action.saving": "Saving…",
+      "notice.saved": "Alipay configuration saved.",
+      "notice.saveFailed": "Could not save. Please retry.",
+      "error.unauthenticated": "Your session expired. Please sign in again.",
+      "error.forbidden": "You are not allowed to do this.",
+      "error.withCode": "Save failed ({code}).",
+      "error.withStatus": "Save failed (HTTP {status})."
+    }
+  }
+}
