@@ -43,8 +43,31 @@ const RAW_MESSAGE_CALL =
 /** 已本地化的动作回执，允许出现在反馈通道里。 */
 const ALLOWED_RECEIVER = /\b(result|response|res|data|payload|feedback|body)\?*\.message\b/;
 
-/** 内联提示必须是 `InlineError` / `InlineNotice`，不能手写 role。 */
-const RAW_INLINE_ROLE = /<p[^>]*\brole="(?:alert|status)"/;
+/**
+ * 内联提示必须是 `InlineError` / `InlineNotice`，不能手写 role。
+ *
+ * 按整份文件匹配而不是逐行：多行 JSX 把 `role` 写在单独一行同样要拦（referral 的
+ * `<p\n  role="status">` 就曾被逐行匹配漏掉）。
+ * 带 `aria-label` 的 `role="status"` 区域（骨架屏/加载容器）是「区域播报」，豁免 ——
+ * 换成 `<p>` 包裹块级占位反而不合法。
+ */
+const NATIVE_TAGS = 'p|div|span|section|li';
+const ELEMENT = new RegExp(`<(${NATIVE_TAGS})\\b([^>]*)>`, 'g');
+
+function rawInlineRoles(source) {
+  const offsets = [];
+  for (const match of source.matchAll(ELEMENT)) {
+    const attributes = match[2] ?? '';
+    if (!/\brole="(?:alert|status)"/.test(attributes)) continue;
+    if (/\baria-label=/.test(attributes)) continue;
+    offsets.push(match.index ?? 0);
+  }
+  return offsets;
+}
+
+function lineOf(source, offset) {
+  return source.slice(0, offset).split('\n').length;
+}
 
 /** 测试、夹具、构建产物不是线上反馈代码。 */
 const SKIP_PATH = /(^|\/)(node_modules|dist|\.next|tests?|__tests__|fixtures?)(\/|$)/;
@@ -117,16 +140,15 @@ function checkInlineRoles() {
     walk(src, files);
     for (const file of files) {
       const relative = path.relative(root, file);
-      readFileSync(file, 'utf8')
-        .split('\n')
-        .forEach((line, index) => {
-          if (!RAW_INLINE_ROLE.test(line)) return;
-          problems.push({
-            rule: 'inline-role',
-            where: `${relative}:${index + 1}`,
-            detail: line.trim(),
-          });
+      const source = readFileSync(file, 'utf8');
+      for (const offset of rawInlineRoles(source)) {
+        const line = lineOf(source, offset);
+        problems.push({
+          rule: 'inline-role',
+          where: `${relative}:${line}`,
+          detail: source.split('\n')[line - 1]?.trim() ?? '',
         });
+      }
     }
   }
 }

@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
   Input,
+  InlineNotice,
   Label,
   PageHeader,
   SectionTitle,
@@ -108,12 +109,9 @@ function ReferralAccountPage(props: AccountPageComponentProps): ReactElement {
       <PageHeader title={tr('page.title')} />
 
       {!config.enabled ? (
-        <p
-          role="status"
-          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-300"
-        >
+        <InlineNotice className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-amber-700 dark:text-amber-300">
           {tr('notice.disabled')}
-        </p>
+        </InlineNotice>
       ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
