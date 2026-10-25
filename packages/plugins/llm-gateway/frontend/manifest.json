@@ -95,7 +95,9 @@
         "labelKey": "nav.adminAccounts",
         "groupKey": "nav.group",
         "order": 10,
-        "activePaths": ["/prices"]
+        "activePaths": [
+          "/prices"
+        ]
       },
       "data": [
         {
@@ -526,7 +528,6 @@
     {
       "id": "llm-gateway",
       "titleKey": "widget.title",
-      "title": "模型服务",
       "component": "account/gateway",
       "permission": "llm-gateway.use"
     }
@@ -539,7 +540,12 @@
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ],
-  "locales": ["zh-CN", "zh-TW", "zh-HK", "en-US"],
+  "locales": [
+    "zh-CN",
+    "zh-TW",
+    "zh-HK",
+    "en-US"
+  ],
   "messages": {
     "zh-CN": {
       "nav.group": "模型服务",

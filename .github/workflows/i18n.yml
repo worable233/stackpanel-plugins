@@ -17,14 +17,17 @@ jobs:
           node-version: 22
 
       # 本仓库无法独立 `pnpm install`（插件以 workspace 协议引用内核包），
-      # 而这两道门禁只需要 `opencc-js` 一个纯 JS 依赖。
-      - name: Install catalog tooling
+      # 这几道门禁只需要 `opencc-js` 与 `typescript` 两个纯 JS 依赖。
+      - name: Install gate tooling
         run: >-
           npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund
-          opencc-js@^1.4.2
+          opencc-js@^1.4.2 typescript@^6.0.3
 
       - name: Check key / placeholder / reference parity
         run: node scripts/check-package-catalogs.mjs
 
       - name: Check Traditional Chinese catalogs are up to date
         run: node scripts/i18n-hant.mjs --check
+
+      - name: Check for unregistered human-language literals
+        run: node scripts/scan-i18n-literals.mjs --check

@@ -50,7 +50,6 @@ export const frontend: FrontendPackage = {
         permission: 'zjmf-upstream.admin',
         successFeedback: {
           messageKey: 'action.syncSuccess',
-          message: '同步完成：已更新 {updated} 个商品，跳过 {skipped} 个。',
           params: {
             updated: 'updated',
             skipped: 'skipped',

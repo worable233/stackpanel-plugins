@@ -1031,7 +1031,6 @@ const frontend: FrontendPackage = {
       {
         id: 'llm-gateway',
         titleKey: 'widget.title',
-        title: '模型服务',
         component: 'account/gateway',
         permission: 'llm-gateway.use',
       },

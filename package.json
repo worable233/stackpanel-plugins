@@ -16,7 +16,8 @@
     "i18n:packages": "node scripts/check-package-catalogs.mjs",
     "i18n:hant": "node scripts/i18n-hant.mjs",
     "i18n:hant:check": "node scripts/i18n-hant.mjs --check",
-    "i18n:check": "pnpm i18n:packages && pnpm i18n:hant:check",
+    "i18n:check": "pnpm i18n:packages && pnpm i18n:hant:check && pnpm i18n:literals",
+    "i18n:literals": "node scripts/scan-i18n-literals.mjs --check",
     "feedback:check": "node scripts/check-feedback.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

@@ -142,7 +142,6 @@
       "permission": "zjmf-upstream.admin",
       "successFeedback": {
         "messageKey": "action.syncSuccess",
-        "message": "同步完成：已更新 {updated} 个商品，跳过 {skipped} 个。",
         "params": {
           "updated": "updated",
           "skipped": "skipped"
@@ -273,7 +272,12 @@
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ],
-  "locales": ["zh-CN", "zh-TW", "zh-HK", "en-US"],
+  "locales": [
+    "zh-CN",
+    "zh-TW",
+    "zh-HK",
+    "en-US"
+  ],
   "messages": {
     "zh-CN": {
       "nav.group": "上游",
