@@ -1,0 +1,14 @@
+{
+  "name": "@stackpanel/plugin-wechatpay-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup"
+  },
+  "dependencies": {
+    "sonner": "^2.0.8",
+    "zod": "^4.4.3"
+  },
+  "license": "MIT"
+}
