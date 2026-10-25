@@ -25,5 +25,10 @@
   "error.unauthenticated": "Your session expired. Please sign in again.",
   "error.forbidden": "You are not allowed to do this.",
   "error.withCode": "Save failed ({code}).",
-  "error.withStatus": "Save failed (HTTP {status})."
+  "error.withStatus": "Save failed (HTTP {status}).",
+  "summary.certificates": "{count} platform certificate(s), earliest expiry {expiry}",
+  "action.refreshCertificates": "Refresh platform certificates now",
+  "action.refreshing": "Refreshing…",
+  "notice.certificatesRefreshed": "Platform certificates updated ({count}).",
+  "notice.certificatesRefreshFailed": "Certificate refresh failed. Check the merchant configuration and network."
 }

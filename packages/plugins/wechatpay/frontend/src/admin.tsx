@@ -15,6 +15,7 @@ interface WechatPayStatus {
   serialNo?: string;
   apiBase?: string;
   methods?: Array<{ id: string; label: string }>;
+  platformCertificates?: Array<{ serialNo: string; expiresAtMs: number }>;
 }
 
 interface ProblemDetails {
@@ -45,6 +46,27 @@ function WechatPayAdminPage(props: AdminPageComponentProps): ReactElement {
   const [privateKey, setPrivateKey] = useState('');
   const [apiV3Key, setApiV3Key] = useState('');
   const [platformPublicKey, setPlatformPublicKey] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  /**
+   * 手动触发平台证书轮换。平时由 `platform-cert-refresh` 任务每 12 小时跑一次；
+   * 这个按钮的用处是「刚换了配置、又不想等下一次」。
+   */
+  function handleRefreshCertificates(): void {
+    setRefreshing(true);
+    void fetch('/api/plugins/wechatpay/admin/refresh-certificates', { method: 'POST' })
+      .then(async (response) => {
+        if (!response.ok) {
+          toast.error(await readErrorMessage(response, tr));
+          return;
+        }
+        const summary = (await response.json()) as { count?: number };
+        toast.success(tr('notice.certificatesRefreshed', { count: String(summary.count ?? 0) }));
+        router.refresh();
+      })
+      .catch(() => toast.error(tr('notice.certificatesRefreshFailed')))
+      .finally(() => setRefreshing(false));
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -115,6 +137,22 @@ function WechatPayAdminPage(props: AdminPageComponentProps): ReactElement {
               <dd className="mt-1 break-all">{status.apiBase}</dd>
             </div>
           </dl>
+          <div className="mt-4 space-y-2 border-t pt-4">
+            <p className="text-muted-foreground">
+              {tr('summary.certificates', {
+                count: String(status.platformCertificates?.length ?? 0),
+                expiry: formatExpiry(status.platformCertificates?.[0]?.expiresAtMs),
+              })}
+            </p>
+            <button
+              type="button"
+              onClick={handleRefreshCertificates}
+              disabled={refreshing}
+              className="h-8 rounded-lg border px-3 text-sm font-medium disabled:opacity-60"
+            >
+              {refreshing ? tr('action.refreshing') : tr('action.refreshCertificates')}
+            </button>
+          </div>
         </section>
       ) : null}
 
@@ -216,6 +254,13 @@ function Field(props: {
       {props.hint ? <p className="text-xs text-muted-foreground">{props.hint}</p> : null}
     </div>
   );
+}
+
+function formatExpiry(expiresAtMs: number | undefined): string {
+  if (!expiresAtMs) return '—';
+  const date = new Date(expiresAtMs);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toISOString().slice(0, 10);
 }
 
 async function readErrorMessage(response: Response, tr: ReturnType<typeof t>): Promise<string> {

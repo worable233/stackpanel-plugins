@@ -2,6 +2,7 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encryptResource, notificationSignMessage, rsaSign } from './wechatpay-client.js';
+import { TEST_PLATFORM_CERT_PEM, TEST_PLATFORM_KEY_PEM } from './test-fixtures.js';
 import wechatpayPlugin from './index.js';
 
 /** 插件自身的接线（不是协议）：下单、关单、原始报文回调在真实 ctx 契约下是否走得通。 */
@@ -32,8 +33,20 @@ function config() {
 function fakeCtx(storedConfig: unknown = config()) {
   const secrets = new Map<string, string>();
   const settles: unknown[] = [];
+  const schedules: Array<{ name: string; schedule: unknown }> = [];
+  const jobHandlers = new Map<string, () => Promise<void>>();
   const ctx = {
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+    jobs: {
+      schedule: async (name: string, schedule: unknown) => {
+        schedules.push({ name, schedule });
+      },
+      handle: (name: string, handler: () => Promise<void>) => {
+        jobHandlers.set(name, handler);
+        return () => jobHandlers.delete(name);
+      },
+      enqueue: async () => '',
+    },
     secrets: {
       isAvailable: () => true,
       get: async (key: string) => secrets.get(key) ?? null,
@@ -49,12 +62,12 @@ function fakeCtx(storedConfig: unknown = config()) {
       },
     },
   };
-  return { ctx, settles, secrets };
+  return { ctx, settles, secrets, schedules, jobHandlers };
 }
 
 async function activate(storedConfig: unknown = config()) {
   let provider: Record<string, unknown> | null = null;
-  const { ctx, settles, secrets } = fakeCtx(storedConfig);
+  const { ctx, settles, secrets, schedules, jobHandlers } = fakeCtx(storedConfig);
   await wechatpayPlugin.onActivate?.({
     ...ctx,
     registerExtension: (_point: string, service: unknown) => {
@@ -62,7 +75,7 @@ async function activate(storedConfig: unknown = config()) {
       return () => undefined;
     },
   } as never);
-  return { provider: provider as Record<string, unknown>, settles, secrets, ctx };
+  return { provider: provider as Record<string, unknown>, settles, secrets, ctx, schedules, jobHandlers };
 }
 
 function signedNotification(transaction: Record<string, unknown>, overrideKey?: string) {
@@ -329,5 +342,159 @@ describe('wechatpay plugin wiring', () => {
       }),
     ).rejects.toThrow(/密钥材料无效/);
     expect(secrets.size).toBe(0);
+  });
+});
+
+
+describe('wechatpay platform certificate rotation', () => {
+  /**
+   * bootstrap 用的是测试自己生成的那把公钥，**不是**随后下发的证书公钥 ——
+   * 只有两把不同，才能证明轮换真的把验签密钥换掉了。
+   */
+  function certificateConfig() {
+    return config();
+  }
+
+  function certificateBody(serialNo: string): string {
+    const nonce = 'certnonce123';
+    const ciphertext = encryptResource({
+      plaintext: TEST_PLATFORM_CERT_PEM,
+      nonce,
+      associatedData: 'certificate',
+      apiV3Key: 'k'.repeat(32),
+    });
+    return JSON.stringify({
+      data: [
+        {
+          serial_no: serialNo,
+          encrypt_certificate: { nonce, associated_data: 'certificate', ciphertext },
+        },
+      ],
+    });
+  }
+
+  function signedResponse(body: string, serial = 'ROTATED-SERIAL') {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const nonce = 'respnonce';
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'wechatpay-timestamp': timestamp,
+        'wechatpay-nonce': nonce,
+        'wechatpay-serial': serial,
+        // 轮换应答由**当前**平台私钥签（bootstrap 那把），证书列表本身随后才换。
+        'wechatpay-signature': rsaSign(
+          notificationSignMessage({ timestamp, nonce, body }),
+          platform.privateKey,
+        ),
+      },
+    });
+  }
+
+  it('schedules the rotation job every 12h on activation', async () => {
+    const { schedules, jobHandlers } = await activate(certificateConfig());
+    expect(schedules).toEqual([{ name: 'platform-cert-refresh', schedule: { everyMs: 12 * 60 * 60_000 } }]);
+    expect(jobHandlers.has('platform-cert-refresh')).toBe(true);
+  });
+
+  it('downloads, decrypts and installs the rotated certificate', async () => {
+    const { provider } = await activate(certificateConfig());
+    const body = certificateBody('ROTATED-SERIAL');
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe('https://api.mch.weixin.qq.com/v3/certificates');
+      return signedResponse(body);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const summary = (await (provider['refreshCertificates'] as () => Promise<unknown>)()) as {
+      count: number;
+      serials: string[];
+    };
+    expect(summary.count).toBe(1);
+    expect(summary.serials).toEqual(['ROTATED-SERIAL']);
+  });
+
+  it('refuses a rotation response whose signature does not verify', async () => {
+    const { provider } = await activate(certificateConfig());
+    const body = certificateBody('EVIL-SERIAL');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const timestamp = String(Math.floor(Date.now() / 1000));
+        return new Response(body, {
+          status: 200,
+          headers: {
+            'wechatpay-timestamp': timestamp,
+            'wechatpay-nonce': 'n',
+            'wechatpay-serial': 'EVIL-SERIAL',
+            // 用商户自己的私钥签：应答验签必须挡住。
+            'wechatpay-signature': rsaSign(
+              notificationSignMessage({ timestamp, nonce: 'n', body }),
+              merchant.privateKey,
+            ),
+          },
+        });
+      }),
+    );
+    await expect(
+      (provider['refreshCertificates'] as () => Promise<unknown>)(),
+    ).rejects.toThrow(/签名无效/);
+  });
+
+  it('switches callback verification to the rotated certificate (before/after)', async () => {
+    const { provider, settles } = await activate(certificateConfig());
+
+    const transaction = {
+      appid: 'wx1234567890abcdef',
+      out_trade_no: 'ORD-ROT',
+      transaction_id: '4200009999',
+      trade_state: 'SUCCESS',
+      amount: { total: 500, currency: 'CNY' },
+    };
+    const nonce = randomBytes(6).toString('hex');
+    const ciphertext = encryptResource({
+      plaintext: JSON.stringify(transaction),
+      nonce,
+      associatedData: 'transaction',
+      apiV3Key: 'k'.repeat(32),
+    });
+    const notifyBody = JSON.stringify({
+      id: 'evt-rot',
+      event_type: 'TRANSACTION.SUCCESS',
+      resource: { ciphertext, nonce, associated_data: 'transaction' },
+    });
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const headerNonce = randomBytes(8).toString('hex');
+    const headers = {
+      'wechatpay-timestamp': timestamp,
+      'wechatpay-nonce': headerNonce,
+      'wechatpay-serial': 'ROTATED-SERIAL',
+      // 轮换后微信改用新证书对应的私钥签名；bootstrap 那把已经验不过了。
+      'wechatpay-signature': rsaSign(
+        notificationSignMessage({ timestamp, nonce: headerNonce, body: notifyBody }),
+        TEST_PLATFORM_KEY_PEM,
+      ),
+    };
+
+    // 轮换前：bootstrap 公钥验不过新证书签的回调 —— 这正是必须自动轮换的原因。
+    const before = await invokeCallback(notifyBody, headers);
+    expect(before.statusCode).toBe(401);
+    expect(settles).toEqual([]);
+
+    const fetchMock = vi.fn(async () => signedResponse(certificateBody('ROTATED-SERIAL')));
+    vi.stubGlobal('fetch', fetchMock);
+    await (provider['refreshCertificates'] as () => Promise<unknown>)();
+
+    const reply = await invokeCallback(notifyBody, headers);
+    expect(reply.statusCode).toBe(200);
+    expect(settles).toEqual([
+      {
+        providerId: 'wechatpay',
+        merchantOrderNo: 'ORD-ROT',
+        externalId: '4200009999',
+        amount: 500,
+        currency: 'CNY',
+      },
+    ]);
   });
 });

@@ -1,3 +1,4 @@
+import type { KeyObject } from 'node:crypto';
 import { EXTENSION_POINTS, definePlugin, PluginError } from '@stackpanel/sdk';
 import type {
   ExternalPaymentInitiation,
@@ -7,6 +8,7 @@ import type {
   HttpRequest,
   PaymentMethod,
   PaymentProvider,
+  JobContext,
   PluginContext,
   RawHttpReply,
   RawHttpRequest,
@@ -19,6 +21,8 @@ import {
   buildNativeOrderBody,
   configSchema,
   decryptResource,
+  PlatformKeyring,
+  parseCertificateList,
   parseErrorBody,
   parseNativeOrderResponse,
   sameAppId,
@@ -52,6 +56,8 @@ class WechatPayService implements PaymentProvider {
   readonly mode = 'gateway' as const;
   readonly callbackPath = '/callbacks/wechatpay';
   private config: ResolvedConfig | null = null;
+  /** 平台公钥索引：按 `Wechatpay-Serial` 选证书，未轮换过时只有 bootstrap 那一张。 */
+  private keyring: PlatformKeyring = new PlatformKeyring();
   /** 原始配置（含密钥明文），只用于「留空保持不变」时回填，永不外泄。 */
   private raw: WechatPayConfig | null = null;
 
@@ -64,6 +70,7 @@ class WechatPayService implements PaymentProvider {
         const parsed = configSchema.parse(methodConfig);
         this.config = validateConfig(parsed);
         this.raw = parsed;
+        this.keyring = new PlatformKeyring(this.config.platformKeyObject);
         return;
       }
     } catch (error) {
@@ -78,6 +85,7 @@ class WechatPayService implements PaymentProvider {
       const parsed = configSchema.parse(JSON.parse(saved));
       this.config = validateConfig(parsed);
       this.raw = parsed;
+      this.keyring = new PlatformKeyring(this.config.platformKeyObject);
     } catch {
       this.ctx.logger.warn('wechatpay: stored configuration is invalid and has been disabled');
       this.config = null;
@@ -150,6 +158,7 @@ class WechatPayService implements PaymentProvider {
             serialNo: this.config.serialNo,
             apiBase: this.config.apiBase,
             methods: this.getMethods(),
+            platformCertificates: this.keyring.describe(),
           }
         : {}),
     };
@@ -170,6 +179,7 @@ class WechatPayService implements PaymentProvider {
     await this.ctx.secrets.set(CONFIG_KEY, JSON.stringify(parsed.data));
     this.config = config;
     this.raw = parsed.data;
+    this.keyring = new PlatformKeyring(config.platformKeyObject);
     return this.status();
   }
 
@@ -187,7 +197,7 @@ class WechatPayService implements PaymentProvider {
     verifyNotification({
       headers,
       body: rawBody,
-      platformPublicKey: config.platformKeyObject,
+      platformPublicKey: this.requirePlatformKey(headers.serial),
     });
 
     let envelope: { resource?: { ciphertext?: string; nonce?: string; associated_data?: string } };
@@ -280,15 +290,16 @@ class WechatPayService implements PaymentProvider {
       );
     }
     // 应答验签：没有签名的应答不能信（中间人可伪造 code_url）。
+    const serial = response.headers.get('wechatpay-serial') ?? undefined;
     verifyNotification({
       headers: {
         timestamp: response.headers.get('wechatpay-timestamp') ?? undefined,
         nonce: response.headers.get('wechatpay-nonce') ?? undefined,
         signature: response.headers.get('wechatpay-signature') ?? undefined,
-        serial: response.headers.get('wechatpay-serial') ?? undefined,
+        serial,
       },
       body: text,
-      platformPublicKey: config.platformKeyObject,
+      platformPublicKey: this.requirePlatformKey(serial),
     });
     return text;
   }
@@ -318,6 +329,37 @@ class WechatPayService implements PaymentProvider {
     return next;
   }
 
+  /**
+   * 拉取并解密平台证书（`GET /v3/certificates`）。
+   *
+   * 必须**先**用现有证书验签应答，否则任何人都能喂一份假证书列表进来 ——
+   * 那等于让对方自己决定用什么公钥验证自己。
+   */
+  async refreshCertificates(): Promise<{ count: number; serials: string[] }> {
+    const config = this.requireConfig();
+    const body = await this.send(config, 'GET', '/v3/certificates', '');
+    const certificates = parseCertificateList(body, config.apiV3Key);
+    this.keyring.replace(certificates);
+    const summary = this.keyring.describe();
+    this.ctx.logger.info(
+      `wechatpay: 平台证书已轮换（${summary.length} 张，最早过期 ${new Date(
+        Math.min(...summary.map((entry) => entry.expiresAtMs)),
+      ).toISOString()}）`,
+    );
+    return { count: summary.length, serials: summary.map((entry) => entry.serialNo) };
+  }
+
+  warn(message: string): void {
+    this.ctx.logger.warn(message);
+  }
+
+  private requirePlatformKey(serial: string | undefined): KeyObject {
+    const key = this.keyring.forSerial(serial);
+    // 没有可用公钥就没有可信来源 —— 宁可拒绝，也不要「验不过就放行」。
+    if (!key) throw new WechatPayError('verify-failed', '没有可用的微信支付平台公钥', 401, true);
+    return key;
+  }
+
   private parseConfig(config: unknown): ResolvedConfig {
     const parsed = configSchema.safeParse(config);
     if (!parsed.success) throw new WechatPayError('config-invalid', undefined, 503, true);
@@ -342,6 +384,24 @@ function headerValue(headers: Record<string, string | string[] | undefined>, nam
   const value = headers[name];
   if (Array.isArray(value)) return value[0];
   return value ?? undefined;
+}
+
+/** 平台证书轮换频率：微信平台证书有效期通常以年计，12h 拉一次足够，也不至于打爆网关。 */
+export const CERT_REFRESH_INTERVAL_MS = 12 * 60 * 60_000;
+
+/**
+ * 本插件注册的内核任务。抽成函数以便 `jobs-contract.test.ts` 直接断言名字与频率。
+ *
+ * 轮换失败只记 warn，绝不抛：任务本身挂着「定时」，一次网关抖动不该让下次轮换也停。
+ */
+export function registerWechatPayJobs(jobs: JobContext, target: WechatPayService | null): void {
+  jobs.handle('platform-cert-refresh', async () => {
+    if (!target) return;
+    await target.refreshCertificates().catch((error: unknown) => {
+      target.warn(`wechatpay: 平台证书轮换失败：${String(error)}`);
+    });
+  });
+  void jobs.schedule('platform-cert-refresh', { everyMs: CERT_REFRESH_INTERVAL_MS });
 }
 
 function handle(handler: (req: HttpRequest, reply: HttpReply) => Promise<unknown>) {
@@ -389,6 +449,16 @@ export const wechatpayPlugin = definePlugin({
       }),
     },
     {
+      method: 'POST',
+      path: '/wechatpay/admin/refresh-certificates',
+      auth: 'admin',
+      permission: 'wechatpay.admin',
+      handler: handle(async () => {
+        if (!service) throw new WechatPayError('config-missing', '微信支付插件未就绪', 503, true);
+        return service.refreshCertificates();
+      }),
+    },
+    {
       // 原始报文路由：验签需要未经解析的字节（见 handleNotification 注释）。
       kind: 'raw',
       method: 'POST',
@@ -424,6 +494,7 @@ export const wechatpayPlugin = definePlugin({
     service = new WechatPayService(ctx);
     await service.load();
     ctx.registerExtension<PaymentProvider>(EXTENSION_POINTS.paymentProvider, service);
+    registerWechatPayJobs(ctx.jobs, service);
     ctx.logger.info(
       `wechatpay: activated (${service.getMethods().length > 0 ? 'configured' : 'not configured'})`,
     );
