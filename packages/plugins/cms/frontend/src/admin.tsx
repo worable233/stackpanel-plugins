@@ -45,6 +45,7 @@ import {
   type CmsRedirectList,
   type CmsRevisionList,
   formatDateTime,
+  failure,
   kindKey,
   listQuery,
   readErrorMessage,
@@ -204,7 +205,7 @@ function ContentListPage({ kind, initial, locale }: ContentListPageProps): React
       try {
         setItems(await fetchList(kind, next, tr));
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : tr('error.loadFailed'));
+        setError(failure(loadError, tr('error.loadFailed')));
       } finally {
         setLoading(false);
       }
@@ -227,7 +228,7 @@ function ContentListPage({ kind, initial, locale }: ContentListPageProps): React
       await mutate(kind, id, op, tr);
       await reload({ status, q: search.trim(), page });
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : tr('error.actionFailed'));
+      setError(failure(actionError, tr('error.actionFailed')));
     } finally {
       setPending(null);
     }
@@ -240,7 +241,7 @@ function ContentListPage({ kind, initial, locale }: ContentListPageProps): React
       await removeContent(kind, id, tr);
       await reload({ status, q: search.trim(), page });
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : tr('error.deleteFailed'));
+      setError(failure(actionError, tr('error.deleteFailed')));
     } finally {
       setPending(null);
     }
@@ -541,8 +542,7 @@ function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
         setPublishAt(content.publishAt ? toLocalInput(content.publishAt) : '');
         setSlugTouched(true);
       } catch (loadError) {
-        if (active)
-          setError(loadError instanceof Error ? loadError.message : tr('error.loadFailed'));
+        if (active) setError(failure(loadError, tr('error.loadFailed')));
       } finally {
         if (active) setLoaded(true);
       }
@@ -608,7 +608,7 @@ function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
       setNotice(tr('editor.notice.saved'));
       return saved;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : tr('error.saveFailed'));
+      setError(failure(saveError, tr('error.saveFailed')));
       return null;
     } finally {
       setSaving(false);
@@ -630,7 +630,7 @@ function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
       setPublished(result.published);
       setNotice(tr('editor.notice.published'));
     } catch (publishError) {
-      setError(publishError instanceof Error ? publishError.message : tr('error.publishFailed'));
+      setError(failure(publishError, tr('error.publishFailed')));
     } finally {
       setSaving(false);
     }
@@ -650,9 +650,7 @@ function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
       setPublished(result.published);
       setNotice(tr('editor.notice.unpublished'));
     } catch (unpublishError) {
-      setError(
-        unpublishError instanceof Error ? unpublishError.message : tr('error.unpublishFailed'),
-      );
+      setError(failure(unpublishError, tr('error.unpublishFailed')));
     } finally {
       setSaving(false);
     }
@@ -669,7 +667,7 @@ function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
         ),
       );
     } catch (historyError) {
-      setError(historyError instanceof Error ? historyError.message : tr('error.revisionsFailed'));
+      setError(failure(historyError, tr('error.revisionsFailed')));
     }
   }
 
@@ -687,7 +685,7 @@ function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
       setPublished(result.published);
       setNotice(tr('editor.notice.revisionPublished', { revision: revisionNumber }));
     } catch (revisionError) {
-      setError(revisionError instanceof Error ? revisionError.message : tr('error.publishFailed'));
+      setError(failure(revisionError, tr('error.publishFailed')));
     } finally {
       setSaving(false);
     }
@@ -1021,7 +1019,7 @@ function RedirectsPage({
           await bff<CmsRedirectList>(`/cms/admin/redirects?page=${nextPage}&pageSize=20`, tr),
         );
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : tr('error.loadFailed'));
+        setError(failure(loadError, tr('error.loadFailed')));
       }
     },
     [tr],
@@ -1040,7 +1038,7 @@ function RedirectsPage({
       });
       await reload(page);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : tr('error.deleteFailed'));
+      setError(failure(deleteError, tr('error.deleteFailed')));
     } finally {
       setPending(null);
     }

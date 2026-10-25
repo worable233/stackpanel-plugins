@@ -67,6 +67,16 @@ import { t } from './i18n.js';
 type AccountRow = z.infer<typeof accountSchema>;
 type Translator = (key: string, params?: Record<string, string | number>) => string;
 
+/**
+ * 反馈只能显示已本地化的文案，绝不显示原始异常正文（同内核契约：按 code 查文案）。
+ *
+ * 异常正文只进控制台，界面拿到调用方选定的 `tr(...)` 文案。
+ */
+function failure(cause: unknown, message: string): string {
+  console.error('[llm-gateway] request failed', cause);
+  return message;
+}
+
 const MODEL_LIMIT = 500;
 
 function asStringArray(value: unknown): string[] {
@@ -392,7 +402,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
       if (!next.length) throw new Error(tr('common.noUpstreamModels'));
       setModels((current) => Array.from(new Set([...current, ...next])).sort());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : tr('common.fetchFailed'));
+      setError(failure(cause, tr('common.fetchFailed')));
     } finally {
       setLoadingCatalog(false);
     }
@@ -449,7 +459,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
                 router.push('/admin/plugin/llm-gateway/accounts');
                 router.refresh();
               } catch (cause) {
-                setError(cause instanceof Error ? cause.message : tr('common.saveFailed'));
+                setError(failure(cause, tr('common.saveFailed')));
               } finally {
                 setSaving(false);
               }
@@ -776,7 +786,7 @@ function AccountForm({
       setAvailable((current) => Array.from(new Set([...current, ...models])).sort());
       setSelected(models.slice(0, MODEL_LIMIT));
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : tr('common.fetchFailed'));
+      setError(failure(fetchError, tr('common.fetchFailed')));
     } finally {
       setFetching(false);
     }

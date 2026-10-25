@@ -1,0 +1,21 @@
+name: feedback
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contract:
+    name: Feedback contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 纯文本 + manifest 检查，无依赖（见脚本头部注释）。
+      - name: Raw exception text / success receipt
+        run: node scripts/check-feedback.mjs

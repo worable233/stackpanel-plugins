@@ -252,6 +252,8 @@ const ticketActions: PluginActionDefinition[] = [
     method: 'POST',
     path: '/tickets',
     permission: 'ticket.create',
+    // 创建后由 `redirect` 跳转到详情页，跳转本身就是回执。
+    silent: true,
     redirect: { responsePath: 'redirectUrl' },
     input: [
       { name: 'subject', type: 'string', required: true, maxLength: 191 },
@@ -266,6 +268,7 @@ const ticketActions: PluginActionDefinition[] = [
     method: 'POST',
     path: '/tickets/:id/messages',
     permission: 'ticket.create',
+    successFeedback: { messageKey: 'feedback.replied' },
     input: [
       { name: 'id', type: 'string', required: true, maxLength: 191 },
       { name: 'body', type: 'string', required: true, maxLength: 10000 },
@@ -278,6 +281,7 @@ const ticketActions: PluginActionDefinition[] = [
     method: 'POST',
     path: '/tickets/:id/close',
     permission: 'ticket.create',
+    successFeedback: { messageKey: 'feedback.closed' },
     input: [
       { name: 'id', type: 'string', required: true, maxLength: 191 },
       { name: 'reason', type: 'string', maxLength: 10000 },
@@ -288,6 +292,7 @@ const ticketActions: PluginActionDefinition[] = [
     method: 'POST',
     path: '/tickets/:id/remind',
     permission: 'ticket.create',
+    successFeedback: { messageKey: 'feedback.reminded' },
     input: [{ name: 'id', type: 'string', required: true, maxLength: 191 }],
   },
   {
@@ -295,6 +300,7 @@ const ticketActions: PluginActionDefinition[] = [
     method: 'PATCH',
     path: '/ticket/admin/tickets/:id',
     permission: 'ticket.admin',
+    successFeedback: { messageKey: 'feedback.updated' },
     input: [
       { name: 'id', type: 'string', required: true, maxLength: 191 },
       { name: 'status', type: 'string', maxLength: 32 },

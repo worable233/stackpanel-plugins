@@ -75,5 +75,9 @@
   "workspace.accept": "Accept",
   "workspace.transfer": "Transfer",
   "workspace.relatedOrder": "Related order",
-  "workspace.relatedService": "Related service"
+  "workspace.relatedService": "Related service",
+  "feedback.replied": "Reply sent",
+  "feedback.closed": "Ticket closed",
+  "feedback.reminded": "Reminder sent",
+  "feedback.updated": "Ticket updated"
 }

@@ -2,6 +2,7 @@
 
 import type { AdminPageComponentProps, FrontendPackage } from '@stackpanel/sdk';
 import { PageHeader } from '@stackpanel/ui';
+import { useRouter } from 'next/navigation';
 import { useState, type ReactElement } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -20,6 +21,15 @@ const statusSchema = z.object({
   excludeTypes: z.string().optional(),
 });
 type Status = z.infer<typeof statusSchema>;
+
+/**
+ * 反馈只显示已本地化文案；异常正文（SMTP 报错、`SignatureDoesNotMatch` 之类）
+ * 只进控制台。
+ */
+function failure(cause: unknown, message: string): string {
+  console.error('[smtp] request failed', cause);
+  return message;
+}
 
 function Field({
   label,
@@ -53,6 +63,7 @@ function Field({
 
 function SmtpSettings(props: AdminPageComponentProps): ReactElement {
   const tr = t(props.locale);
+  const router = useRouter();
   const status = props.data.status as Status | undefined;
   const [host, setHost] = useState(status?.host ?? '');
   const [port, setPort] = useState(String(status?.port ?? 465));
@@ -87,9 +98,11 @@ function SmtpSettings(props: AdminPageComponentProps): ReactElement {
       });
       if (!res.ok) throw new Error((await res.json()).error ?? tr('error.saveFailed'));
       toast.success(tr('notice.saved'));
-      window.location.reload();
+      // `location.reload()` 会把刚弹出的 toast 一起销毁；`router.refresh()` 只重取
+      // RSC 数据，宿主 `<Toaster />` 不动，回执才看得见。
+      router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : tr('error.saveFailed'));
+      toast.error(failure(e, tr('error.saveFailed')));
     } finally {
       setBusy(false);
     }
@@ -105,7 +118,7 @@ function SmtpSettings(props: AdminPageComponentProps): ReactElement {
       if (!res.ok) throw new Error((await res.json()).error ?? tr('error.sendFailed'));
       toast.success(tr('test.sent'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : tr('error.sendFailed'));
+      toast.error(failure(e, tr('error.sendFailed')));
     } finally {
       setBusy(false);
     }

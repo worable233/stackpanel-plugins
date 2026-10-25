@@ -17,6 +17,7 @@
     "i18n:hant": "node scripts/i18n-hant.mjs",
     "i18n:hant:check": "node scripts/i18n-hant.mjs --check",
     "i18n:check": "pnpm i18n:packages && pnpm i18n:hant:check",
+    "feedback:check": "node scripts/check-feedback.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

@@ -156,6 +156,18 @@ export function listQuery(params: {
   return search.toString();
 }
 
+/**
+ * 反馈只能显示已本地化的文案，绝不显示原始异常正文。
+ *
+ * `Error.message` 里是服务端/上游的英文原文（`fetch failed`、
+ * `SignatureDoesNotMatch`、SQL 片段……），既未本地化也可能泄漏内部细节。
+ * 这里只把它写进控制台，界面拿到调用方选定的 `tr(...)` 文案。
+ */
+export function failure(cause: unknown, message: string): string {
+  console.error('[cms] request failed', cause);
+  return message;
+}
+
 /** Parse a JSON error body into a human message in the caller's locale. */
 export async function readErrorMessage(response: Response, tr: Translate): Promise<string> {
   const fallback = tr('error.requestFailed', { status: response.status });

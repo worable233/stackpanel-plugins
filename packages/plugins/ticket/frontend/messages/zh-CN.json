@@ -75,5 +75,9 @@
   "workspace.accept": "接单",
   "workspace.transfer": "转交",
   "workspace.relatedOrder": "关联订单",
-  "workspace.relatedService": "关联服务"
+  "workspace.relatedService": "关联服务",
+  "feedback.replied": "回复已发送",
+  "feedback.closed": "工单已关闭",
+  "feedback.reminded": "已提醒处理",
+  "feedback.updated": "工单已更新"
 }
