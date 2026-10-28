@@ -1,0 +1,7 @@
+{
+  "nav.label": "API Market",
+  "nav.group": "APIs",
+  "page.title": "API Market",
+  "page.empty": "No APIs are published yet.",
+  "page.unitCost": "{units} units/call"
+}

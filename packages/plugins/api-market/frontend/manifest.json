@@ -1,0 +1,57 @@
+{
+  "version": "0.1.0",
+  "entry": "frontend/dist/index.js",
+  "pages": [
+    {
+      "path": "/api-market",
+      "component": "api-market/catalog",
+      "data": [
+        {
+          "fetch": {
+            "path": "/api-market/catalog"
+          },
+          "as": "catalog"
+        }
+      ]
+    }
+  ],
+  "layouts": [],
+  "finders": [],
+  "adminRoutes": [],
+  "adminActions": [],
+  "actions": [],
+  "accountRoutes": [],
+  "accountWidgets": [],
+  "files": ["frontend/dist/index.js", "frontend/dist/index.js.map"],
+  "locales": ["zh-CN", "zh-TW", "zh-HK", "en-US"],
+  "messages": {
+    "zh-CN": {
+      "nav.label": "API 市场",
+      "nav.group": "接口",
+      "page.title": "API 市场",
+      "page.empty": "暂无已上架的接口。",
+      "page.unitCost": "{units} 单位/次"
+    },
+    "zh-TW": {
+      "nav.label": "API 市場",
+      "nav.group": "介面",
+      "page.title": "API 市場",
+      "page.empty": "暫無已上架的介面。",
+      "page.unitCost": "{units} 單位/次"
+    },
+    "zh-HK": {
+      "nav.label": "API 市場",
+      "nav.group": "介面",
+      "page.title": "API 市場",
+      "page.empty": "暫無已上架的介面。",
+      "page.unitCost": "{units} 單位/次"
+    },
+    "en-US": {
+      "nav.label": "API Market",
+      "nav.group": "APIs",
+      "page.title": "API Market",
+      "page.empty": "No APIs are published yet.",
+      "page.unitCost": "{units} units/call"
+    }
+  }
+}

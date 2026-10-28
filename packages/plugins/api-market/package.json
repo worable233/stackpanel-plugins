@@ -1,0 +1,36 @@
+{
+  "name": "@stackpanel/plugin-api-market",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "stackpanel": {
+    "builtin": false
+  },
+  "description": "API 市场：管理员录入第三方 REST 接口，用户自助签发 key，网关按模板转发上游、按次原子扣额度并记录调用。",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepare": "tsc -p tsconfig.build.json",
+    "build": "node ../../../scripts/build-plugin.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@stackpanel/net-guard": "workspace:*",
+    "@stackpanel/sdk": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
