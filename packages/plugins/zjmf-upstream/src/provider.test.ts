@@ -632,3 +632,101 @@ describe('normalizeStatus', () => {
     expect(normalizeStatus('REQUIRES_RECONCILIATION')).toBe('PENDING_PROVISION');
   });
 });
+
+describe('changePackage 只提交差异（上游对未变化项整单拒绝）', () => {
+  const baseUpstream = {
+    id: 'up-1',
+    name: 'up',
+    baseUrl: 'https://93.184.216.34/',
+    protocol: 'finance' as const,
+    currency: 'CNY',
+    markupBps: 0,
+    defaultStock: 100,
+    syncIntervalMinutes: 60,
+    enabled: true,
+    syncState: 'IDLE' as const,
+    allowUnverifiedV10Routes: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  function pluginCtx(): PluginContext {
+    const ctx = minimalCtx();
+    (ctx as { secrets: PluginContext['secrets'] }).secrets = {
+      isAvailable: () => true,
+      get: async () => JSON.stringify({ username: 'u', password: 'p' }),
+      set: async () => {},
+      remove: async () => {},
+    };
+    return ctx;
+  }
+
+  function providerCtx(runtime: Record<string, unknown>): ProviderServiceContext {
+    const ctx = pluginCtx();
+    return {
+      service: {
+        id: 's',
+        providerId: 'zjmf',
+        providerServiceId: '42',
+        runtime,
+        credentialsRef: null,
+        userId: 'u',
+        orderId: 'o',
+        productId: 'p',
+        status: 'ACTIVE',
+      } as never,
+      secrets: ctx.secrets,
+    };
+  }
+
+  beforeEach(() => {
+    vi.mocked(getUpstream).mockResolvedValue(baseUpstream);
+  });
+
+  it('只把变化的配置项发给上游', async () => {
+    const bodies: URLSearchParams[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const path = new URL(input.toString()).pathname;
+        if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+        if (init?.body instanceof URLSearchParams) bodies.push(init.body);
+        return json({ status: 200, msg: '请求成功', data: {} });
+      }),
+    );
+    const provider = new ZJMFProvider(pluginCtx());
+    await provider.changePackage(
+      providerCtx({
+        upstreamId: 'up-1',
+        config: { cycle: 'monthly', selections: { '3395983': 'old-os', '3395985': '1' } },
+      }),
+      {
+        type: 'package',
+        config: { cycle: 'monthly', selections: { '3395983': 'old-os', '3395985': '2' } },
+      },
+    );
+    const upgrade = bodies.find((body) => body.get('configoption[3395985]'));
+    expect(upgrade?.get('configoption[3395985]')).toBe('2');
+    expect(upgrade?.get('configoption[3395983]')).toBeNull();
+  });
+
+  it('配置没有变化时不向上游提交空升级', async () => {
+    const bodies: URLSearchParams[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const path = new URL(input.toString()).pathname;
+        if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+        if (init?.body instanceof URLSearchParams) bodies.push(init.body);
+        return json({ status: 200, msg: '请求成功', data: {} });
+      }),
+    );
+    const provider = new ZJMFProvider(pluginCtx());
+    const selection = { cycle: 'monthly', selections: { '3395985': '1' } };
+    await provider.changePackage(providerCtx({ upstreamId: 'up-1', config: selection }), {
+      type: 'package',
+      config: selection,
+    });
+    expect(bodies.some((body) => body.get('hid'))).toBe(false);
+  });
+});

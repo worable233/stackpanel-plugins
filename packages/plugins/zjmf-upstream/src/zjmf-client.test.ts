@@ -547,15 +547,15 @@ describe('ZJMF failure vs empty distinction (handoff #2)', () => {
     await expect(clientFor(fetchMock).listServiceResources('42', 'snapshot')).resolves.toEqual([]);
   });
 
-  it('V4: getServiceMetrics throws on HTTP 500 (finance)', async () => {
+  it('V4: finance 没有监控端点 → 返回空集且不发请求（实测 /host/monitor 404）', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const path = new URL(input.toString()).pathname;
       if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
       return new Response('boom', { status: 500 });
     });
-    await expect(clientFor(fetchMock).getServiceMetrics('42')).rejects.toBeInstanceOf(
-      ZJMFClientError,
-    );
+    await expect(clientFor(fetchMock).getServiceMetrics('42')).resolves.toEqual([]);
+    const paths = fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname);
+    expect(paths).not.toContain('/host/monitor');
   });
 
   it('V5: calculateChangePrice throws on HTTP 500 instead of null', async () => {
@@ -623,12 +623,13 @@ describe('ZJMF failure vs empty distinction (handoff #2)', () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const path = new URL(input.toString()).pathname;
       if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
-      if (path === '/host/monitor')
-        return json({ status: 200, data: { cpu_usage: [{ t: 1, v: 2 }] } });
-      return json({ status: 200, data: {} });
+      return json({ status: 200, data: { list: [{ id: 1, hid: 42 }] } });
     });
-    const metrics = await clientFor(fetchMock, 'finance').getServiceMetrics('42');
-    expect(metrics[0]).toMatchObject({ id: 'cpu_usage' });
+    // 财务协议不支持服务子资源（fail-closed，实测上游 500），且不触发「V10 未取证」守卫。
+    await expect(
+      clientFor(fetchMock, 'finance').supportsServiceResources('42'),
+    ).resolves.toBe(false);
+    await expect(clientFor(fetchMock, 'finance').getServiceMetrics('42')).resolves.toEqual([]);
   });
 
   it('V7b: experimental switch restores the unverified V10 route', async () => {
@@ -964,27 +965,13 @@ describe('ZJMF service provisioning', () => {
     });
     expect(resolved?.id).toBe('33363');
   });
-  it('normalizes finance monitor payloads into metric series', async () => {
+  it('finance 不伪造监控曲线：只返回空集', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const path = new URL(input.toString()).pathname;
       if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
-      if (path === '/host/monitor') {
-        return json({
-          status: 200,
-          data: {
-            cpu_usage: [
-              { t: 1700000000000, v: 12.5 },
-              { t: 1700000060000, v: 13.2 },
-            ],
-          },
-        });
-      }
       return json({ status: 200, data: {} });
     });
-    const metrics = await clientFor(fetchMock).getServiceMetrics('42');
-    const cpu = metrics.find((m) => m.id === 'cpu_usage');
-    expect(cpu?.points).toHaveLength(2);
-    expect(cpu?.points[0]).toMatchObject({ t: 1700000000000, v: 12.5 });
+    await expect(clientFor(fetchMock).getServiceMetrics('42')).resolves.toEqual([]);
   });
 
   it('posts a finance action to the provision endpoint', async () => {

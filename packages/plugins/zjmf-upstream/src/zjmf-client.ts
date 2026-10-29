@@ -181,6 +181,11 @@ export class ZJMFClient {
     private readonly fetchImpl: Fetch = fetch,
   ) {}
 
+  /** 上游协议（`finance` = 魔方财务；`v10` = 魔方 V10 控制台）。 */
+  get protocol(): ZJMFProtocol {
+    return this.connection.protocol;
+  }
+
   /**
    * 未取证路由守卫（工单 #2 §3.3）。
    *
@@ -1170,6 +1175,10 @@ export class ZJMFClient {
       return pickServiceDetail({
         ...merged,
         ip: stringOrNull(merged['dedicatedip']) ?? stringOrNull(merged['ip']),
+        // 追加 IP 是用户花钱买的：主 IP 之外必须一并透出，否则「加了 IP 看不到」。
+        extraIps: Array.isArray(merged['assignedips'])
+          ? merged['assignedips'].filter((value): value is string => typeof value === 'string')
+          : [],
         ...(status ? { status } : {}),
         ...(statusLabel ? { statusLabel } : {}),
       });
@@ -1288,7 +1297,10 @@ export class ZJMFClient {
    * 避免前端展示必然失败的按钮。探测失败按「不支持」处理（fail-closed）。
    */
   async supportsServiceResources(serviceId: string): Promise<boolean> {
-    if (this.connection.protocol === 'finance') return true;
+    // 财务版没有可用的客户自助子资源端点：实测 `/host/snapshot`、`/host/backup`
+    // 一类路径返回上游 500（参数/路由不匹配），`/provision/custom/content` 亦无
+    // snapshot/backup 分支。宁可 fail-closed（不展示能力），也不给用户一个点开就报错的按钮。
+    if (this.connection.protocol === 'finance') return false;
     try {
       const family = await this.resolveFamily(serviceId);
       return family === 'mf_cloud' || family === 'remf_cloud';
@@ -1300,10 +1312,11 @@ export class ZJMFClient {
   async getServiceMetrics(serviceId: string): Promise<ZJMFMetric[]> {
     const encoded = encodeURIComponent(serviceId);
     if (this.connection.protocol === 'finance') {
-      // 上游成功但无监控数据 → []（合法「空」）；传输/鉴权/HTTP 失败则上抛（§3.1）。
-      const data = await this.authorizedGet(`/host/monitor?host_id=${encoded}`);
-      const payload = object(data['data']);
-      return normalizeMetrics(payload);
+      // 财务版没有监控取数端点：`/host/monitor?host_id=` 实测 404，
+      // `/host/chart?host_id=` 只返回图表**类型清单**（CPU/内存/网卡/磁盘 IO），
+      // 没有配套的时间序列端点（chart_data / metrics / monitor_data 均 404）。
+      // 与其把 404 抛成「监控加载失败」，不如返回空集——面板显示「暂无监控数据」。
+      return [];
     }
     // V10：`GET console/v1/<family>/:id/chart?type=cpu`，返回 data.list[].{time,value}。
     // 证据：`10.4.6/public/plugins/server/mf_cloud/controller/home/CloudController.php:876-910`。
@@ -2507,66 +2520,6 @@ export interface ZJMFMetric {
   points: Array<{ t: number; v: number }>;
 }
 
-const METRIC_FIELD_MAP: Array<[string, string, string]> = [
-  ['cpu', 'CPU 占用率', '%'],
-  ['cpu_usage', 'CPU 占用率', '%'],
-  ['memory', '内存占用率', '%'],
-  ['mem', '内存占用率', '%'],
-  ['memory_usage', '内存占用率', '%'],
-  ['disk', '磁盘占用率', '%'],
-  ['bandwidth', '带宽', 'Mbps'],
-  ['network_in', '入站流量', 'KB/s'],
-  ['network_out', '出站流量', 'KB/s'],
-];
-
-/** 从原始负载里提取监控时序（兼容上游多种字段形态）。 */
-function normalizeMetrics(payload: Record<string, unknown>): ZJMFMetric[] {
-  const result: ZJMFMetric[] = [];
-  for (const [key, label, unit] of METRIC_FIELD_MAP) {
-    const raw = payload[key] ?? payload[key.replace(/_/g, '')];
-    const points = toPoints(raw);
-    if (points.length) {
-      result.push({ id: key, label, unit, points });
-    }
-  }
-  // 兼容 { data: [{name, unit, points}] } 或 { list: [...] } 形态
-  for (const candidate of [payload['list'], payload['series']]) {
-    if (Array.isArray(candidate)) {
-      for (const series of candidate) {
-        const o = object(series);
-        const name = stringOrNull(o['name']) ?? stringOrNull(o['label']) ?? '';
-        const pts = toPoints(o['points'] ?? o['data']);
-        if (name && pts.length)
-          result.push({
-            id: name,
-            label: name,
-            unit: stringOrNull(o['unit']) ?? '',
-            points: pts,
-          });
-      }
-    }
-  }
-  return result;
-}
-
-function toPoints(value: unknown): Array<{ t: number; v: number }> {
-  if (!Array.isArray(value)) return [];
-  const points: Array<{ t: number; v: number }> = [];
-  for (const item of value) {
-    if (Array.isArray(item) && item.length >= 2) {
-      const t = Number(item[0]);
-      const v = Number(item[1]);
-      if (Number.isFinite(t) && Number.isFinite(v)) points.push({ t, v });
-    } else {
-      const o = object(item);
-      const t = Number(o['t'] ?? o['time'] ?? o['ts']);
-      const v = Number(o['v'] ?? o['value']);
-      if (Number.isFinite(t) && Number.isFinite(v)) points.push({ t, v });
-    }
-  }
-  return points;
-}
-
 /** 从开通/详情负载里提取服务字段（ROOT/密码/IP/状态/规格）。 */
 function pickServiceDetail(payload: Record<string, unknown>): Record<string, unknown> {
   const status =
@@ -2579,6 +2532,9 @@ function pickServiceDetail(payload: Record<string, unknown>): Record<string, unk
       stringOrNull(payload['instance_id']),
     host: stringOrNull(payload['ip']) ?? stringOrNull(payload['hostname']),
     ip: stringOrNull(payload['ip']),
+    ...(Array.isArray(payload['extraIps']) && payload['extraIps'].length > 0
+      ? { extraIps: payload['extraIps'] }
+      : {}),
     username:
       stringOrNull(payload['username']) ??
       stringOrNull(payload['root']) ??

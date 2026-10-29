@@ -680,6 +680,17 @@ export class ZJMFProvider implements FulfillmentProvider {
     const fields: ServiceDetail['fields'] = [];
     const ip = stringOr(detail['ip']);
     if (ip) fields.push({ label: 'IPv4 地址', value: ip, copyable: true });
+    // 追加 IP（升配买的独立 IP）在列表页/详情页都要能看到。
+    const extraIps = Array.isArray(detail['extraIps'])
+      ? detail['extraIps'].filter((value): value is string => typeof value === 'string')
+      : [];
+    extraIps.forEach((value, index) => {
+      fields.push({
+        label: extraIps.length > 1 ? `附加 IP ${index + 1}` : '附加 IP',
+        value,
+        copyable: true,
+      });
+    });
     const host = stringOr(detail['host']);
     if (host && host !== ip) fields.push({ label: '主机名', value: host, copyable: true });
     const username = stringOr(detail['username']);
@@ -715,7 +726,7 @@ export class ZJMFProvider implements FulfillmentProvider {
       status: normalizeStatus(status ?? ctx.service.status),
       ...(statusLabel ? { statusLabel } : {}),
       fields,
-      actions: defaultActions(),
+      actions: defaultActions(client.protocol),
     };
   }
 
@@ -758,6 +769,16 @@ export class ZJMFProvider implements FulfillmentProvider {
     }
     assertSafeParams(params);
     const { client } = await this.resolveForService(ctx.service);
+    if (client.protocol === 'finance' && ['reset_password', 'reinstall'].includes(actionId)) {
+      // 上游财务版没有这两个方法的可用契约（实测 406），直接给出可执行指引，
+      // 而不是把上游的 406 原样抛给用户。
+      throw new ZJMFProviderError(
+        501,
+        actionId === 'reinstall'
+          ? '上游未提供自助重装，请提交工单让上游处理（重装会清空数据）'
+          : '上游未提供自助重置密码，请在 VNC 控制台内修改，或提交工单让上游处理',
+      );
+    }
     const data = await client.runServiceAction(ctx.service.providerServiceId, actionId, params);
 
     // 上游可能在响应里回带展示数据（新密码、控制台地址）；尽力提取，缺失则忽略。
@@ -821,16 +842,29 @@ export class ZJMFProvider implements FulfillmentProvider {
       throw new ZJMFProviderError(409, '服务尚未开通');
     }
     const { client } = await this.resolveForService(ctx.service);
-    const selections =
-      change.config?.selections &&
-      Object.fromEntries(
-        Object.entries(change.config.selections).filter(
-          ([, value]) => value !== undefined && value !== null && value !== '',
-        ),
-      );
-    await client.changePackage(ctx.service.providerServiceId, {
-      ...(selections ? { selections } : {}),
-    });
+    // 只提交**变化项**：上游 `upgrade/upgrade_config_post` 对「未变化的配置项」
+    // 会整单拒绝（实测传全量返回 400「参数异常,添加失败」，传 diff 才 200）。
+    const current = (((ctx.service.runtime ?? {}) as Record<string, unknown>)[
+      'config'
+    ] as CheckoutSelection | undefined)?.selections as
+      | Record<string, string | number>
+      | undefined;
+    const next = change.config?.selections ?? {};
+    const diff: Record<string, string | number> = {};
+    for (const [optionId, value] of Object.entries(next)) {
+      if (value === undefined || value === null || value === '') continue;
+      if (current && String(current[optionId] ?? '') === String(value)) continue;
+      diff[optionId] = value;
+    }
+    if (Object.keys(diff).length === 0) {
+      // 没有任何真实变化：不向上游发起一次「空升级」，但仍把目标配置落库。
+      const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
+      return {
+        message: '配置无变化',
+        runtime: change.config ? { ...runtime, config: change.config } : runtime,
+      };
+    }
+    await client.changePackage(ctx.service.providerServiceId, { selections: diff });
     const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
     return {
       message: '配置变更已提交上游',
@@ -1092,42 +1126,43 @@ function assertSafeParams(params: Record<string, string> | undefined): void {
   }
 }
 
-function defaultActions(): ServiceAction[] {
-  return [
+/**
+ * 服务运维动作。
+ *
+ * 只声明**上游真的实现**的动作：魔方财务版（`finance`）的
+ * `/provision/default` 实测只有 `on` / `off` / `hard_off` / `reboot` /
+ * `hard_reboot` / `reinstall` / `vnc`，`reset_password` 等一律 406
+ * 「不支持的方法」。声明一个必然失败的按钮，比不声明更伤用户信任。
+ */
+function defaultActions(protocol?: 'finance' | 'v10'): ServiceAction[] {
+  const actions: ServiceAction[] = [
     { id: 'power_on', label: '开机' },
     { id: 'power_off', label: '关机' },
     { id: 'reboot', label: '重启', confirm: true },
-    {
-      id: 'reinstall',
-      label: '重装系统',
-      danger: true,
-      confirm: true,
-      params: [
-        {
-          name: 'os',
-          label: '操作系统 ID',
-          type: 'text',
-          required: true,
-          maxLength: 64,
-        },
-      ],
-    },
-    {
-      id: 'reset_password',
-      label: '重置密码',
-      confirm: true,
-      params: [
-        {
-          name: 'password',
-          label: '新密码',
-          type: 'password',
-          required: true,
-          maxLength: 64,
-        },
-      ],
-    },
-    { id: 'vnc', label: '打开控制台（VNC）' },
   ];
+  // 财务版实测没有这两个动作：
+  // - `reset_password`：`/provision/default` 回 406「不支持的方法」；
+  // - `reinstall`：传 os/osid/template/image 一律 406「操作系统错误」，拿不到正确契约
+  //   （重装还是不可逆的高危操作）。协议未知时保守声明，等拿到详情再按协议收敛。
+  if (protocol !== 'finance') {
+    actions.push(
+      {
+        id: 'reinstall',
+        label: '重装系统',
+        danger: true,
+        confirm: true,
+        params: [{ name: 'os', label: '操作系统 ID', type: 'text', required: true, maxLength: 64 }],
+      },
+      {
+        id: 'reset_password',
+        label: '重置密码',
+        confirm: true,
+        params: [{ name: 'password', label: '新密码', type: 'password', required: true, maxLength: 64 }],
+      },
+    );
+  }
+  actions.push({ id: 'vnc', label: '打开控制台（VNC）' });
+  return actions;
 }
 
 /** 从上游响应中按候选键取首个非空字符串。 */
