@@ -1179,6 +1179,8 @@ export class ZJMFClient {
         extraIps: Array.isArray(merged['assignedips'])
           ? merged['assignedips'].filter((value): value is string => typeof value === 'string')
           : [],
+        // 套餐含的流量额度（如 `800G`）；已用流量无法取到可信单位，不做换算。
+        flowLimit: stringOrNull(merged['flow_limit']),
         ...(status ? { status } : {}),
         ...(statusLabel ? { statusLabel } : {}),
       });
@@ -2634,6 +2636,7 @@ function pickServiceDetail(payload: Record<string, unknown>): Record<string, unk
     ...(Array.isArray(payload['extraIps']) && payload['extraIps'].length > 0
       ? { extraIps: payload['extraIps'] }
       : {}),
+    ...(stringOrNull(payload['flowLimit']) ? { flowLimit: stringOrNull(payload['flowLimit']) } : {}),
     username:
       stringOrNull(payload['username']) ??
       stringOrNull(payload['root']) ??

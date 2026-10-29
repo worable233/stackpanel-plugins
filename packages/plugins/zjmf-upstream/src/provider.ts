@@ -685,6 +685,8 @@ export class ZJMFProvider implements FulfillmentProvider {
     const extraIps = Array.isArray(detail['extraIps'])
       ? detail['extraIps'].filter((value): value is string => typeof value === 'string')
       : [];
+    const flowLimit = stringOr(detail['flowLimit']);
+    if (flowLimit) fields.push({ label: '流量额度', value: flowLimit, copyable: false });
     extraIps.forEach((value, index) => {
       fields.push({
         label: extraIps.length > 1 ? `附加 IP ${index + 1}` : '附加 IP',
