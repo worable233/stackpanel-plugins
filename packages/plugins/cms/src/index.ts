@@ -74,11 +74,14 @@ export const cmsPlugin = definePlugin({
 function registerPublishSweep(jobs: JobContext): void {
   // `publish-due` is both the recurring sweep handler and the handler a
   // per-item delayed job (`scheduleIfDue`) triggers at its scheduled time; both
-  // run the same idempotent "publish everything currently due" pass.
+  // run the same idempotent "publish everything currently due" pass. The
+  // schedule must use that same name — scheduling `publish-sweep` armed a timer
+  // that fired into nothing (`[jobs] 忽略未知任务：cms.publish-sweep`), so
+  // scheduled content never went live on that path.
   jobs.handle('publish-due', async () => {
     await workflow?.publishDue();
   });
-  void jobs.schedule('publish-sweep', { everyMs: PUBLISH_SWEEP_MS });
+  void jobs.schedule('publish-due', { everyMs: PUBLISH_SWEEP_MS });
 }
 
 export default cmsPlugin;
