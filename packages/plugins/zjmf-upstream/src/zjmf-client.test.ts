@@ -1758,3 +1758,50 @@ describe('救援模式状态（remoteInfo）', () => {
     expect(await client.getRemoteInfo('42')).toBeNull();
   });
 });
+
+describe('到期终止：财务版提交停用申请', () => {
+  const setup = (respond: (url: URL) => unknown) => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(input.toString());
+      if (url.pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (url.pathname === '/host/cancel') {
+        const body = new URLSearchParams(String(init?.body));
+        return json(respond(url) ?? { status: 200, msg: '申请成功' });
+      }
+      return json({ status: 200, data: {} });
+    });
+    const client = new ZJMFClient(
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+    return { client, fetchMock };
+  };
+
+  it('用 host_id + reason 调 host/cancel（传 id 会被上游判「取消类型错误」）', async () => {
+    const { client, fetchMock } = setup(() => ({ status: 200, msg: '申请成功' }));
+    await client.requestServiceCancel('42', '到期未续费');
+    const post = fetchMock.mock.calls.find(
+      (call) => new URL(call[0].toString()).pathname === '/host/cancel',
+    );
+    const body = new URLSearchParams(String(post?.[1]?.body));
+    expect(body.get('host_id')).toBe('42');
+    expect(body.get('reason')).toBe('到期未续费');
+    expect(body.get('id')).toBeNull();
+  });
+
+  it('重复申请（上游回 406 已提交）按成功处理，不卡住到期清扫', async () => {
+    const { client } = setup(() => ({ status: 406, msg: '该产品已提交过停用申请' }));
+    await expect(client.requestServiceCancel('42', '到期未续费')).resolves.toBeUndefined();
+  });
+
+  it('真正的失败（未找到产品）必须上抛，让 sweep 继续重试', async () => {
+    const { client } = setup(() => ({ status: 406, msg: '未找到该产品' }));
+    await expect(client.requestServiceCancel('42', '到期未续费')).rejects.toThrow(/未找到该产品/);
+  });
+});

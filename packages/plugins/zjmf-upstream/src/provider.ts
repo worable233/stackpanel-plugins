@@ -904,6 +904,13 @@ export class ZJMFProvider implements FulfillmentProvider {
   async terminate(ctx: ProviderServiceContext): Promise<void> {
     if (!ctx.service.providerServiceId) return;
     const { client } = await this.resolveForService(ctx.service);
+    if (client.protocol === 'finance') {
+      // 财务版没有客户侧「立即销毁」：只有 `host/cancel` 的**申请停用**（上游后台
+      // 处理，不退款）。继续返回 501 会让到期终止永远停在 terminating、每轮 sweep
+      // 重试并轰炸管理员，而机器在上游照旧运行 —— 那才是真正的不受控。
+      await client.requestServiceCancel(ctx.service.providerServiceId, '到期未续费');
+      return;
+    }
     await client.runServiceAction(ctx.service.providerServiceId, 'terminate');
   }
 

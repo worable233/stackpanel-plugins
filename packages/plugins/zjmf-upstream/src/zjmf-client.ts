@@ -432,6 +432,26 @@ export class ZJMFClient {
   }
 
   /**
+   * 财务版：提交「停用申请」（`POST host/cancel`）。
+   *
+   * 财务主程序没有客户侧「立即销毁」路由：`host/cancel` 提交的是**申请停用**
+   * （上游后台处理，不退款）。参数名是 `host_id`——传 `id` 会被判「取消类型错误」；
+   * `reason` 可取 `GET host/cancel?host_id=` 返回的 `cancelist` 之一。
+   *
+   * 重复提交时上游回 406「已提交过申请」，按成功处理：否则每次到期 sweep 都会
+   * 重试失败，服务永远卡在 terminating，管理员还会被反复告警。
+   */
+  async requestServiceCancel(serviceId: string, reason: string): Promise<void> {
+    try {
+      await this.authorizedPost('host/cancel', { host_id: serviceId, reason });
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      if (/已提交|已申请|申请中|重复/.test(text)) return;
+      throw error;
+    }
+  }
+
+  /**
    * 财务版：读救援模式状态（`provision/custom/:id` 的 `remoteInfo`，实测回 `{rescue:0}`）。
    *
    * 只在**已进入救援**时值得展示：机器重启进救援系统后 IP/系统都会变，用户看到
