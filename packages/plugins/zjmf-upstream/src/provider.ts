@@ -678,7 +678,13 @@ export class ZJMFProvider implements FulfillmentProvider {
       };
     }
     const { client } = await this.resolveForService(ctx.service);
-    const detail = await client.getService(providerServiceId);
+    // 三个上游读并行走：详情原本串行 getService → remoteInfo，加上流量统计后
+    // 串起来就是 3 个 RTT（实测详情 4~6 秒）。并行后 ≈ 最慢的那个。
+    const [detail, traffic, remoteInfo] = await Promise.all([
+      client.getService(providerServiceId),
+      client.getTrafficUsage(providerServiceId).catch(() => null),
+      client.getRemoteInfo(providerServiceId).catch(() => null),
+    ]);
     const fields: ServiceDetail['fields'] = [];
     const ip = stringOr(detail['ip']);
     if (ip) fields.push({ label: 'IPv4 地址', value: ip, copyable: true });
@@ -686,7 +692,22 @@ export class ZJMFProvider implements FulfillmentProvider {
     const extraIps = Array.isArray(detail['extraIps'])
       ? detail['extraIps'].filter((value): value is string => typeof value === 'string')
       : [];
-    const flowLimit = stringOr(detail['flowLimit']);
+    const flowLimit = stringOr(detail['flowLimit']) ?? '';
+    const flowLimitGb = flowLimit ? parseFlowLimitGb(flowLimit) : null;
+    if (traffic) {
+      // 单位 GB 已由「速率曲线积分 vs 累计用量」双向取证（见 client.getTrafficUsage）。
+      const usedText = `${traffic.totalGb.toFixed(2)} GB`;
+      const percent =
+        flowLimitGb && flowLimitGb > 0
+          ? `（${((traffic.totalGb / flowLimitGb) * 100).toFixed(1)}%）`
+          : '';
+      const over = flowLimitGb !== null && traffic.totalGb > flowLimitGb;
+      fields.push({
+        label: '已用流量',
+        value: `${usedText}${flowLimit ? ` / ${flowLimit}` : ''}${percent}${over ? '——已超出套餐流量' : ''}`,
+        copyable: false,
+      });
+    }
     if (flowLimit) fields.push({ label: '流量额度', value: flowLimit, copyable: false });
     extraIps.forEach((value, index) => {
       fields.push({
@@ -724,8 +745,7 @@ export class ZJMFProvider implements FulfillmentProvider {
       fields.push({ label: '电源状态', value: powerState === 'ON' ? '已开机' : '已关机' });
     }
     // 只在**已进入救援**时提示：救援系统里 IP 与系统都会变，用户不知道就会以为
-    // 机器坏了。多一次约 200ms 的上游调用，失败静默忽略（不拖垮详情）。
-    const remoteInfo = await client.getRemoteInfo(providerServiceId).catch(() => null);
+    // 机器坏了。失败静默忽略（不拖垮详情）。
     if (remoteInfo?.rescue) {
       fields.push({ label: '救援模式', value: '已进入（点「退出救援」回到正常系统）' });
     }
@@ -1190,6 +1210,21 @@ function pickResourceColumns(kind: string, fields: Record<string, string>): Reco
     if (fields[key] !== undefined) picked[key] = fields[key];
   }
   return picked;
+}
+
+/**
+ * 把上游 `flow_limit`（`"800G"` / `"1T"` / `""` / `"不限"`）解析成 GB 数。
+ * 解析不出来返回 null —— 宁可只显示已用量，也不给一个假百分比。
+ */
+export function parseFlowLimitGb(text: string): number | null {
+  const match = /^(\d+(?:\.\d+)?)\s*([GMT]?)B?$/i.exec(text.trim());
+  if (!match) return null;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return null;
+  const unit = (match[2] ?? 'G').toUpperCase();
+  if (unit === 'T') return value * 1024;
+  if (unit === 'M') return value / 1024;
+  return value;
 }
 
 const SPEC_LABELS: Record<string, string> = {

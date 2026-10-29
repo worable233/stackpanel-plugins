@@ -432,6 +432,41 @@ export class ZJMFClient {
   }
 
   /**
+   * 财务版：已用流量（`GET host/trafficusage`，按计费周期）。
+   *
+   * **单位已实测取证为 GB**（不是猜）：拿同一台机的实时速率曲线
+   * `provision/chart/:id?type=flow`（单位 Mbps，5 分钟一点）做积分，与本接口的
+   * `in`/`out` 对比——chart 进向 641.25MB = 0.626GB vs 本接口 `in=0.630`（比值
+   * 1.006），出向 20.25MB = 0.0198GB vs `out=0.020`（比值 1.011）。采样离散化
+   * 带来的 1% 误差之外两者一致，因此 `in`/`out` 就是「该时段流量的 GB 数」。
+   *
+   * 不传 `start`/`end` 时上游按**当前计费周期**返回（实测 33363 只回当天 11 条
+   * 小时级、30463 回 31 条天级），所以默认窗口正是「本期已用」。
+   */
+  async getTrafficUsage(
+    serviceId: string,
+    opts: { start?: string; end?: string } = {},
+  ): Promise<{ inGb: number; outGb: number; totalGb: number; points: number } | null> {
+    if (this.connection.protocol !== 'finance') return null;
+    const query = new URLSearchParams({ id: serviceId });
+    if (opts.start) query.set('start', opts.start);
+    if (opts.end) query.set('end', opts.end);
+    const data = await this.authorizedGet(`host/trafficusage?${query.toString()}`);
+    const rows = Array.isArray(data['data']) ? data['data'] : [];
+    if (rows.length === 0) return null;
+    let inGb = 0;
+    let outGb = 0;
+    for (const row of rows) {
+      const item = object(row);
+      const inValue = Number(item['in']);
+      const outValue = Number(item['out']);
+      if (Number.isFinite(inValue)) inGb += inValue;
+      if (Number.isFinite(outValue)) outGb += outValue;
+    }
+    return { inGb, outGb, totalGb: inGb + outGb, points: rows.length };
+  }
+
+  /**
    * 财务版：提交「停用申请」（`POST host/cancel`）。
    *
    * 财务主程序没有客户侧「立即销毁」路由：`host/cancel` 提交的是**申请停用**

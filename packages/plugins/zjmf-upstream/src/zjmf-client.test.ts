@@ -1847,3 +1847,56 @@ describe('换商品：不可换时前置失败，不把订单搅进去', () => {
     expect(posted).toContain('/upgrade/checkout_upgrade_product');
   });
 });
+
+describe('已用流量（单位 GB 由速率曲线交叉取证）', () => {
+  const build = (rows: unknown, url?: { start?: string; end?: string }) => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const u = new URL(input.toString());
+      if (u.pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (u.pathname === '/host/trafficusage') {
+        if (url) url.start = u.searchParams.get('start') ?? undefined;
+        if (url) url.end = u.searchParams.get('end') ?? undefined;
+        return json({ status: 200, data: rows });
+      }
+      return json({ status: 200, data: {} });
+    });
+    return new ZJMFClient(
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+  };
+
+  it('累加周期内 in/out，返回 GB 合计', async () => {
+    const client = build([
+      { time: '2026-10-29 13:00:00', in: 0.63, out: 0.02 },
+      { time: '2026-10-29 14:00:00', in: 1.37, out: '0.98' },
+    ]);
+    const usage = await client.getTrafficUsage('42');
+    expect(usage?.inGb).toBeCloseTo(2.0, 5);
+    expect(usage?.outGb).toBeCloseTo(1.0, 5);
+    expect(usage?.totalGb).toBeCloseTo(3.0, 5);
+    expect(usage?.points).toBe(2);
+  });
+
+  it('默认不带窗口（上游按当前计费周期返回），显式传入才带 start/end', async () => {
+    const seen: { start?: string; end?: string } = {};
+    await build([{ in: 1, out: 0 }], seen).getTrafficUsage('42');
+    expect(seen).toEqual({ start: undefined, end: undefined });
+    const seen2: { start?: string; end?: string } = {};
+    await build([{ in: 1, out: 0 }], seen2).getTrafficUsage('42', {
+      start: '2026-09-01',
+      end: '2026-10-30',
+    });
+    expect(seen2).toEqual({ start: '2026-09-01', end: '2026-10-30' });
+  });
+
+  it('上游无数据时返回 null（不假装用了 0）', async () => {
+    expect(await build([]).getTrafficUsage('42')).toBeNull();
+  });
+});
