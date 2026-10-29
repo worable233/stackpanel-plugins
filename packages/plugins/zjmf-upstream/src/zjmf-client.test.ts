@@ -1805,3 +1805,45 @@ describe('到期终止：财务版提交停用申请', () => {
     await expect(client.requestServiceCancel('42', '到期未续费')).rejects.toThrow(/未找到该产品/);
   });
 });
+
+describe('换商品：不可换时前置失败，不把订单搅进去', () => {
+  const build = (page: unknown) => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(input.toString());
+      if (url.pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (url.pathname === '/upgrade/upgrade_product_page') return json(page);
+      return json({ status: 200, msg: 'ok' });
+    });
+    const client = new ZJMFClient(
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+    return { client, fetchMock };
+  };
+
+  it('换购页拒绝时抛 501 且不发 upgrade_product_post', async () => {
+    const { client, fetchMock } = build({
+      status: 400,
+      msg: '当前产品无法升级或降级可配置项',
+    });
+    await expect(client.changeProduct('42', '99')).rejects.toThrow(/无法升级或降级可配置项/);
+    const posted = fetchMock.mock.calls.filter(
+      (call) => new URL(call[0].toString()).pathname === '/upgrade/upgrade_product_post',
+    );
+    expect(posted).toHaveLength(0);
+  });
+
+  it('换购页可用时继续提交换购并结算', async () => {
+    const { client, fetchMock } = build({ status: 200, data: { product: [] } });
+    await client.changeProduct('42', '99');
+    const posted = fetchMock.mock.calls.map((call) => new URL(call[0].toString()).pathname);
+    expect(posted).toContain('/upgrade/upgrade_product_post');
+    expect(posted).toContain('/upgrade/checkout_upgrade_product');
+  });
+});

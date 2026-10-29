@@ -1572,6 +1572,18 @@ export class ZJMFClient {
   ): Promise<Record<string, unknown>> {
     const encoded = encodeURIComponent(serviceId);
     if (this.connection.protocol === 'finance') {
+      // 上游只对部分商品开放「换商品」。先读一次换购页：不可换时它直接回
+      // 「当前产品无法升级或降级可配置项」，此时再去 `upgrade_product_post`
+      // 只会把钱和订单都搅进去（用户已付款、履约再 400）。
+      try {
+        await this.authorizedGet(`upgrade/upgrade_product_page?hid=${encoded}`);
+      } catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        throw new ZJMFClientError(
+          501,
+          `该服务在当前上游不支持更换商品：${text || '上游未开放换购'}`,
+        );
+      }
       await this.authorizedPost('upgrade/upgrade_product_post', {
         hid: encoded,
         pid: productId,

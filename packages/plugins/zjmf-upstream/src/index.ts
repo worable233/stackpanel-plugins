@@ -1085,7 +1085,7 @@ export const zjmfUpstreamPlugin = definePlugin({
   manifest: {
     id: 'zjmf-upstream',
     name: '魔方上游',
-    version: '0.3.7',
+    version: '0.3.8',
     description:
       '将魔方财务（ZJMF）V1 与 V10 商品作为货源接入商店：提供货源清单、配置读取与履约，不自动创建商店商品。',
     requires: [{ id: 'store', range: '^0.3.0' }],
