@@ -8,6 +8,7 @@ import type {
   ProvisionResult,
   ProviderServiceContext,
   ServiceAction,
+  ServiceActionParam,
   ServiceActionResult,
   ServiceChangeInput,
   ServiceDetail,
@@ -672,7 +673,7 @@ export class ZJMFProvider implements FulfillmentProvider {
         title: ctx.service.productName ?? (runtime['host'] as string) ?? '服务',
         status: normalizeStatus(ctx.service.status),
         fields: [],
-        actions: defaultActions(),
+        actions: defaultActions(undefined),
       };
     }
     const { client } = await this.resolveForService(ctx.service);
@@ -726,11 +727,50 @@ export class ZJMFProvider implements FulfillmentProvider {
       status: normalizeStatus(status ?? ctx.service.status),
       ...(statusLabel ? { statusLabel } : {}),
       fields,
-      actions: defaultActions(client.protocol),
+      actions: defaultActions(client.protocol, await this.loadOsChoices(client, detail)),
     };
   }
 
+  /**
+   * 重装可选的操作系统列表。
+   *
+   * 上游主机详情不带「可选系统」清单（`options.os` 只有当前值），但带 `pid`
+   * （上游商品 id），而 `/cart/set_config?pid=` 的配置项里就有「操作系统」这一项
+   * 及其全部档位。档位 id 正是 `reinstall` 需要的 `os`。
+   * 拿不到就退化成文本输入，不给假的下拉。
+   */
+  private async loadOsChoices(
+    client: ZJMFClient,
+    detail: Record<string, unknown>,
+  ): Promise<Array<{ label: string; value: string }> | undefined> {
+    const raw = (detail['raw'] ?? {}) as Record<string, unknown>;
+    // 上游的 `pid` 是数字（JSON number），`stringOr` 只认字符串——直接用它取会
+    // 静默落空，重装就只能退化成让用户手填系统 ID。
+    const rawPid = raw['pid'] ?? detail['productId'];
+    const pid = typeof rawPid === 'number' ? String(rawPid) : stringOr(rawPid);
+    if (!pid) return undefined;
+    try {
+      const config = await client.getConfig(pid);
+      const option = config?.options.find(
+        (item) => /操作系统|镜像|image|^os$/i.test(item.label) || item.group === '镜像',
+      );
+      const choices = (option?.choices ?? []).filter(
+        (choice) => choice.id && choice.label && /[A-Za-z\u4e00-\u9fa5]/.test(choice.label),
+      );
+      if (choices.length === 0) return undefined;
+      return choices.map((choice) => ({ label: choice.label, value: choice.id }));
+    } catch {
+      return undefined;
+    }
+  }
+
   private async readCachedPassword(ctx: ProviderServiceContext): Promise<string | null> {
+    // 用户自己重置过的密码落在 `runtime.rootPassword`：多数服务实例没有
+    // `credentialsRef`（开通时上游不回密码），只走 secrets 会让用户重设完密码
+    // 之后**永远看不到它**。
+    const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
+    const fromRuntime = stringOr(runtime['rootPassword']);
+    if (fromRuntime) return fromRuntime;
     if (!ctx.service.credentialsRef) return null;
     const stored = await ctx.secrets.get(ctx.service.credentialsRef);
     if (!stored) return null;
@@ -768,21 +808,42 @@ export class ZJMFProvider implements FulfillmentProvider {
       throw new ZJMFProviderError(400, '不支持的运维动作');
     }
     assertSafeParams(params);
-    const { client } = await this.resolveForService(ctx.service);
-    if (client.protocol === 'finance' && ['reset_password', 'reinstall'].includes(actionId)) {
-      // 上游财务版没有这两个方法的可用契约（实测 406），直接给出可执行指引，
-      // 而不是把上游的 406 原样抛给用户。
-      throw new ZJMFProviderError(
-        501,
-        actionId === 'reinstall'
-          ? '上游未提供自助重装，请提交工单让上游处理（重装会清空数据）'
-          : '上游未提供自助重置密码，请在 VNC 控制台内修改，或提交工单让上游处理',
-      );
+    // 参数校验放在调用上游之前：重装缺 os 上游只会回一句「操作系统错误」，
+    // 改密缺密码则会白跑一趟异步任务。
+    if (actionId === 'reinstall' && !params?.['os']) {
+      throw new ZJMFProviderError(400, '请选择要重装的操作系统');
     }
+    if (actionId === 'reset_password') {
+      const password = params?.['password'] ?? '';
+      if (password.length < 8) throw new ZJMFProviderError(400, '新密码至少 8 位');
+    }
+    const { client } = await this.resolveForService(ctx.service);
     const data = await client.runServiceAction(ctx.service.providerServiceId, actionId, params);
+    let passwordRuntime: Record<string, unknown> | null = null;
+    // 改密成功后上游不会回传密码（异步任务），把用户设定的新密码存进凭据，
+    // 详情页的「ROOT 密码」才是真的。存不进去不影响动作本身。
+    if (actionId === 'reset_password' && params?.['password']) {
+      if (ctx.service.credentialsRef) {
+        try {
+          await ctx.secrets.set(
+            ctx.service.credentialsRef,
+            JSON.stringify({ password: params['password'] }),
+          );
+        } catch {
+          /* 忽略：凭据存储不可用时仍应返回动作结果 */
+        }
+      }
+      const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
+      passwordRuntime = { ...runtime, rootPassword: params['password'] };
+    }
 
     // 上游可能在响应里回带展示数据（新密码、控制台地址）；尽力提取，缺失则忽略。
     const fields: ServiceActionResult['fields'] = [];
+    // 重置密码是异步任务，上游只回「发起成功」不回密码；用户设的密码就是新密码，
+    // 直接回显，否则用户点完按钮根本不知道密码是多少。
+    if (actionId === 'reset_password' && params?.['password']) {
+      fields.push({ label: '新密码', value: params['password'], secret: true, copyable: true });
+    }
     const password = firstString(data, ['password', 'new_password', 'pass', 'vnc_pass']);
     if (password)
       fields.push({
@@ -794,12 +855,24 @@ export class ZJMFProvider implements FulfillmentProvider {
     const url = firstString(data, ['url', 'vnc_url', 'console_url', 'console']);
     const result: ServiceActionResult = {};
     if (fields.length > 0) result.fields = fields;
+    const message =
+      actionId === 'reset_password'
+        ? '已发起重置密码，通常 1 分钟内生效'
+        : actionId === 'reinstall'
+          ? '已发起重装：机器会重启并清空系统盘，请稍后重新连接'
+          : actionId === 'rescue'
+            ? '已发起进入救援模式，机器会重启到救援系统'
+            : actionId === 'exit_rescue'
+              ? '已退出救援模式，机器会重启回正常系统'
+              : null;
+    if (message) result.message = message;
     if (url) {
       result.url = url;
       // 平台前端 action 无回传通道，落库到 runtime 以便刷新后仍展示控制台地址。
       const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
       result.runtime = { ...runtime, consoleUrl: url };
     }
+    if (passwordRuntime) result.runtime = { ...(result.runtime ?? passwordRuntime), ...passwordRuntime };
     return result;
   }
 
@@ -1108,9 +1181,13 @@ const SUPPORTED_ACTIONS = new Set([
   'power_on',
   'power_off',
   'reboot',
+  'hard_off',
+  'hard_reboot',
   'terminate',
   'reinstall',
   'reset_password',
+  'rescue',
+  'exit_rescue',
   'vnc',
 ]);
 
@@ -1134,34 +1211,77 @@ function assertSafeParams(params: Record<string, string> | undefined): void {
  * `hard_reboot` / `reinstall` / `vnc`，`reset_password` 等一律 406
  * 「不支持的方法」。声明一个必然失败的按钮，比不声明更伤用户信任。
  */
-function defaultActions(protocol?: 'finance' | 'v10'): ServiceAction[] {
+function defaultActions(
+  protocol?: 'finance' | 'v10',
+  osChoices?: Array<{ label: string; value: string }>,
+): ServiceAction[] {
   const actions: ServiceAction[] = [
     { id: 'power_on', label: '开机' },
     { id: 'power_off', label: '关机' },
     { id: 'reboot', label: '重启', confirm: true },
   ];
-  // 财务版实测没有这两个动作：
-  // - `reset_password`：`/provision/default` 回 406「不支持的方法」；
-  // - `reinstall`：传 os/osid/template/image 一律 406「操作系统错误」，拿不到正确契约
-  //   （重装还是不可逆的高危操作）。协议未知时保守声明，等拿到详情再按协议收敛。
-  if (protocol !== 'finance') {
+  // 强制关机/强制重启只在财务协议声明：`/provision/default` 的 func 就是
+  // `hard_off` / `hard_reboot`（`public/plugins/reserver/mf_finance` 的路由表）；
+  // V10 只有 `mf_cloud` 家族有这两个末段，`mf_dcim` 没有，无法在协议层统一声明。
+  if (protocol === 'finance') {
     actions.push(
-      {
-        id: 'reinstall',
-        label: '重装系统',
-        danger: true,
-        confirm: true,
-        params: [{ name: 'os', label: '操作系统 ID', type: 'text', required: true, maxLength: 64 }],
-      },
-      {
-        id: 'reset_password',
-        label: '重置密码',
-        confirm: true,
-        params: [{ name: 'password', label: '新密码', type: 'password', required: true, maxLength: 64 }],
-      },
+      { id: 'hard_off', label: '强制关机', danger: true, confirm: true },
+      { id: 'hard_reboot', label: '强制重启', confirm: true },
     );
   }
-  actions.push({ id: 'vnc', label: '打开控制台（VNC）' });
+  const osParam: ServiceActionParam =
+    osChoices && osChoices.length > 0
+      ? { name: 'os', label: '操作系统', type: 'select', required: true, options: osChoices }
+      : {
+          name: 'os',
+          label: '操作系统 ID',
+          type: 'text',
+          required: true,
+          maxLength: 64,
+          placeholder: '与下单时的系统选项 ID 相同，如 15711313',
+        };
+  actions.push(
+    {
+      id: 'reinstall',
+      label: '重装系统',
+      danger: true,
+      confirm: true,
+      // 只声明前端能直接渲染的参数：`port` 不在平台 action 的静态字段里，
+      // 声明它只会变成「请自己写 JSON」的输入框。重装默认沿用上游 22 端口。
+      params: [osParam, { name: 'password', label: '新 ROOT 密码', type: 'password', maxLength: 64 }],
+    },
+    {
+      id: 'reset_password',
+      label: '重置密码',
+      confirm: true,
+      params: [{ name: 'password', label: '新密码', type: 'password', required: true, maxLength: 64 }],
+    },
+    { id: 'vnc', label: '打开控制台（VNC）' },
+  );
+  // 救援模式同样只有财务协议有明确的 func 契约（`rescue_system` / `exitRescue`）。
+  if (protocol === 'finance') {
+    actions.push(
+      {
+        id: 'rescue',
+        label: '进入救援模式',
+        danger: true,
+        confirm: true,
+        params: [
+          {
+            name: 'type',
+            label: '救援系统',
+            type: 'select',
+            required: true,
+            options: [
+              { label: 'Linux', value: '2' },
+              { label: 'Windows', value: '1' },
+            ],
+          },
+        ],
+      },
+      { id: 'exit_rescue', label: '退出救援模式', confirm: true },
+    );
+  }
   return actions;
 }
 

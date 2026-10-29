@@ -1005,7 +1005,9 @@ describe('ZJMF service provisioning', () => {
       (call) => new URL(call[0].toString()).pathname === '/provision/default',
     );
     const body = actionCall?.[1]?.body?.toString() ?? '';
-    expect(body).toContain('func=reset_password');
+    // 财务版重置密码的 func 是 `crack_pass`（`reset_password` 会被上游回
+    // 406「不支持的方法」）；证据 mf_finance / mf_finance_common 的 $postData。
+    expect(body).toContain('func=crack_pass');
     expect(body).toContain('password=S3cretPass%21');
     expect(result).toMatchObject({ data: { password: 'S3cretPass!' } });
   });
@@ -1489,5 +1491,65 @@ describe('buildForm 编码（PHP http_build_query 等价）', () => {
       expect(Number(body.get('chart[0][start]'))).toBeGreaterThan(0);
     }
     expect(rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe('财务版监控（/provision/chart 取证）', () => {
+  it('按 type 取数并解析成多条曲线，时间按 +08:00 解释', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(input.toString());
+      if (url.pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (url.pathname === '/provision/chart/42') {
+        const type = url.searchParams.get('type');
+        if (type === 'cpu') {
+          return json({
+            status: 200,
+            data: {
+              unit: '%',
+              label: ['CPU使用率(%)'],
+              list: [[{ time: '2026-10-29 13:40:00', value: 0.05 }]],
+            },
+          });
+        }
+        if (type === 'memory') {
+          return json({
+            status: 200,
+            data: {
+              unit: 'B',
+              label: ['总量(B)', '已用(B)'],
+              list: [
+                [{ time: '2026-10-29 13:40:00', value: 8589934592 }],
+                [{ time: '2026-10-29 13:40:00', value: 1073741824 }],
+              ],
+            },
+          });
+        }
+        if (type === 'network') return json({ status: 400, msg: '类型错误' });
+        return json({ status: 200, data: { unit: 'x', label: ['v'], list: [[{ time: '2026-10-29 13:40:00', value: 1 }]] } });
+      }
+      return json({ status: 200, data: {} });
+    });
+    const client = new ZJMFClient(
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+    const metrics = await client.getServiceMetrics('42');
+    const cpu = metrics.find((metric) => metric.id === 'cpu-0');
+    expect(cpu?.label).toBe('CPU使用率(%)');
+    expect(cpu?.unit).toBe('%');
+    expect(cpu?.points).toEqual([{ t: Date.parse('2026-10-29T13:40:00+08:00'), v: 0.05 }]);
+    expect(metrics.filter((metric) => metric.id.startsWith('memory-'))).toHaveLength(2);
+    const requested = fetchMock.mock.calls
+      .map((call) => new URL(call[0].toString()))
+      .filter((url) => url.pathname === '/provision/chart/42')
+      .map((url) => url.searchParams.get('type'));
+    // 四个真实类型都试过；`network` 上游回 400，不再请求。
+    expect([...requested].sort()).toEqual(['cpu', 'disk', 'flow', 'memory']);
   });
 });

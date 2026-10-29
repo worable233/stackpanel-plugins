@@ -730,3 +730,121 @@ describe('changePackage 只提交差异（上游对未变化项整单拒绝）',
     expect(bodies.some((body) => body.get('hid'))).toBe(false);
   });
 });
+
+describe('财务协议的真实运维能力（V10 源码取证）', () => {
+  const baseUpstream = {
+    id: 'up-1',
+    name: 'up',
+    baseUrl: 'https://93.184.216.34/',
+    protocol: 'finance' as const,
+    currency: 'CNY',
+    markupBps: 0,
+    defaultStock: 100,
+    syncIntervalMinutes: 60,
+    enabled: true,
+    syncState: 'IDLE' as const,
+    allowUnverifiedV10Routes: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  function makeCtx(store: { password?: string }) {
+    const ctx = minimalCtx();
+    (ctx as { secrets: PluginContext['secrets'] }).secrets = {
+      isAvailable: () => true,
+      get: async () => JSON.stringify({ username: 'u', password: 'p' }),
+      set: async (_key: string, value: string) => {
+        store.password = (JSON.parse(value) as { password?: string }).password;
+      },
+      remove: async () => {},
+    };
+    return ctx;
+  }
+
+  function providerCtx(secrets: ProviderServiceContext['secrets']): ProviderServiceContext {
+    return {
+      service: {
+        id: 's',
+        providerId: 'zjmf',
+        providerServiceId: '42',
+        runtime: { upstreamId: 'up-1' },
+        credentialsRef: 'cred-1',
+        userId: 'u',
+        orderId: 'o',
+        productId: 'p',
+        status: 'ACTIVE',
+      } as never,
+      secrets,
+    };
+  }
+
+  function stubFetch(bodies: URLSearchParams[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const path = new URL(input.toString()).pathname;
+        if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+        if (init?.body instanceof URLSearchParams) bodies.push(init.body);
+        return json({ status: 200, msg: '发起重置密码成功', data: {} });
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    vi.mocked(getUpstream).mockResolvedValue(baseUpstream);
+  });
+
+  it('重置密码走上游的 crack_pass，并把新密码存进凭据', async () => {
+    const bodies: URLSearchParams[] = [];
+    stubFetch(bodies);
+    const store: { password?: string } = {};
+    const ctx = makeCtx(store);
+    const provider = new ZJMFProvider(ctx);
+    await provider.executeAction('reset_password', providerCtx(ctx.secrets), {
+      password: 'Sp6qZw9rT4vY',
+    });
+    const action = bodies.find((body) => body.get('func'));
+    // `reset_password` 在财务版是 406「不支持的方法」，真正的 func 是 crack_pass。
+    expect(action?.get('func')).toBe('crack_pass');
+    expect(action?.get('password')).toBe('Sp6qZw9rT4vY');
+    expect(action?.get('is_api')).toBe('1');
+    expect(store.password).toBe('Sp6qZw9rT4vY');
+  });
+
+  it('密码太短在本地就拦住，不白跑一趟上游异步任务', async () => {
+    const bodies: URLSearchParams[] = [];
+    stubFetch(bodies);
+    const ctx = makeCtx({});
+    const provider = new ZJMFProvider(ctx);
+    await expect(
+      provider.executeAction('reset_password', providerCtx(ctx.secrets), { password: 'short' }),
+    ).rejects.toThrow(/至少 8 位/);
+    expect(bodies).toHaveLength(0);
+  });
+
+  it('重装缺操作系统时明确报错，而不是让上游回一句「操作系统错误」', async () => {
+    const bodies: URLSearchParams[] = [];
+    stubFetch(bodies);
+    const ctx = makeCtx({});
+    const provider = new ZJMFProvider(ctx);
+    await expect(provider.executeAction('reinstall', providerCtx(ctx.secrets))).rejects.toThrow(
+      /请选择要重装的操作系统/,
+    );
+    expect(bodies).toHaveLength(0);
+  });
+
+  it('重装把 os/port 透传给上游 reinstall', async () => {
+    const bodies: URLSearchParams[] = [];
+    stubFetch(bodies);
+    const ctx = makeCtx({});
+    const provider = new ZJMFProvider(ctx);
+    await provider.executeAction('reinstall', providerCtx(ctx.secrets), {
+      os: '15711313',
+      port: '22',
+    });
+    const action = bodies.find((body) => body.get('func'));
+    expect(action?.get('func')).toBe('reinstall');
+    expect(action?.get('os')).toBe('15711313');
+    expect(action?.get('port')).toBe('22');
+  });
+});

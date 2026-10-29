@@ -1297,6 +1297,11 @@ export class ZJMFClient {
    * 避免前端展示必然失败的按钮。探测失败按「不支持」处理（fail-closed）。
    */
   async supportsServiceResources(serviceId: string): Promise<boolean> {
+    // 财务版的快照/备份只能通过 `/provision/custom/:id` 的 createSnap/createBackup
+    // 触发，**列表**接口 `/provision/custom/content?key=snapshot` 返回的是上游模板
+    // 渲染的 HTML 片段（无结构化数据），既列不出已有快照，也删不掉/恢复不了。
+    // 只声明「能创建不能查看」的子资源只会制造「我的快照在哪」的工单，
+    // 所以这里继续 fail-closed。以下为最初的探测记录：
     // 财务版没有可用的客户自助子资源端点：实测 `/host/snapshot`、`/host/backup`
     // 一类路径返回上游 500（参数/路由不匹配），`/provision/custom/content` 亦无
     // snapshot/backup 分支。宁可 fail-closed（不展示能力），也不给用户一个点开就报错的按钮。
@@ -1312,11 +1317,32 @@ export class ZJMFClient {
   async getServiceMetrics(serviceId: string): Promise<ZJMFMetric[]> {
     const encoded = encodeURIComponent(serviceId);
     if (this.connection.protocol === 'finance') {
-      // 财务版没有监控取数端点：`/host/monitor?host_id=` 实测 404，
-      // `/host/chart?host_id=` 只返回图表**类型清单**（CPU/内存/网卡/磁盘 IO），
-      // 没有配套的时间序列端点（chart_data / metrics / monitor_data 均 404）。
-      // 与其把 404 抛成「监控加载失败」，不如返回空集——面板显示「暂无监控数据」。
-      return [];
+      // 财务版的监控取数是 `/provision/chart/:hostId`，不是 `/host/chart`。
+      // 证据：`public/plugins/reserver/mf_finance/controller/home/CloudController.php`
+      // （`$RouteLogic->curl('/provision/chart/'.$upstream_host_id, ['type'=>..., 'is_api'=>true], 'GET')`）。
+      // 实测 `type=cpu|memory|flow|disk` 返回 `{unit,label[],list[[{time,value}]]}`，
+      // `type=network` 回 400、不传 type 回 406「类型错误」。
+      const types: Array<[string, string, string]> = [
+        ['cpu', 'CPU 使用率', '%'],
+        ['memory', '内存', 'B'],
+        ['flow', '带宽', 'bps'],
+        ['disk', '磁盘 IO', 'B/s'],
+      ];
+      const series = await Promise.all(
+        types.map(async ([type, label, unit]) => {
+          try {
+            const query = new URLSearchParams({ type, is_api: '1' });
+            const payload = await this.authorizedGet(
+              `/provision/chart/${encoded}?${query.toString()}`,
+            );
+            return chartToMetrics(type, label, unit, payload);
+          } catch {
+            // 单个类型取不到不影响其它曲线：监控面板少一条比整块报错好。
+            return [];
+          }
+        }),
+      );
+      return series.flat();
     }
     // V10：`GET console/v1/<family>/:id/chart?type=cpu`，返回 data.list[].{time,value}。
     // 证据：`10.4.6/public/plugins/server/mf_cloud/controller/home/CloudController.php:876-910`。
@@ -2287,14 +2313,27 @@ function normalizeChartPoints(
   return points;
 }
 
-/** 平台运维动作 → 老财务 /provision/default 的 func。 */
+/**
+ * 平台运维动作 → 老财务 `/provision/default` 的 `func`。
+ *
+ * 证据：`10.4.6/public/plugins/reserver/mf_finance/controller/home/CloudController.php`
+ * 与 `.../mf_finance_common/...` 的 `$postData`（`on`/`off`/`reboot`/`hard_off`/
+ * `hard_reboot`/`vnc`/`status`/`crack_pass`/`rescue_system`/`reinstall`/`exitRescue`）。
+ * 注意重置密码的 func 是 **`crack_pass`**，`reset_password` 会被上游回
+ * 406「不支持的方法」——这一步之前就错在这里。
+ */
 const SERVICE_ACTION_FUNC: Record<string, string> = {
   power_on: 'on',
   power_off: 'off',
   reboot: 'reboot',
+  hard_off: 'hard_off',
+  hard_reboot: 'hard_reboot',
   terminate: 'terminate',
   reinstall: 'reinstall',
-  reset_password: 'reset_password',
+  reset_password: 'crack_pass',
+  status: 'status',
+  rescue: 'rescue_system',
+  exit_rescue: 'exitRescue',
   vnc: 'vnc',
 };
 
@@ -2518,6 +2557,66 @@ export interface ZJMFMetric {
   label: string;
   unit: string;
   points: Array<{ t: number; v: number }>;
+}
+
+/**
+ * 把 `/provision/chart/:id` 的响应转成平台指标。
+ *
+ * 上游形状：`{ status, data: { unit, label: string[], list: Array<Array<{time,value}>> } }`，
+ * `label[i]` 与 `list[i]` 一一对应（例如内存给「总量/已用」两条）。
+ */
+function chartToMetrics(
+  id: string,
+  fallbackLabel: string,
+  fallbackUnit: string,
+  payload: Record<string, unknown>,
+): ZJMFMetric[] {
+  const data = object(payload['data'] ?? payload);
+  const labels = Array.isArray(data['label']) ? data['label'].map((item) => String(item)) : [];
+  const rows = Array.isArray(data['list']) ? data['list'] : [];
+  const unit = stringOrNull(data['unit']) ?? fallbackUnit;
+  const metrics: ZJMFMetric[] = [];
+  rows.forEach((row, index) => {
+    if (!Array.isArray(row)) return;
+    const points = row
+      .map((point) => {
+        const item = object(point);
+        const t = parseChartTime(item['time'] ?? item['timestamp'] ?? item['date']);
+        const value = Number(item['value'] ?? item['v']);
+        return t !== null && Number.isFinite(value) ? { t, v: value } : null;
+      })
+      .filter((point): point is { t: number; v: number } => point !== null);
+    if (points.length === 0) return;
+    const label = labels[index] ?? (rows.length > 1 ? `${fallbackLabel} ${index + 1}` : fallbackLabel);
+    metrics.push({
+      id: `${id}-${labels.length > 1 ? index : 0}`,
+      label,
+      unit,
+      points,
+    });
+  });
+  return metrics;
+}
+
+/**
+ * 解析图表时间轴。上游给的是本地时间字符串（如 `2026-10-29 13:40:00`），
+ * 站点在国内，按 +08:00 解释；也兼容秒/毫秒时间戳。
+ */
+function parseChartTime(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 1e12 ? value : value * 1000;
+  }
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(text);
+  if (match) {
+    const parsed = Date.parse(
+      `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}+08:00`,
+    );
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 /** 从开通/详情负载里提取服务字段（ROOT/密码/IP/状态/规格）。 */
