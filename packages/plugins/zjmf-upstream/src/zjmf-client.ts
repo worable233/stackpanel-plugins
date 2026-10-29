@@ -1588,7 +1588,7 @@ export class ZJMFClient {
     });
     const page = await this.authorizedGet(`upgrade/upgrade_config_page?hid=${encoded}`);
     const payload = object(page['data']);
-    return buildChangeQuote(payload);
+    return buildChangeQuote(payload, true);
   }
 
   /**
@@ -2040,9 +2040,11 @@ export function decimalToMinor(value: string): number {
 }
 
 export function applyMarkup(price: number, markupBps: number): number {
+  // 0 元是合法金额（降配/等价变更的差价、免费商品）。以前这里把 0 判成
+  // 「超出范围」，导致每一次 0 元变配报价都抛错、静默退化成本地估算。
+  if (price <= 0) return 0;
   const result = (BigInt(price) * BigInt(10_000 + markupBps) + 5_000n) / 10_000n;
-  if (result < 1n || result > 2_000_000_000n)
-    throw new ZJMFClientError(422, '计算后的价格超出范围');
+  if (result > 2_000_000_000n) throw new ZJMFClientError(422, '计算后的价格超出范围');
   return Number(result);
 }
 
@@ -2540,12 +2542,29 @@ function invoiceIdOf(response: Record<string, unknown>): string | null {
 }
 
 /** 从升降级试算响应里构建差价结果（老财务 `price_difference` / V10 兼容字段）。 */
-function buildChangeQuote(payload: Record<string, unknown>): {
+/** 分 → 「¥10.19」；上游金额是元字符串，展示层统一成分。 */
+function yuanText(minor: number): string {
+  return `¥${(minor / 100).toFixed(2)}`;
+}
+
+function buildChangeQuote(
+  payload: Record<string, unknown>,
+  finance = false,
+): {
   price: number;
   breakdown: Array<{ label: string; value: string; price?: number }>;
   summary: string;
 } | null {
+  // 财务版 `upgrade/upgrade_config_page` 的权威差价在 `total`（已含上游折扣）
+  // / `subtotal`（折扣前），**没有** `price_difference` 字段——按后者解析会一直
+  // 拿到 null，报价静默退化成我们自己的本地估算（实测多收 ¥0.35，且丢掉上游折扣）。
+  // V10 的 `common_config` 是另一套字段，靠 `finance` 开关隔离，避免把商品总价
+  // 误当差价。
+  const financeDiff = finance
+    ? (stringOrNull(payload['total']) ?? stringOrNull(payload['subtotal']))
+    : null;
   const diffText =
+    financeDiff ??
     stringOrNull(payload['price_difference']) ??
     stringOrNull(payload['price']) ??
     stringOrNull(payload['amount']);
@@ -2554,9 +2573,27 @@ function buildChangeQuote(payload: Record<string, unknown>): {
   try {
     price = decimalToMinor(diffText);
   } catch {
-    return null;
+    // 降配差价是负数：我方不退款，按 0 元变更处理——这是合法报价，不是解析失败。
+    const numeric = Number.parseFloat(diffText);
+    if (!Number.isFinite(numeric) || numeric > 0) return null;
+    price = 0;
   }
   const breakdown: Array<{ label: string; value: string; price?: number }> = [];
+  if (finance) {
+    // 财务版把「小计 / 应付」直接给了，顺手展示，用户才知道折扣从哪来。
+    const subtotal = safeMinor(payload['subtotal']);
+    const total = safeMinor(payload['total']);
+    if (subtotal !== undefined) {
+      breakdown.push({ label: '小计', value: yuanText(subtotal), price: subtotal });
+    }
+    if (total !== undefined && subtotal !== undefined && total !== subtotal) {
+      // 展示正数优惠额，price 保留负号供对账。
+      breakdown.push({ label: '上游优惠', value: yuanText(subtotal - total), price: total - subtotal });
+    }
+    if (total !== undefined) {
+      breakdown.push({ label: '应付', value: yuanText(total), price: total });
+    }
+  }
   const preview = Array.isArray(payload['preview']) ? payload['preview'] : [];
   for (const row of preview) {
     const o = object(row);

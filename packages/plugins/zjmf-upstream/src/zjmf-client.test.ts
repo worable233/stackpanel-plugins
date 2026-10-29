@@ -684,6 +684,8 @@ describe('ZJMF value normalization', () => {
   it('converts prices exactly and applies markup in integer minor units', () => {
     expect(decimalToMinor('12.3')).toBe(1230);
     expect(applyMarkup(1230, 250)).toBe(1261);
+    // 0 元是合法金额（0 元变配/免费商品），不能当成「超出范围」抛错。
+    expect(applyMarkup(0, 250)).toBe(0);
     expect(() => decimalToMinor('12.345')).toThrow(ZJMFClientError);
   });
 
@@ -1636,5 +1638,84 @@ describe('可变更配置项白名单（upgrade/index 取证）', () => {
     );
     expect(await client.listChangeOptions('42')).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('财务版变配报价（upgrade_config_page 真实字段）', () => {
+  it('从 total/subtotal 取权威差价，而不是不存在的 price_difference', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(input.toString());
+      if (url.pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (url.pathname === '/upgrade/upgrade_config_post') {
+        return json({ status: 200, msg: '请求成功' });
+      }
+      if (url.pathname === '/upgrade/upgrade_config_page') {
+        return json({
+          status: 200,
+          msg: '请求成功',
+          data: {
+            currency: { code: 'CNY' },
+            billingcycle: 'monthly',
+            discount: '0.52',
+            subtotal: '10.36',
+            total: '9.84',
+          },
+        });
+      }
+      return json({ status: 200, data: {} });
+    });
+    const client = new ZJMFClient(
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+    const quote = await client.calculateChangePrice('42', { selections: { '3395985': '15711338' } });
+    expect(quote?.price).toBe(984);
+    expect(quote?.breakdown?.map((row) => `${row.label}=${row.value}`)).toEqual([
+      '小计=¥10.36',
+      '上游优惠=¥0.52',
+      '应付=¥9.84',
+    ]);
+    // 上游要求「只发变化项」：全量会被 400 打回。
+    const post = fetchMock.mock.calls.find(
+      (call) => new URL(call[0].toString()).pathname === '/upgrade/upgrade_config_post',
+    );
+    const body = new URLSearchParams(String(post?.[1]?.body)).toString();
+    expect(body).toContain('hid=42');
+    expect(body).toContain('configoption%5B3395985%5D=15711338');
+  });
+});
+
+describe('降配（负差价）是合法报价', () => {
+  it('上游 total 为负时不报「价格超出范围」，按 0 元变更', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(input.toString());
+      if (url.pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (url.pathname === '/upgrade/upgrade_config_post') return json({ status: 200 });
+      if (url.pathname === '/upgrade/upgrade_config_page') {
+        return json({
+          status: 200,
+          data: { billingcycle: 'monthly', subtotal: '-29.00', total: '-29.00' },
+        });
+      }
+      return json({ status: 200, data: {} });
+    });
+    const client = new ZJMFClient(
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+    const quote = await client.calculateChangePrice('42', { selections: { '3395984': '15711333' } });
+    expect(quote?.price).toBe(0);
   });
 });
