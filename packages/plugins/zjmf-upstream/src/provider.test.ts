@@ -136,9 +136,44 @@ describe('durable upstream provisioning fence', () => {
     );
     const payServiceInvoice = vi.fn(async () => ({ paid: true, paymentState: 'PAID' }));
     const verifyCancelledInvoice = vi.fn(async () => {});
+    // 默认「账单已付」：让既有用例保持「不重复付款」的语义；需要自动续付的用例单独覆写。
+    const listRecentInvoices = vi.fn(async () => null);
+    const hostRow = (serviceId: string) => ({
+      id: serviceId,
+      productId: null,
+      name: serviceId,
+      productName: null,
+      status: 'Active',
+      statusLabel: null,
+      host: null,
+      expiresAt: null,
+      openedAt: null,
+      amount: null,
+      currency: null,
+      raw: { id: serviceId, invoice_id: 'invoice-7', regdate: Math.floor(Date.now() / 1000) },
+    });
+    const findHost = vi.fn(async (serviceId: string) => hostRow(serviceId));
+    const resolveHostForAttempt = vi.fn(async () => hostRow('remote-42'));
+    const inspectInvoice = vi.fn(async (invoiceId: string) => ({
+      invoiceId,
+      status: 'Paid',
+      paid: true,
+      cancelled: false,
+      serviceIds: ['remote-42'],
+      amount: null,
+    }));
     const provider = new ZJMFProvider(ctx);
     vi.spyOn(provider as never, 'resolveForProduct').mockResolvedValue({
-      client: { createService, payServiceInvoice, verifyCancelledInvoice },
+      client: {
+        createService,
+        payServiceInvoice,
+        verifyCancelledInvoice,
+        listRecentInvoices,
+        inspectInvoice,
+        findHost,
+        findHostForInvoice: vi.fn(async () => hostRow('remote-42')),
+        resolveHostForAttempt,
+      },
       upstreamId: 'upstream-1',
       sourceFingerprint: 'account-1',
     } as never);
@@ -165,6 +200,10 @@ describe('durable upstream provisioning fence', () => {
       createService,
       payServiceInvoice,
       verifyCancelledInvoice,
+      listRecentInvoices,
+      inspectInvoice,
+      findHost,
+      resolveHostForAttempt,
       rows,
       extensions,
     };
@@ -265,17 +304,25 @@ describe('durable upstream provisioning fence', () => {
   });
   it('retains an uncertain request across a new provider process and blocks replay', async () => {
     const { provider, input, createService, rows } = fixture();
-    createService.mockRejectedValue(new Error('settle response lost'));
+    createService.mockRejectedValueOnce(new Error('settle response lost'));
     await expect(provider.provision(input)).rejects.toThrow('settle response lost');
+    // 同一订单的账本钉子必须还在：结果未知就不允许重复下单。
     await expect(provider.provision(input)).rejects.toThrow(/禁止重复下单/);
     expect(createService).toHaveBeenCalledTimes(1);
+    // 但购物车锁必须释放。锁只保护「清车 → 加购 → 结算」这段窗口；
+    // 泄漏一次就把整个上游账户永久锁死（真实事故：一次失败导致后续所有订单都报
+    // 「上游购物车正在处理其他订单」）。
     expect(
       [...rows.keys()].filter((key) => key.startsWith(provisioningCartLockModel.kind)),
-    ).toHaveLength(1);
-    await expect(provider.provision({ ...input, orderId: 'other-order' })).rejects.toMatchObject({
-      retryableBeforeSubmit: true,
+    ).toHaveLength(0);
+    // 其他订单不受牵连：可以正常继续下单。
+    const other = await provider.provision({
+      ...input,
+      orderId: 'other-order',
+      fulfillmentId: `delivery-other-order-${input.productId}`,
     });
-    expect(createService).toHaveBeenCalledTimes(1);
+    expect(other.providerServiceId).toBe('remote-42');
+    expect(createService).toHaveBeenCalledTimes(2);
   });
   it('keeps invoice identity when persistence after settlement fails and never recreates it', async () => {
     const { provider, input, createService } = fixture();
@@ -284,6 +331,65 @@ describe('durable upstream provisioning fence', () => {
     const restored = await provider.provision(input);
     expect(restored.providerServiceId).toBe('remote-42');
     expect(restored.runtime?.invoiceId).toBe('invoice-7');
+    expect(createService).toHaveBeenCalledTimes(1);
+  });
+  it('auto-resumes payment when the recorded invoice is still unpaid', async () => {
+    const { provider, input, createService, payServiceInvoice, inspectInvoice } = fixture();
+    input.checkpoint.mockRejectedValueOnce(new Error('store checkpoint failed'));
+    await expect(provider.provision(input)).rejects.toThrow('store checkpoint failed');
+    // 账单仍未付：应该自己续付一次，而不是停在「请人工点继续付款」。
+    inspectInvoice.mockResolvedValueOnce({
+      invoiceId: 'invoice-7',
+      status: 'Unpaid',
+      paid: false,
+      cancelled: false,
+      serviceIds: ['remote-42'],
+      amount: null,
+    });
+    await provider.provision(input);
+    expect(payServiceInvoice).toHaveBeenCalledTimes(1);
+    expect(payServiceInvoice).toHaveBeenCalledWith('invoice-7');
+    // 续付绝不允许重新下单。
+    expect(createService).toHaveBeenCalledTimes(1);
+  });
+  it('refuses to pay an invoice the upstream already cancelled', async () => {
+    const { provider, input, payServiceInvoice, inspectInvoice } = fixture();
+    input.checkpoint.mockRejectedValueOnce(new Error('store checkpoint failed'));
+    await expect(provider.provision(input)).rejects.toThrow('store checkpoint failed');
+    inspectInvoice.mockResolvedValueOnce({
+      invoiceId: 'invoice-7',
+      status: 'Cancelled',
+      paid: false,
+      cancelled: true,
+      serviceIds: [],
+      amount: null,
+    });
+    await expect(provider.provision(input)).rejects.toThrow(/已取消，禁止付款/);
+    expect(payServiceInvoice).not.toHaveBeenCalled();
+  });
+  it('heals a stale upstream id from the host list instead of re-provisioning', async () => {
+    const { provider, input, createService, findHost, resolveHostForAttempt } = fixture();
+    input.checkpoint.mockRejectedValueOnce(new Error('store checkpoint failed'));
+    await expect(provider.provision(input)).rejects.toThrow('store checkpoint failed');
+    // 上游把下单时的占位 id 换成了真实主机：记录里的 remote-42 已不存在。
+    findHost.mockResolvedValue(null as never);
+    resolveHostForAttempt.mockResolvedValue({
+      id: 'real-99',
+      productId: null,
+      name: 'real-99',
+      productName: null,
+      status: 'Active',
+      statusLabel: null,
+      host: null,
+      expiresAt: null,
+      openedAt: null,
+      amount: null,
+      currency: null,
+      raw: { id: 'real-99', invoice_id: 'invoice-7' },
+    } as never);
+    const result = await provider.provision(input);
+    expect(result.providerServiceId).toBe('real-99');
+    // 自愈绝不能变成重新下单。
     expect(createService).toHaveBeenCalledTimes(1);
   });
   it('resumes only the recorded invoice and fences payment timeouts against another debit', async () => {

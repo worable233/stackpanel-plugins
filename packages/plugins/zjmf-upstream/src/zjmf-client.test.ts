@@ -103,11 +103,12 @@ describe('provisioning request safety', () => {
     await client.createService('4661', {
       downstream: { id: '12345', token: 'a'.repeat(32), url: 'https://panel.example/' },
     });
-    expect(requests.map((request) => request.path)).toEqual([
-      '/zjmf_api_login',
-      '/cart/clear',
-      '/apply_credit',
-    ]);
+    expect(
+      requests
+        .map((request) => request.path)
+        // 付款后会用主机列表做只读复核（确认实例身份），不属于资金操作。
+        .filter((path) => path !== '/host/list' && path !== '/host/header'),
+    ).toEqual(['/zjmf_api_login', '/cart/clear', '/apply_credit']);
     expect(requests[1]?.body).toContain('downstream_id=12345');
     expect(requests[2]?.body).toContain('is_api=1');
   });
@@ -744,13 +745,9 @@ describe('ZJMF service provisioning', () => {
       selections: { '3201217': 15038165 },
     });
 
-    expect(calls).toEqual([
-      '/zjmf_api_login',
-      '/cart/clear',
-      '/cart/add_to_shop',
-      '/cart/settle',
-      '/apply_credit',
-    ]);
+    expect(
+      calls.filter((path) => path !== '/host/list' && path !== '/host/header'),
+    ).toEqual(['/zjmf_api_login', '/cart/clear', '/cart/add_to_shop', '/cart/settle', '/apply_credit']);
     expect(result.providerServiceId).toBe('42');
     expect(result.runtime).toMatchObject({
       paid: true,
@@ -888,6 +885,85 @@ describe('ZJMF service provisioning', () => {
     });
   });
 
+  it('reads finance host detail from the member host list when header reports no product', async () => {
+    // 真实上游（moebun）实测：/host/header?host_id=N 一律回「未找到该产品」，
+    // 而 /host/list 才是权威数据源（状态/IP/规格/到期都在里面）。
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const path = new URL(input.toString()).pathname;
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (path === '/host/header') return json({ status: 400, message: '未找到该产品' });
+      if (path === '/host/list')
+        return json({
+          status: 200,
+          data: {
+            count: 1,
+            list: [
+              {
+                id: 33363,
+                domain: 'S93z7tkBNkRxq',
+                domainstatus: 'Active',
+                domainstatus_desc: '已激活',
+                dedicatedip: '156.233.230.86',
+                regdate: 1793252404,
+                nextduedate: 1795930812,
+                amount: '47.88',
+                billingcycle: 'monthly',
+                os: 'Debian^Debian13-x86',
+                productname: '香港EPYC-4H8G',
+                cpu: '4核',
+                memory: '8G',
+                system_disk_size: '60GB NVME',
+                bw: '35Mbps',
+                area: 'HK^香港EPYC',
+                invoice_id: 875800,
+              },
+            ],
+          },
+        });
+      return json({ status: 200, data: {} });
+    });
+    const detail = await clientFor(fetchMock).getService('33363');
+    expect(detail).toMatchObject({
+      providerServiceId: '33363',
+      ip: '156.233.230.86',
+      status: 'Active',
+      statusLabel: '已激活',
+      expiresAt: '2026-11-29T05:40:12.000Z',
+      openedAt: '2026-10-29T05:40:04.000Z',
+      cycle: 'monthly',
+      specs: { cpu: '4核', memory: '8G', disk: '60GB NVME', bandwidth: '35Mbps', region: '香港EPYC' },
+    });
+  });
+  it('maps a placeholder host id to the real host created by payment', async () => {
+    // 实测：账单 875797 付款后真实主机是 33363，而账单 items[].rel_id 指向 33360（不存在）。
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const path = new URL(input.toString()).pathname;
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (path === '/host/list')
+        return json({
+          status: 200,
+          data: {
+            count: 2,
+            list: [
+              { id: 30001, invoice_id: 500, regdate: 1700000000 },
+              { id: 33363, invoice_id: 875800, regdate: 1793252404 },
+            ],
+          },
+        });
+      return json({ status: 200, data: {} });
+    });
+    const client = clientFor(fetchMock);
+    // 直接按账单号：付款换了新号，查不到 → null（绝不猜）
+    expect(await client.findHostForInvoice('875797')).toBeNull();
+    // 按账单号精确命中
+    expect((await client.findHostForInvoice('875800'))?.id).toBe('33363');
+    // 时间窗兜底：只有 33363 在本次尝试之后创建
+    const resolved = await client.resolveHostForAttempt({
+      invoiceId: '875797',
+      sinceMs: 1793252404 * 1000,
+    });
+    expect(resolved?.id).toBe('33363');
+  });
   it('normalizes finance monitor payloads into metric series', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const path = new URL(input.toString()).pathname;

@@ -122,6 +122,9 @@ const ZJMF_CLIENT_ERROR_CODES: Record<string, string> = {
   上游商品价格超出范围: 'zjmf.client.price_out_of_range',
   无法解析上游主机: 'zjmf.client.host_unresolved',
   上游不支持该能力: 'zjmf.client.unsupported',
+  '上游结算结果无法确认，且账单反查未成功；请稍后自动重试核对':
+    'zjmf.client.invoice_trace_unavailable',
+  '上游未留下账单痕迹，可安全重试下单': 'zjmf.client.invoice_trace_empty',
 };
 
 /** Resolve a stable code from a ZJMF client error message (exact, then prefix). */
@@ -130,6 +133,8 @@ function zjmfClientErrorCode(message: string): string {
   if (exact) return exact;
   if (message.startsWith('上游不支持')) return 'zjmf.client.unsupported';
   if (message.startsWith('上游返回 HTTP ')) return 'zjmf.client.http_error';
+  // 「账单已定位但实例未建立」带具体账单号，只能按前缀认。
+  if (message.startsWith('上游账单')) return 'zjmf.client.invoice_pending_host';
   return 'zjmf.client.error';
 }
 
@@ -579,6 +584,7 @@ export class ZJMFClient {
     credentials: Record<string, string>;
     runtime: Record<string, unknown>;
   }> {
+    const attemptStartedMs = Date.now();
     // An uncertain clear must not race with a new add/settle request.
     await this.authorizedRequest('console/v1/cart', 'DELETE', false);
     const body: FormBody = {
@@ -610,19 +616,53 @@ export class ZJMFClient {
     const payload = object(settle['data']);
     // V10 返回 host_ids[]，财务返回 hostid。
     const hostIds = payload['host_ids'];
-    const providerServiceId = Array.isArray(hostIds)
+    let providerServiceId = Array.isArray(hostIds)
       ? stringOrNull(hostIds[0])
       : (stringOrNull(hostIds) ??
         stringOrNull(payload['hostid']) ??
         stringOrNull(payload['host_id']));
+    let invoiceId = stringOrNull(payload['order_id']);
+    let settledPaid = false;
     if (!providerServiceId) {
-      throw new ZJMFClientError(502, '上游结算未返回服务 ID');
+      // 结算响应不可用（超时、断连、字段缺失）不等于上游没动作：账单已经开出来了。
+      // 账单是上游唯一的记账凭证，只读反查它；凭猜测重下单会真的多买一台。
+      const rescued = await this.rescueSettleEvidence({
+        invoiceId,
+        amount: payload['amount'],
+        sinceMs: attemptStartedMs,
+      });
+      if (rescued === 'unknown') {
+        throw new ZJMFClientError(409, '上游结算结果无法确认，且账单反查未成功；请稍后自动重试核对');
+      }
+      if (rescued === 'no-trace') {
+        const error = new ZJMFClientError(409, '上游未留下账单痕迹，可安全重试下单');
+        Object.assign(error, { retryableBeforeSubmit: true });
+        throw error;
+      }
+      invoiceId = rescued.invoiceId;
+      providerServiceId = rescued.serviceId;
+      if (!providerServiceId) {
+        // 账单已定位但实例 id 未读到：先付这笔**已知账单**（同一账单单次扣款，不会多付），
+        // 付款会驱动上游建实例，随后再反查实例 id。
+        const payable = !rescued.paid && !/^Cancel/i.test(rescued.status);
+        if (payable) {
+          const payment = await this.payServiceInvoice(invoiceId);
+          settledPaid = payment.paid;
+        }
+        const afterPay = await this.inspectInvoice(invoiceId);
+        providerServiceId = afterPay?.serviceIds.length === 1 ? afterPay.serviceIds[0]! : null;
+      }
+      if (!providerServiceId) {
+        const error = new ZJMFClientError(409, `上游账单 ${invoiceId} 已定位，但实例尚未建立；请稍后自动重试核对`);
+        Object.assign(error, { evidence: { invoiceId } });
+        throw error;
+      }
     }
 
     // 有金额才需要支付；0 元单直接算已支付。
     const amount = Number(payload['amount'] ?? 0);
-    let paid = payload['amount'] !== undefined && Number.isFinite(amount) && amount === 0;
-    const orderId = stringOrNull(payload['order_id']);
+    let paid = settledPaid || (payload['amount'] !== undefined && Number.isFinite(amount) && amount === 0);
+    const orderId = invoiceId;
     const checkpointRuntime: Record<string, unknown> = {
       invoiceId: orderId,
       billingCycle: opts.cycle ?? 'monthly',
@@ -734,6 +774,142 @@ export class ZJMFClient {
     }
   }
 
+  /**
+   * 只读：读一张账单及其关联实例。
+   *
+   * 结算响应丢失后，账单是上游**唯一**的记账凭证；`null` 表示「无法判断」（探测本身失败），
+   * 必须与「确认没有」严格区分——否则会把网络故障当成“上游什么都没做”，进而重复下单。
+   */
+  async inspectInvoice(invoiceId: string): Promise<{
+    invoiceId: string;
+    status: string;
+    paid: boolean;
+    cancelled: boolean;
+    serviceIds: string[];
+    amount: string | null;
+  } | null> {
+    try {
+      const response =
+        this.connection.protocol === 'finance'
+          ? await this.authorizedGet(`/get_invoices_detail?id=${encodeURIComponent(invoiceId)}`)
+          : await this.authorizedGet(`console/v1/invoice/${encodeURIComponent(invoiceId)}`);
+      const data = object(response['data']);
+      const detail = object(data['detail'] ?? data['invoice'] ?? data);
+      const status = String(detail['status'] ?? '');
+      const paidTime = detail['paid_time'];
+      const items = Array.isArray(data['invoice_items']) ? data['invoice_items'] : [];
+      const serviceIds = items
+        .map(object)
+        .filter((item) => item['type'] === 'host' || item['type'] === 'product')
+        .map((item) => stringOrNull(item['rel_id']))
+        .filter((id): id is string => Boolean(id));
+      // 老财务把实例 id 放在详情链接里（`servicedetail?id=33337`）；没有 rel_id 时这是唯一线索。
+      const fromUrl = serviceIdFromDetailUrl(detail['url']);
+      if (fromUrl && !serviceIds.includes(fromUrl)) serviceIds.push(fromUrl);
+      return {
+        invoiceId,
+        status,
+        paid: status === 'Paid' || (typeof paidTime === 'number' && paidTime > 0),
+        cancelled: /^Cancel/i.test(status),
+        serviceIds,
+        amount:
+          stringOrNull(detail['subtotal']) ??
+          stringOrNull(detail['total']) ??
+          stringOrNull(detail['sub']),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** 只读：最近账单（响应丢失后按金额＋时间窗定位）。`null` 同样表示「未知」而非「没有」。 */
+  async listRecentInvoices(
+    options: { sinceMs?: number; limit?: number } = {},
+  ): Promise<
+    | Array<{
+        id: string;
+        status: string;
+        paid: boolean;
+        amount: string | null;
+        createdMs: number | null;
+      }>
+    | null
+  > {
+    const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+    try {
+      // V10 的账单列表端点在上游没有稳定证据（实测 404），宁可不猜也不乱调。
+      if (this.connection.protocol !== 'finance') return null;
+      const response = await this.authorizedGet(`/get_invoices?limit=${limit}`);
+      const data = object(response['data']);
+      if (!Array.isArray(data['invoices'])) return null;
+      return data['invoices']
+        .map(object)
+        .map((invoice) => {
+          const status = String(invoice['status'] ?? '');
+          const paidTime = invoice['paid_time'];
+          const stamp = invoice['create_time'] ?? invoice['due_time'];
+          return {
+            id: stringOrNull(invoice['id']) ?? '',
+            status,
+            paid: status === 'Paid' || (typeof paidTime === 'number' && paidTime > 0),
+            amount:
+              stringOrNull(invoice['subtotal']) ??
+              stringOrNull(invoice['total']) ??
+              stringOrNull(invoice['sub']),
+            createdMs: typeof stamp === 'number' && stamp > 0 ? stamp * 1000 : null,
+          };
+        })
+        .filter((invoice) => invoice.id !== '');
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 结算响应用不了时，反查上游到底做了什么。
+   *
+   * 返回三态而不是布尔值：`no-trace` 才能安全重下单；`unknown` 只能等下一次核对。
+   */
+  private async rescueSettleEvidence(options: {
+    invoiceId: string | null;
+    amount: unknown;
+    sinceMs: number;
+  }): Promise<
+    | 'unknown'
+    | 'no-trace'
+    | { invoiceId: string; serviceId: string | null; status: string; paid: boolean }
+  > {
+    let invoiceId = options.invoiceId;
+    if (!invoiceId) {
+      const recent = await this.listRecentInvoices({ sinceMs: options.sinceMs, limit: 20 });
+      if (recent === null) return 'unknown';
+      const amount =
+        typeof options.amount === 'number' || typeof options.amount === 'string'
+          ? Number(options.amount)
+          : null;
+      const inWindow = recent.filter(
+        (invoice) => invoice.createdMs === null || invoice.createdMs >= options.sinceMs - 120_000,
+      );
+      const candidates = inWindow.filter(
+        (invoice) =>
+          amount === null ||
+          (invoice.amount !== null && Math.abs(Number(invoice.amount) - amount) < 0.005),
+      );
+      if (candidates.length === 0) return 'no-trace';
+      // 多张账单金额相同 → 无法确定哪张是我们的，不猜。
+      if (candidates.length > 1) return 'unknown';
+      invoiceId = candidates[0]!.id;
+    }
+    const trace = await this.inspectInvoice(invoiceId);
+    if (!trace) return 'unknown';
+    return {
+      invoiceId,
+      serviceId: trace.serviceIds.length === 1 ? trace.serviceIds[0]! : null,
+      status: trace.status,
+      paid: trace.paid,
+    };
+  }
+
   /** Finance V1 UserInvoiceController::getInvoicesDetail: GET only, account-scoped. */
   async verifyCancelledInvoice(invoiceId: string, serviceIds: string[]): Promise<void> {
     if (
@@ -800,6 +976,7 @@ export class ZJMFClient {
     runtime: Record<string, unknown>;
   }> {
     const billingCycle = opts.cycle ?? 'monthly';
+    const attemptStartedMs = Date.now();
     // 共享购物车必须串行清空成功，失败则停止，避免混入其他请求的商品。
     const downstream: FormBody = opts.downstream
       ? {
@@ -834,12 +1011,48 @@ export class ZJMFClient {
       : await this.authorizedPost('/cart/settle', downstream);
     const settlePayload = object(settle['data']);
     const hostIds = settlePayload['hostid'];
-    const invoiceId = stringOrNull(settlePayload['invoiceid']);
-    const providerServiceId = Array.isArray(hostIds)
+    let invoiceId = stringOrNull(settlePayload['invoiceid']);
+    let providerServiceId = Array.isArray(hostIds)
       ? stringOrNull(hostIds[0])
       : stringOrNull(hostIds);
+    let settledPaid = false;
     if (!providerServiceId) {
-      throw new ZJMFClientError(502, '上游结算未返回服务 ID');
+      // 结算响应不可用（超时、断连、字段缺失）不等于上游没动作：账单已经开出来了。
+      // 账单是上游唯一的记账凭证，只读反查它；凭猜测重下单会真的多买一台。
+      const rescued = await this.rescueSettleEvidence({
+        invoiceId,
+        amount: settlePayload['total'] ?? settlePayload['amount'],
+        sinceMs: attemptStartedMs,
+      });
+      if (rescued === 'unknown') {
+        throw new ZJMFClientError(409, '上游结算结果无法确认，且账单反查未成功；请稍后自动重试核对');
+      }
+      if (rescued === 'no-trace') {
+        const error = new ZJMFClientError(409, '上游未留下账单痕迹，可安全重试下单');
+        Object.assign(error, { retryableBeforeSubmit: true });
+        throw error;
+      }
+      invoiceId = rescued.invoiceId;
+      providerServiceId = rescued.serviceId;
+      // 账单已定位且未付：直接付这一张（单张账单只扣一次，不可能多付）。
+      // 不付就永远停在 AWAITING_UPSTREAM_PAYMENT 等人工点「继续付款」。
+      if (!rescued.paid && !/^Cancel/i.test(rescued.status)) {
+        const payment = await this.payServiceInvoice(invoiceId);
+        settledPaid = payment.paid;
+      }
+      // 账单 `items[].rel_id` 只是下单占位的记录 id：付款后上游会重新分配主机 id
+      // （实测账单 875797 付款后真实主机是 33363，而 rel_id 指向不存在的 33360）。
+      // 所以必须以会员主机列表为准确认；确认不到就不冒充证据。
+      const resolvedHost = await this.resolveHostForAttempt({
+        invoiceId,
+        sinceMs: attemptStartedMs,
+      });
+      providerServiceId = resolvedHost ? stringOrNull(resolvedHost['id']) : null;
+      if (!providerServiceId) {
+        const error = new ZJMFClientError(409, `上游账单 ${invoiceId} 已定位，但实例尚未建立；请稍后自动重试核对`);
+        Object.assign(error, { evidence: { invoiceId } });
+        throw error;
+      }
     }
 
     const checkpointRuntime: Record<string, unknown> = {
@@ -866,9 +1079,9 @@ export class ZJMFClient {
     }
 
     // 仅对原发票全额支付一次；余额不足不进行部分扣款。
-    let paid = false;
-    let paymentState = 'PAYMENT_REQUIRED';
-    if (invoiceId) {
+    let paid = settledPaid;
+    let paymentState = settledPaid ? 'PAID' : 'PAYMENT_REQUIRED';
+    if (invoiceId && !settledPaid) {
       await opts.checkpoint?.({
         providerServiceId,
         runtime: { ...checkpointRuntime, paymentState: 'PAYMENT_IN_FLIGHT' },
@@ -893,6 +1106,26 @@ export class ZJMFClient {
       }
     }
 
+    // 付款后上游可能把占位 id 换成真实主机：以主机列表复核一次（只读）。
+    // 不修正的话 store 会拿着不存在的 id 同步状态，永远卡在 PROVISIONING。
+    if (providerServiceId) {
+      const actual = await this.findHost(providerServiceId);
+      if (!actual) {
+        const resolved = await this.resolveHostForAttempt({
+          invoiceId,
+          sinceMs: attemptStartedMs,
+        });
+        const corrected = resolved ? resolved.id : null;
+        if (corrected && corrected !== providerServiceId) {
+          providerServiceId = corrected;
+          await opts.checkpoint?.({
+            providerServiceId,
+            runtime: { ...checkpointRuntime, paymentState: 'PROVISIONING' },
+          });
+        }
+      }
+    }
+
     return {
       providerServiceId,
       credentials: {},
@@ -914,23 +1147,29 @@ export class ZJMFClient {
   async getService(serviceId: string): Promise<Record<string, unknown>> {
     const encoded = encodeURIComponent(serviceId);
     if (this.connection.protocol === 'finance') {
-      const [header, summary] = await Promise.all([
-        this.authorizedGet(`/host/header?host_id=${encoded}`),
-        this.getHostSummary(serviceId),
-      ]);
-      const payload = object(header['data']);
-      const host = object(payload['host_data']);
-      // 魔方财务：domainstatus 才是运行状态；status 常为账单状态（如 Paid）。
+      // 权威数据源是会员主机列表：/host/header 会把 host_id 当产品查，对真实主机
+      // 一律返回「未找到该产品」（已实测）。所以 header 只做尽力而为的补充
+      // （部分上游只在 header 里给凭证/IP/OS），字段以列表优先。
+      const hosts = await this.listHosts();
+      const listed = hosts.find((entry) => entry.id === String(serviceId))?.raw ?? {};
+      const header = await this
+        .authorizedGet(`/host/header?host_id=${encoded}`)
+        .catch(() => null);
+      const hostData = object(object(header?.['data'])['host_data']);
+      if (Object.keys(listed).length === 0 && Object.keys(hostData).length === 0) {
+        throw new ZJMFClientError(404, `上游主机 ${serviceId} 不存在`);
+      }
+      const merged = { ...hostData, ...listed };
+      // domainstatus 才是运行状态；header 里的 status 常是账单状态（如 Paid）。
       const status =
-        stringOrNull(host['domainstatus']) ??
-        stringOrNull(host['status']) ??
-        stringOrNull(host['status_text']);
+        stringOrNull(merged['domainstatus']) ??
+        stringOrNull(merged['status']) ??
+        stringOrNull(merged['status_text']);
       const statusLabel =
-        stringOrNull(host['domainstatus_desc']) ?? stringOrNull(host['status_text']);
+        stringOrNull(merged['domainstatus_desc']) ?? stringOrNull(merged['status_text']);
       return pickServiceDetail({
-        ...(summary ?? {}),
-        ...host,
-        ip: stringOrNull(host['dedicatedip']) ?? stringOrNull(host['ip']),
+        ...merged,
+        ip: stringOrNull(merged['dedicatedip']) ?? stringOrNull(merged['ip']),
         ...(status ? { status } : {}),
         ...(statusLabel ? { statusLabel } : {}),
       });
@@ -955,32 +1194,44 @@ export class ZJMFClient {
     });
   }
 
+  /** 按上游主机 id 定位（不存在则 null）。 */
+  async findHost(serviceId: string): Promise<ZJMFHost | null> {
+    const hosts = await this.listHosts();
+    return hosts.find((host) => host.id === String(serviceId)) ?? null;
+  }
+
   /**
-   * 财务协议的 host/header 不含 CPU/内存/磁盘等规格，从 host/list 补齐。
-   * host/list 不支持按 id 过滤，故按 id 精确匹配。
-   * 上游成功但列表无匹配项 → 返回 null（无规格，属合法「空」）；
-   * 传输/鉴权/HTTP 错误则上抛，不再静默降级（工单 #2 §3.1）。
+   * 账单 → 主机（只信主机列表里的 `invoice_id`，不信账单 `items[].rel_id`）。
+   * 多张匹配＝有歧义，返回 null，绝不猜。
    */
-  private async getHostSummary(serviceId: string): Promise<Record<string, unknown> | null> {
-    const data = await this.authorizedGet('/host/list?limit=200');
-    const list = object(data['data'])['list'];
-    if (!Array.isArray(list)) return null;
-    const item = list.map(object).find((entry) => String(entry['id']) === serviceId);
-    if (!item) return null;
-    const summary: Record<string, unknown> = {};
-    const copy = (from: string, to: string): void => {
-      const value = item[from];
-      if (value !== undefined && value !== null && value !== '') summary[to] = value;
-    };
-    copy('cpu', 'cpu');
-    copy('memory', 'memory');
-    copy('system_disk_size', 'disk');
-    copy('bw', 'bandwidth');
-    const area = stringOrNull(item['area']) ?? stringOrNull(item['area_name']);
-    if (area) {
-      summary['region'] = area.includes('^') ? area.split('^').slice(1).join('^').trim() : area;
+  async findHostForInvoice(invoiceId: string): Promise<ZJMFHost | null> {
+    if (this.connection.protocol !== 'finance') return null;
+    const hosts = await this.listHosts();
+    const target = String(invoiceId);
+    const matched = hosts.filter((host) => String(host.raw['invoice_id'] ?? '') === target);
+    return matched.length === 1 ? matched[0]! : null;
+  }
+
+  /**
+   * 本次开通尝试对应的主机：优先账单号对齐，其次「尝试时间窗内唯一新增的主机」。
+   * 付款会把账单换成新号（实测 875797 → 875800），所以时间窗是必要兜底。
+   */
+  async resolveHostForAttempt(options: {
+    invoiceId?: string | null;
+    sinceMs: number;
+  }): Promise<ZJMFHost | null> {
+    if (this.connection.protocol !== 'finance') return null;
+    if (options.invoiceId) {
+      const exact = await this.findHostForInvoice(options.invoiceId);
+      if (exact) return exact;
     }
-    return summary;
+    const hosts = await this.listHosts();
+    const floorMs = options.sinceMs - 120_000;
+    const fresh = hosts.filter((host) => {
+      const regdate = Number(host.raw['regdate'] ?? host.raw['create_time']);
+      return Number.isFinite(regdate) && regdate > 0 && regdate * 1000 >= floorMs;
+    });
+    return fresh.length === 1 ? fresh[0]! : null;
   }
 
   /**
@@ -1729,8 +1980,13 @@ function productDescription(raw: Record<string, unknown>): string | null {
   return null;
 }
 
-function object(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
+function serviceIdFromDetailUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = /[?&]id=(\d+)/.exec(value);
+  return match ? match[1]! : null;
+}
+
+function object(value: unknown): Record<string, unknown> {  return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
@@ -2332,9 +2588,14 @@ function pickServiceDetail(payload: Record<string, unknown>): Record<string, unk
     statusLabel: stringOrNull(payload['status_text']) ?? stringOrNull(payload['statusLabel']),
     ...(readExpiry(payload) ? { expiresAt: readExpiry(payload) } : {}),
     ...(readOpenedAt(payload) ? { openedAt: readOpenedAt(payload) } : {}),
-    ...((stringOrNull(payload['billing_cycle']) ?? stringOrNull(payload['cycle']))
+    ...((stringOrNull(payload['billing_cycle']) ??
+    stringOrNull(payload['billingcycle']) ??
+    stringOrNull(payload['cycle']))
       ? {
-          cycle: stringOrNull(payload['billing_cycle']) ?? stringOrNull(payload['cycle']),
+          cycle:
+            stringOrNull(payload['billing_cycle']) ??
+            stringOrNull(payload['billingcycle']) ??
+            stringOrNull(payload['cycle']),
         }
       : {}),
     specs: pickSpecs(payload),
@@ -2354,16 +2615,23 @@ function pickSpecs(payload: Record<string, unknown>): Record<string, unknown> {
     ['memory_mb', 'memory'],
     ['disk', 'disk'],
     ['disk_gb', 'disk'],
+    ['system_disk_size', 'disk'],
     ['bandwidth', 'bandwidth'],
+    ['bw', 'bandwidth'],
     ['os', 'os'],
     ['os_name', 'os'],
     ['region', 'region'],
     ['datacenter', 'region'],
+    ['area', 'region'],
   ];
   for (const [from, to] of map) {
     const value = payload[from];
     if (value !== undefined && value !== null) specs[to] = value;
   }
+  // 财务在售主机的 `area` 形如 "DE^德国 法兰克福"：只保留可读部分。
+  const area = specs['region'];
+  if (typeof area === 'string' && area.includes('^'))
+    specs['region'] = area.split('^').slice(1).join('^').trim();
   return specs;
 }
 

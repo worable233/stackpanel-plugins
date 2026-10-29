@@ -17,6 +17,7 @@ import type {
   MetricSeries,
 } from '@stackpanel/sdk';
 import { randomUUID, createHash, randomBytes } from 'node:crypto';
+import type { ExtensionInstance } from '@stackpanel/sdk';
 import {
   provisioningJournalModel,
   provisioningCartLockModel,
@@ -33,6 +34,11 @@ import {
 import { getUpstream, readUpstreamBinding } from './repository.js';
 
 const CREDENTIALS_PREFIX = 'credentials.';
+/**
+ * 购物车锁的最长持有时间。锁的存在只为串行化「清车 → 加购 → 结算」这段窗口；
+ * 进程崩溃或远程失败回不来时，租约到期就应该能被下一个订单回收。
+ */
+const CART_LOCK_TTL_MS = 15 * 60_000;
 const SERVICE_CREDENTIALS_PREFIX = 'svc.';
 
 class ZJMFProviderError extends Error {
@@ -151,10 +157,26 @@ export class ZJMFProvider implements FulfillmentProvider {
         ]),
       )
       .digest('hex');
-    const previous = await this.ctx.extensions.get<ProvisioningJournalData>(
+    let previous = await this.ctx.extensions.get<ProvisioningJournalData>(
       provisioningJournalModel,
       journalId,
     );
+    if (previous && !previous.spec.providerServiceId) {
+      // 没有实例 id 不等于上游什么都没做。每次重试前先做一次**只读**反查：
+      // 若账单能定位到实例，就把实例 id 补回记录，让重试走「恢复已存在实例」
+      // 而不是重新下单（重新下单会真的多买一台）。
+      const outcome = await this.repairFromInvoice(client, previous, journalId);
+      if (outcome === 'no-trace') {
+        // 上游证明那次尝试没留下任何账单：删掉死钉子，本次按全新下单处理。
+        await this.ctx.extensions.delete(provisioningJournalModel, journalId);
+        previous = null;
+      } else if (outcome === 'repaired') {
+        previous = await this.ctx.extensions.get<ProvisioningJournalData>(
+          provisioningJournalModel,
+          journalId,
+        );
+      }
+    }
     if (previous) {
       if (previous.spec.sourceFingerprint && previous.spec.sourceFingerprint !== sourceFingerprint)
         throw new ZJMFProviderError(409, '上游账号或地址已变更，禁止处理原账单');
@@ -162,6 +184,46 @@ export class ZJMFProvider implements FulfillmentProvider {
         throw new ZJMFProviderError(409, '同一订单的上游配置已变更，禁止重新下单');
       if (!previous.spec.providerServiceId)
         throw new ZJMFProviderError(409, '该订单已发送上游请求，结果未确认，禁止重复下单');
+      // 记录的实例 id 可能已被上游换掉（下单时是占位 id）：找不到就按账单/时间窗重定位，
+      // 否则 store 会拿着不存在的 id 同步状态，永远卡在 PROVISIONING。
+      if (!(await client.findHost(previous.spec.providerServiceId))) {
+        const resolved = await client.resolveHostForAttempt({
+          invoiceId: previous.spec.invoiceId,
+          sinceMs:
+            previous.createdAt instanceof Date
+              ? previous.createdAt.getTime()
+              : Date.now() - 900_000,
+        });
+        const corrected = resolved ? resolved.id : null;
+        if (!corrected)
+          throw new ZJMFProviderError(
+            409,
+            '记录的实例在上游不存在，且无法按账单重新定位；请人工核对',
+          );
+        previous = await this.ctx.extensions.update(
+          provisioningJournalModel,
+          journalId,
+          { ...previous.spec, providerServiceId: corrected, invoiceId: previous.spec.invoiceId },
+          { expectedVersion: previous.version },
+        );
+      }
+      if (
+        !ctx.resumePayment &&
+        previous.spec.invoiceId &&
+        ['ORDER_CREATED', 'PAYMENT_REQUIRED'].includes(previous.spec.state)
+      ) {
+        // 账单已定位但未付：自动续付，而不是让人去点「继续付款」。
+        // 先只读确认账单仍未付——单张账单只扣一次，重复进入不会多付。
+        const trace = await client.inspectInvoice(previous.spec.invoiceId);
+        if (trace === null)
+          throw new ZJMFProviderError(409, '无法确认原账单状态，稍后自动重试');
+        if (trace.cancelled)
+          throw new ZJMFProviderError(
+            409,
+            `上游账单 ${previous.spec.invoiceId} 已取消，禁止付款`,
+          );
+        if (!trace.paid) return this.provision({ ...ctx, resumePayment: true });
+      }
       if (ctx.resumePayment) {
         if (
           !previous.spec.invoiceId ||
@@ -235,7 +297,7 @@ export class ZJMFProvider implements FulfillmentProvider {
         409,
         '上游实例必须逐台交付；旧批量任务需要核对，禁止直接重新下单',
       );
-    try {
+    const acquire = async () => {
       await this.ctx.tx(async (tx) => {
         if (recoveryEvidence) {
           const lock = await tx.extensions.get<{ reference: string }>(
@@ -253,7 +315,11 @@ export class ZJMFProvider implements FulfillmentProvider {
           }
         }
         // Persistent account-wide lock: cart operations cannot interleave across processes.
-        await tx.extensions.create(provisioningCartLockModel, { reference }, { name: upstreamId });
+        await tx.extensions.create(
+          provisioningCartLockModel,
+          { reference, acquiredAtMs: Date.now() },
+          { name: upstreamId },
+        );
         await tx.extensions.create<ProvisioningJournalData>(
           provisioningJournalModel,
           {
@@ -271,13 +337,26 @@ export class ZJMFProvider implements FulfillmentProvider {
         if (downstreamUrl)
           await this.ctx.secrets.set(downstreamSecret, randomBytes(16).toString('hex'));
       });
-    } catch {
-      // No remote request has been issued by this invocation. Do not hide an existing request.
-      if (await this.ctx.extensions.get(provisioningJournalModel, journalId))
-        throw new ZJMFProviderError(409, '该订单已有开通请求，禁止重复执行');
+    };
+    const cartBusy = () => {
       const error = new ZJMFProviderError(409, '上游购物车正在处理其他订单，请稍后重试');
       Object.assign(error, { retryableBeforeSubmit: true });
-      throw error;
+      return error;
+    };
+    try {
+      await acquire();
+    } catch {
+      // No remote request has been issued by this invocation. Do not hide an existing request.
+      if (await this.ctx.extensions.get(provisioningJournalModel, journalId)) {
+        throw new ZJMFProviderError(409, '该订单已有开通请求，禁止重复执行');
+      }
+      // 账户级锁必须可回收：失败的尝试不会再回来放锁，没有租约就是一次失败枪决整个上游。
+      if (!(await this.reclaimStaleCartLock(upstreamId))) throw cartBusy();
+      try {
+        await acquire();
+      } catch {
+        throw cartBusy();
+      }
     }
     const checkpoint = async (service: {
       providerServiceId: string;
@@ -320,7 +399,9 @@ export class ZJMFProvider implements FulfillmentProvider {
         runtime,
       });
     };
-    const created = await client.createService(providerProductId, {
+    const created = await (async () => {
+      try {
+        return await client.createService(providerProductId, {
       quantity: ctx.quantity,
       reference,
       checkpoint,
@@ -335,9 +416,37 @@ export class ZJMFProvider implements FulfillmentProvider {
         : {}),
       ...(config?.cycle ? { cycle: config.cycle } : {}),
       ...(config?.selections ? { selections: config.selections } : {}),
-    });
-    await checkpoint(created);
-    let credentialsRef: string | null = null;
+        });
+      } catch (error) {
+        // 账单已定位但实例未建立：把账单号落进记录，下一次重试就能只读反查并续做，
+        // 而不是永久卡在「结果未确认」。
+        const evidence = (error as { evidence?: { invoiceId?: unknown } }).evidence;
+        const invoiceId = evidence?.invoiceId;
+        if (typeof invoiceId === 'string' && invoiceId) {
+          const row = await this.ctx.extensions.get<ProvisioningJournalData>(
+            provisioningJournalModel,
+            journalId,
+          );
+          if (row) {
+            await this.ctx.extensions.update(
+              provisioningJournalModel,
+              journalId,
+              {
+                ...row.spec,
+                state: 'REQUIRES_RECONCILIATION',
+                invoiceId,
+                runtime: { ...row.spec.runtime, invoiceId },
+              },
+              { expectedVersion: row.version },
+            );
+          }
+        }
+        // 我们持有锁：任何失败都必须在离开前放锁，否则整个上游账户会被永久锁死。
+        await this.releaseCartLock(upstreamId, reference);
+        throw error;
+      }
+    })();
+    await checkpoint(created);    let credentialsRef: string | null = null;
     if (Object.keys(created.credentials).length > 0) {
       // 写入调用方（store）传入的密钥存储，确保后续 getDetail 能从同一命名空间读取。
       credentialsRef = `${SERVICE_CREDENTIALS_PREFIX}${randomUUID()}`;
@@ -355,8 +464,98 @@ export class ZJMFProvider implements FulfillmentProvider {
     };
   }
 
-  async verifyCancelledProvision(ctx: ProvisionContext) {
-    const { client, upstreamId, sourceFingerprint } = await this.resolveForProduct(
+  /**
+   * 回收租约过期的购物车锁。
+   *
+   * 老版本的锁没有 `acquiredAtMs`，一律视为过期：否则升级后仍会被历史死锁卡住。
+   */
+  private async reclaimStaleCartLock(upstreamId: string): Promise<boolean> {
+    type LockSpec = { reference: string; acquiredAtMs?: number };
+    const lock = await this.ctx.extensions.get<LockSpec>(provisioningCartLockModel, upstreamId);
+    if (!lock) return false;
+    const acquiredAtMs =
+      typeof lock.spec.acquiredAtMs === 'number' ? lock.spec.acquiredAtMs : 0;
+    if (acquiredAtMs > 0 && Date.now() - acquiredAtMs < CART_LOCK_TTL_MS) return false;
+    await this.ctx.tx(async (tx) => {
+      const current = await tx.extensions.get<LockSpec>(provisioningCartLockModel, upstreamId);
+      if (!current || current.version !== lock.version) return;
+      await tx.extensions.update(provisioningCartLockModel, upstreamId, current.spec, {
+        expectedVersion: current.version,
+      });
+      await tx.extensions.delete(provisioningCartLockModel, upstreamId);
+    });
+    return true;
+  }
+
+  /** 只放自己的锁；放锁失败不影响交付结论（租约到期后仍会被回收）。 */
+  private async releaseCartLock(upstreamId: string, reference: string): Promise<void> {
+    try {
+      await this.ctx.tx(async (tx) => {
+        const lock = await tx.extensions.get<{ reference: string }>(
+          provisioningCartLockModel,
+          upstreamId,
+        );
+        if (!lock || lock.spec.reference !== reference) return;
+        await tx.extensions.update(provisioningCartLockModel, upstreamId, lock.spec, {
+          expectedVersion: lock.version,
+        });
+        await tx.extensions.delete(provisioningCartLockModel, upstreamId);
+      });
+    } catch {
+      // 忽略：锁的租约保证不会永久占用。
+    }
+  }
+
+  /**
+   * 只读修复：从已落库的账单反查实例 id。不付款、不建资源、不下单。
+   * 返回 true 表示记录已补齐，重试可以走「恢复已存在实例」而不是重新下单。
+   */
+  private async repairFromInvoice(
+    client: ZJMFClient,
+    row: ExtensionInstance<ProvisioningJournalData>,
+    journalId: string,
+  ): Promise<'repaired' | 'no-trace' | 'unknown'> {
+    let invoiceId = row.spec.invoiceId;
+    if (!invoiceId) {
+      // 记录里没有账单号：按本次尝试的时间窗去上游找。找不到＝上游确实没留下任何东西，
+      // 这种「确认没有」是唯一允许重新下单的前提。
+      const sinceMs = row.createdAt instanceof Date ? row.createdAt.getTime() : Date.now() - 900_000;
+      const recent = await client.listRecentInvoices({ sinceMs, limit: 20 });
+      if (recent === null) return 'unknown';
+      const inWindow = recent.filter(
+        (invoice) => invoice.createdMs === null || invoice.createdMs >= sinceMs - 120_000,
+      );
+      if (inWindow.length === 0) return 'no-trace';
+      if (inWindow.length > 1) return 'unknown';
+      invoiceId = inWindow[0]!.id;
+    }
+    const trace = await client.inspectInvoice(invoiceId);
+    // 主机以会员主机列表为准：账单 rel_id 是占位 id，付款后上游会换成真实主机。
+    const sinceMs = row.createdAt instanceof Date ? row.createdAt.getTime() : Date.now() - 900_000;
+    const host = await client.resolveHostForAttempt({ invoiceId, sinceMs });
+    const providerServiceId = host ? host.id : null;
+    if (!providerServiceId || !trace) return 'unknown';
+    await this.ctx.extensions.update(
+      provisioningJournalModel,
+      journalId,
+      {
+        ...row.spec,
+        state: trace.paid ? 'PAID' : 'ORDER_CREATED',
+        providerServiceId,
+        invoiceId,
+        runtime: {
+          ...row.spec.runtime,
+          invoiceId,
+          paid: trace.paid,
+          paymentState: trace.paid ? 'PAID' : 'PAYMENT_REQUIRED',
+        },
+      },
+      { expectedVersion: row.version },
+    );
+    return 'repaired';
+  }
+
+  async verifyCancelledProvision(ctx: ProvisionContext) {    const { client, upstreamId, sourceFingerprint } = await this.resolveForProduct(
       ctx.product.metadata,
     );
     const generation = ctx.recoveryGeneration ?? 1;
