@@ -1616,7 +1616,7 @@ export class ZJMFClient {
         const text = error instanceof Error ? error.message : String(error);
         throw new ZJMFClientError(
           501,
-          `该服务在当前上游不支持更换商品：${text || '上游未开放换购'}`,
+          `该服务在当前上游不支持更换商品：${text || '上游未开放换购'}。升级资源请走「配置变更」`,
         );
       }
       await this.authorizedPost('upgrade/upgrade_product_post', {
