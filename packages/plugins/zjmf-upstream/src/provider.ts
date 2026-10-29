@@ -11,6 +11,7 @@ import type {
   ServiceActionParam,
   ServiceActionResult,
   ServiceChangeInput,
+  ServiceChangeOption,
   ServiceDetail,
   ServiceRenewalInput,
   ServiceResource,
@@ -783,6 +784,14 @@ export class ZJMFProvider implements FulfillmentProvider {
     } catch {
       return null;
     }
+  }
+
+  async listChangeOptions(
+    ctx: ProviderServiceContext,
+  ): Promise<ServiceChangeOption[] | undefined> {
+    if (!ctx.service.providerServiceId) return undefined;
+    const { client } = await this.resolveForService(ctx.service);
+    return client.listChangeOptions(ctx.service.providerServiceId);
   }
 
   async getMetrics(ctx: ProviderServiceContext): Promise<MetricSeries[]> {

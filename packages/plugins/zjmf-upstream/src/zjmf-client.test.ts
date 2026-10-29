@@ -1553,3 +1553,88 @@ describe('财务版监控（/provision/chart 取证）', () => {
     expect([...requested].sort()).toEqual(['cpu', 'disk', 'flow', 'memory']);
   });
 });
+
+describe('可变更配置项白名单（upgrade/index 取证）', () => {
+  it('把 data.host[] 解析成 key/label/当前档位/可选档位', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(input.toString());
+      if (url.pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (url.pathname === '/upgrade/index/42') {
+        return json({
+          status: 200,
+          data: {
+            currency: { code: 'CNY' },
+            host: [
+              {
+                oid: 3395984,
+                id: 3395984,
+                flag: 1,
+                option_name: '快照数量',
+                option_type: 1,
+                qty: 0,
+                subid: 15711334,
+                suboption_name: '1个',
+                sub: [
+                  { id: 15711333, option_name: '0个', fee: null },
+                  { id: 15711334, option_name: '1个', fee: 0 },
+                  { id: 15711335, option_name: '2个', fee: 12.5 },
+                ],
+              },
+              {
+                oid: 3395985,
+                id: 3395985,
+                flag: 1,
+                option_name: 'IP数量',
+                subid: 15711336,
+                suboption_name: '2个IP',
+                sub: [{ id: 15711336, option_name: '2个IP' }],
+              },
+            ],
+          },
+        });
+      }
+      return json({ status: 200, data: {} });
+    });
+    const client = new ZJMFClient(
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+    const options = await client.listChangeOptions('42');
+    expect(options).toHaveLength(2);
+    const snapshot = options![0]!;
+    expect(snapshot.key).toBe('3395984');
+    expect(snapshot.label).toBe('快照数量');
+    expect(snapshot.current).toBe('15711334');
+    expect(snapshot.currentLabel).toBe('1个');
+    expect(snapshot.choices.map((choice) => choice.value)).toEqual([
+      '15711333',
+      '15711334',
+      '15711335',
+    ]);
+    // 只有真正产生费用的档位才带 fee，null / 0 不制造「加价 0 元」的噪音。
+    expect(snapshot.choices.map((choice) => choice.fee)).toEqual([undefined, undefined, 12.5]);
+    expect(options![1]!.label).toBe('IP数量');
+  });
+
+  it('V10 协议没有这份白名单，返回 undefined 让 store 回退', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => json({ status: 200, data: {} }));
+    const client = new ZJMFClient(
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'v10',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+    expect(await client.listChangeOptions('42')).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

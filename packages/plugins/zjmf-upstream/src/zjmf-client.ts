@@ -2,6 +2,7 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { isUnsafeHostname, isUnsafeIpAddress } from '@stackpanel/net-guard';
 import { z } from 'zod';
+import type { ServiceChangeOption } from '@stackpanel/sdk';
 
 export { isUnsafeIpAddress };
 
@@ -428,6 +429,60 @@ export class ZJMFClient {
       .filter((option): option is ZJMFConfigOption => option !== null);
     if (cycles.length === 0) return null;
     return { cycles, options };
+  }
+
+  /**
+   * 财务版：这台机器**实际能改哪些配置项**。
+   *
+   * `GET /upgrade/index/:id` 是上游自己的「变更配置」面板数据源：`data.host[]`
+   * 每行一个可选配置项（`oid` 与商品配置项 id 同域），`sub[]` 是允许改成的档位
+   * （带 `fee`）。实测响应约 200ms。
+   *
+   * 之所以要这份白名单：商品配置里有区域/系统/CPU 等一堆项，上游只受理其中
+   * 少数几项（这台机器是「快照数量」「IP 数量」）。没有它，报价会对任何选择
+   * 都说「可以」，用户付款后变更才被上游 400 打回。
+   *
+   * V10 的变更面是 `upgrade_config`/`common_config`，语义不同，先返回 undefined
+   * （store 回退到商品全量配置）。
+   */
+  async listChangeOptions(serviceId: string): Promise<ServiceChangeOption[] | undefined> {
+    if (this.connection.protocol !== 'finance') return undefined;
+    const data = await this.authorizedGet(`upgrade/index/${encodeURIComponent(serviceId)}`);
+    const payload = object(data['data']);
+    const rows = Array.isArray(payload['host']) ? payload['host'] : [];
+    const options: ServiceChangeOption[] = [];
+    for (const raw of rows) {
+      const row = object(raw);
+      const key = stringOrNull(row['oid']) ?? stringOrNull(row['id']);
+      const label = stringOrNull(row['option_name']);
+      if (!key || !label) continue;
+      const subRows = Array.isArray(row['sub']) ? row['sub'] : [];
+      const choices: ServiceChangeOption['choices'] = [];
+      for (const sub of subRows) {
+        const choice = object(sub);
+        const value = stringOrNull(choice['id']);
+        const choiceLabel =
+          stringOrNull(choice['option_name']) ?? stringOrNull(choice['show_pricing']);
+        if (!value || !choiceLabel) continue;
+        const fee = Number(choice['fee']);
+        choices.push({
+          value,
+          label: choiceLabel,
+          ...(Number.isFinite(fee) && fee > 0 ? { fee } : {}),
+        });
+      }
+      if (choices.length === 0) continue;
+      const current = stringOrNull(row['subid']);
+      const currentLabel = stringOrNull(row['suboption_name']);
+      options.push({
+        key,
+        label,
+        ...(current ? { current } : {}),
+        ...(currentLabel ? { currentLabel } : {}),
+        choices,
+      });
+    }
+    return options;
   }
 
   /**
