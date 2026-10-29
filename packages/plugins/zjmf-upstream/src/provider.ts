@@ -696,19 +696,23 @@ export class ZJMFProvider implements FulfillmentProvider {
     const flowLimitGb = flowLimit ? parseFlowLimitGb(flowLimit) : null;
     if (traffic) {
       // 单位 GB 已由「速率曲线积分 vs 累计用量」双向取证（见 client.getTrafficUsage）。
-      const usedText = `${traffic.totalGb.toFixed(2)} GB`;
+      // 只报「已用 / flow_limit」这个事实：上游超额后可以追加**临时流量**
+      // （`flow_packet_order_paid` → `addTempTraffic`，算总额时是 `limit + temp_traffic`），
+      // 而 `host/list` 不返回 `temp_traffic`。所以我们不知道有没有加过，
+      // 就不下「已超出套餐流量」的断言——超过 100% 时让数字自己说话。
       const percent =
         flowLimitGb && flowLimitGb > 0
           ? `（${((traffic.totalGb / flowLimitGb) * 100).toFixed(1)}%）`
           : '';
-      const over = flowLimitGb !== null && traffic.totalGb > flowLimitGb;
       fields.push({
         label: '已用流量',
-        value: `${usedText}${flowLimit ? ` / ${flowLimit}` : ''}${percent}${over ? '——已超出套餐流量' : ''}`,
+        value: `${traffic.totalGb.toFixed(2)} GB${flowLimit ? ` / ${flowLimit}` : ''}${percent}`,
         copyable: false,
       });
+    } else if (flowLimit) {
+      // 上游拿不到用量时才单独列额度，避免和「已用流量」行重复两遍 800G。
+      fields.push({ label: '流量额度', value: flowLimit, copyable: false });
     }
-    if (flowLimit) fields.push({ label: '流量额度', value: flowLimit, copyable: false });
     extraIps.forEach((value, index) => {
       fields.push({
         label: extraIps.length > 1 ? `附加 IP ${index + 1}` : '附加 IP',
