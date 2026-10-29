@@ -723,6 +723,12 @@ export class ZJMFProvider implements FulfillmentProvider {
     if (powerState !== 'UNKNOWN') {
       fields.push({ label: '电源状态', value: powerState === 'ON' ? '已开机' : '已关机' });
     }
+    // 只在**已进入救援**时提示：救援系统里 IP 与系统都会变，用户不知道就会以为
+    // 机器坏了。多一次约 200ms 的上游调用，失败静默忽略（不拖垮详情）。
+    const remoteInfo = await client.getRemoteInfo(providerServiceId).catch(() => null);
+    if (remoteInfo?.rescue) {
+      fields.push({ label: '救援模式', value: '已进入（点「退出救援」回到正常系统）' });
+    }
     return {
       title: ctx.service.productName ?? stringOr(detail['host']) ?? '服务',
       provisionedAt: stringOr(detail['openedAt']) ?? null,

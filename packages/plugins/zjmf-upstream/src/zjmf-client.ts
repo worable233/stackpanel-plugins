@@ -432,6 +432,24 @@ export class ZJMFClient {
   }
 
   /**
+   * 财务版：读救援模式状态（`provision/custom/:id` 的 `remoteInfo`，实测回 `{rescue:0}`）。
+   *
+   * 只在**已进入救援**时值得展示：机器重启进救援系统后 IP/系统都会变，用户看到
+   * 「救援模式：已进入」才知道该点「退出救援」，而不是以为机器坏了。
+   */
+  async getRemoteInfo(serviceId: string): Promise<{ rescue: boolean } | null> {
+    if (this.connection.protocol !== 'finance') return null;
+    const data = await this.authorizedPost(
+      `provision/custom/${encodeURIComponent(serviceId)}`,
+      { func: 'remoteInfo' },
+    );
+    const payload = object(data['data'] ?? data);
+    const rescue = payload['rescue'];
+    if (rescue === undefined || rescue === null) return null;
+    return { rescue: Number(rescue) === 1 || rescue === true || rescue === '1' };
+  }
+
+  /**
    * 财务版：这台机器**实际能改哪些配置项**。
    *
    * `GET /upgrade/index/:id` 是上游自己的「变更配置」面板数据源：`data.host[]`

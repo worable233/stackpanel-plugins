@@ -1719,3 +1719,42 @@ describe('降配（负差价）是合法报价', () => {
     expect(quote?.price).toBe(0);
   });
 });
+
+describe('救援模式状态（remoteInfo）', () => {
+  const clientFor = (rescue: unknown) => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(input.toString());
+      if (url.pathname === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      if (url.pathname === '/provision/custom/42') {
+        return json({ status: 200, msg: '获取成功', data: { rescue } });
+      }
+      return json({ status: 200, data: {} });
+    });
+    return new ZJMFClient(
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+  };
+
+  it('rescue=1 视为已进入救援', async () => {
+    expect(await clientFor(1).getRemoteInfo('42')).toEqual({ rescue: true });
+  });
+
+  it('rescue=0 视为正常系统', async () => {
+    expect(await clientFor(0).getRemoteInfo('42')).toEqual({ rescue: false });
+  });
+
+  it('V10 没有 remoteInfo 契约，返回 null 不猜', async () => {
+    const client = new ZJMFClient(
+      { id: 'up', baseUrl: 'https://billing.example/', protocol: 'v10', username: 'u', password: 'p' },
+      vi.fn<typeof fetch>(async () => json({ status: 200, data: {} })),
+    );
+    expect(await client.getRemoteInfo('42')).toBeNull();
+  });
+});
