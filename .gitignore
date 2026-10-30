@@ -33,6 +33,7 @@ test-results/
 *.tgz
 
 # Local tool state
+.probe/
 .agents/
 skills-lock.json
 opencode.json
