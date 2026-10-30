@@ -65,6 +65,7 @@ import {
   type BillingContext,
   type SettleResult,
 } from './billing.js';
+import { checkQuota, recordQuotaTokens, releaseQuotaRequest, type QuotaRule } from './quota.js';
 import {
   applyBodyRewrites,
   applyHeaderRewrites,
@@ -600,8 +601,35 @@ async function handleRelay(
       retryAfterSeconds: rpm.retryAfterSeconds ?? null,
     });
   }
+  /**
+   * 长周期配额（P1）：每 N 小时 X 次 / Y token。与 RPM 分开检查——RPM 挡瞬时
+   * 突发，配额管长期公平分配（「零元模型每 6 小时 100 次」）。
+   *
+   * 次数在准入时**原子占用**（`incr` 后超限则回滚），所以并发请求不会一起放行。
+   * token 只能读到已用量：请求还没跑，真实 token 数不存在。
+   */
+  const quota = await checkQuota({
+    rule: quotaRuleOf(key),
+    keyId: key.id,
+    userId: key.userId,
+  });
+  if (!quota.allowed) {
+    const used = quota.used ?? 0;
+    const limit = quota.limit ?? 0;
+    const isRequests = (quota.rule?.maxRequests ?? 0) > 0 && limit === quota.rule?.maxRequests;
+    throw new GatewayError(
+      429,
+      'quota_exceeded',
+      isRequests
+        ? `请求配额已用尽（${used}/${limit} 次每 ${quota.rule?.windowHours ?? 0} 小时）`
+        : `Token 配额已用尽（${used}/${limit} 个每 ${quota.rule?.windowHours ?? 0} 小时）`,
+      { retryAfterSeconds: quota.retryAfterSeconds ?? null },
+    );
+  }
+
   const concurrency = await scheduler.checkConcurrency(admission);
   if (!concurrency.ok) {
+    await releaseQuotaRequest(quota);
     throw new GatewayError(concurrency.status, concurrency.code, concurrency.message, {
       retryAfterSeconds: concurrency.retryAfterSeconds ?? null,
     });
@@ -1158,6 +1186,9 @@ async function handleRelay(
     if (accountLease) await rt.state.releaseLease(accountLease).catch(() => false);
     await releaseLeases(rt, keyLeases);
     if (!billingDone) {
+      // 请求没走到结算：把准入时占用的配额次数退还。免费额度的语义是「成功
+      // 用到的次数」，让上游故障吃掉用户额度会引发成片投诉。
+      await releaseQuotaRequest(quota).catch(() => undefined);
       await release(rt.wallet, rt.logger, billing).catch((error: unknown) => {
         rt.logger.warn(
           `llm-gateway: release after failure failed: ${redactSecrets(String(error))}`,
@@ -1719,7 +1750,14 @@ async function settleUsage(
 /** 结算成功后累加 key 用量（addPolicyUsage / addLegacyUsage 是唯一入口）。 */
 async function afterSettle(
   rt: GatewayRuntime,
-  key: { id: string; userId: string; source: 'token' | 'legacy' },
+  key: {
+    id: string;
+    userId: string;
+    source: 'token' | 'legacy';
+    quotaWindowHours?: number;
+    quotaMaxRequests?: number;
+    quotaMaxTokens?: number;
+  },
   result: SettleResult,
   accountId: string | null,
 ): Promise<void> {
@@ -1735,6 +1773,37 @@ async function afterSettle(
   if (result.amount > 0) {
     await recordBudget(rt, key.userId, result.amount).catch(() => undefined);
   }
+  // 长周期 token 配额按真实用量累加。放在结算之后：token 数是上游算完才有的，
+  // 无法在准入时预估。失败不影响计费（recordQuotaTokens 内部吞错）。
+  const tokens = (result.log.promptTokens ?? 0) + (result.log.completionTokens ?? 0);
+  if (tokens > 0) {
+    await recordQuotaTokens({
+      rule: quotaRuleOf(key),
+      keyId: key.id,
+      userId: key.userId,
+      tokens,
+    }).catch(() => undefined);
+  }
+}
+
+/** 从 key 记录里取出长周期配额规则；未配置时返回 null（不检查）。 */
+export function quotaRuleOf(key: {
+  quotaWindowHours?: number;
+  quotaMaxRequests?: number;
+  quotaMaxTokens?: number;
+}): QuotaRule | null {
+  const windowHours = key.quotaWindowHours ?? 0;
+  const maxRequests = key.quotaMaxRequests ?? 0;
+  const maxTokens = key.quotaMaxTokens ?? 0;
+  if (windowHours <= 0) return null;
+  if (maxRequests <= 0 && maxTokens <= 0) return null;
+  return {
+    scope: 'key',
+    windowHours,
+    maxRequests,
+    maxTokens,
+    enabled: true,
+  };
 }
 
 /**

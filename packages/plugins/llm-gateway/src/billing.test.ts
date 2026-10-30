@@ -276,6 +276,51 @@ describe('estimateReserve', () => {
     // 2*500 + 30*50 = 2500（外加极小 token 部分向上取整）。
     expect(amount).toBe(2500);
   });
+
+  /**
+   * 回归：真实事故——基础价 1e6/2e6，阶梯价 2e6/4e6，预留按基础价算只有 82 分，
+   * 实际命中阶梯要 142 分。内核 `settleHold` 把结算夹在冻结额内（契约），
+   * 超出 60 分静默蒸发。预留必须按**最坏阶梯价**取上界。
+   */
+  it('reserves at the worst-case tier price, not the base price', () => {
+    const tiered: ModelPrice = {
+      inputPrice: 1_000_000,
+      outputPrice: 2_000_000,
+      multiplier: 100,
+      tiers: [{ from: 10, inputPrice: 2_000_000, outputPrice: 4_000_000 }],
+    };
+    const base = estimateReserve({ price: { ...tiered, tiers: [] }, bodyText: 'hi', maxTokens: 1 });
+    const carved = estimateReserve({ price: tiered, bodyText: 'hi', maxTokens: 1 });
+    // 基础价：1e6/1e6 token ≈ 1 分 + max_tokens 1；阶梯价必须显著更大。
+    expect(carved).toBeGreaterThan(base);
+    // 逐字段取 max：output 单价翻倍，预留金额至少要覆盖「按阶梯价顶格算」的输出部分。
+    const worst = Math.max(
+      Math.round((1 * 4_000_000) / 1_000_000),
+      Math.round((1 * 2_000_000) / 1_000_000),
+    );
+    expect(carved).toBeGreaterThanOrEqual(worst);
+  });
+
+  it('takes the per-field maximum across tiers, not just the highest tier', () => {
+    const multi: ModelPrice = {
+      inputPrice: 0,
+      outputPrice: 0,
+      multiplier: 100,
+      tiers: [
+        { from: 10, inputPrice: 9_000_000, outputPrice: 1_000_000 },
+        { from: 20, inputPrice: 1_000_000, outputPrice: 9_000_000 },
+      ],
+    };
+    const amount = estimateReserve({ price: multi, bodyText: 'hi', maxTokens: 1_000_000 });
+    // 若只挑「最高的那一档」（from:20）会漏掉 input 的 9_000_000。
+    // 逐字段取 max 后，input 与 output 都按 9_000_000 估。
+    expect(amount).toBeGreaterThanOrEqual(9_000_000);
+  });
+
+  it('zero-price models still reserve nothing', () => {
+    const free: ModelPrice = { inputPrice: 0, outputPrice: 0, multiplier: 100 };
+    expect(estimateReserve({ price: free, bodyText: 'hello world', maxTokens: 100_000 })).toBe(0);
+  });
 });
 
 describe('reserve', () => {

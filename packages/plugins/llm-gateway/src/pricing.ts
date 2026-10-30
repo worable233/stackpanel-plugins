@@ -160,6 +160,41 @@ export function priceForUsage(price: ModelPrice, promptTokens: number): ModelPri
   };
 }
 
+/**
+ * 「最坏情况单价」：把基础价与所有阶梯价里**每一项单价的最大值**取出来。
+ *
+ * 存在的理由（真实漏损事故）：预留按基础价估算，而阶梯价可以比基础价高一个
+ * 数量级。预留 82 分、实际 142 分，内核 `settleHold` 会按契约把结算额夹到
+ * 冻结额上限（`Math.min(settledAmount, hold.amount)`，有测试固化），于是超出的
+ * 60 分**静默蒸发**——不报错、不留痕。修复办法是让预留本身就用最坏情况的价：
+ * 多冻的部分结算时原样退还，成本是短暂的余额占用；少冻的代价是永久漏损。
+ *
+ * 为什么按字段取 max 而不是挑「最贵的那一档」：不同阶梯可以各贵一项
+ * （比如高档 input 更贵、低档 output 更贵），逐字段取最大值才是真正的上界。
+ * 时段窗口价（`windows`）不参与：它在请求入口就折进 `priceSnapshot`，
+ * `served` 已经是折后价。
+ */
+export function worstCasePrice(price: ModelPrice): ModelPrice {
+  const tiers = price.tiers ?? [];
+  if (tiers.length === 0) return price;
+  const maxOf = (pick: (row: PriceTier) => number | undefined, fallback: number): number => {
+    let max = fallback;
+    for (const tier of tiers) {
+      const value = pick(tier);
+      if (typeof value === 'number' && Number.isFinite(value) && value > max) max = value;
+    }
+    return max;
+  };
+  return {
+    ...price,
+    inputPrice: maxOf((t) => t.inputPrice, price.inputPrice),
+    outputPrice: maxOf((t) => t.outputPrice, price.outputPrice),
+    cacheReadPrice: maxOf((t) => t.cacheReadPrice, price.cacheReadPrice ?? 0),
+    cacheWritePrice: maxOf((t) => t.cacheWritePrice, price.cacheWritePrice ?? 0),
+    reasoningPrice: maxOf((t) => t.reasoningPrice, price.reasoningPrice ?? 0),
+  };
+}
+
 /** 权限组折扣（% off，0–99）。与内核商店同一口径：取用户各组中的最大折扣。 */
 export function bestDiscountPercent(groups: ReadonlyArray<{ discount?: number | null }>): number {
   let max = 0;

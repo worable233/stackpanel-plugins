@@ -26,6 +26,10 @@ export const keySchema = z.object({
   concurrencyLimit: z.number(),
   quotaLimit: z.number().nullable(),
   quotaUsed: z.number(),
+  /** 长周期配额（P1）：每 N 小时 X 次 / Y token；0 = 不限。旧数据可能缺字段。 */
+  quotaWindowHours: z.number().default(0),
+  quotaMaxRequests: z.number().default(0),
+  quotaMaxTokens: z.number().default(0),
   expiresAt: z.string().nullable(),
   lastUsedAt: z.string().nullable(),
   createdAt: z.string(),

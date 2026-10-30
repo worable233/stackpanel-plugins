@@ -37,7 +37,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PluginLogger, WalletHold, WalletService } from '@stackpanel/sdk';
 import type { ModelPrice, ServedPrice, TokenUsage } from './pricing.js';
-import { computeAmount, computeCostAmount, estimateTokens } from './pricing.js';
+import { computeAmount, computeCostAmount, estimateTokens, worstCasePrice } from './pricing.js';
 import { consumeEntitlement, getEntitlement, patchUsageLog } from './repository.js';
 import { remainingOf, splitSettlement } from './entitlements.js';
 import {
@@ -59,6 +59,11 @@ export const DEFAULT_RESERVE_MAX_TOKENS = 4_096;
 
 export interface ReserveEstimateInput {
   price: ModelPrice;
+  /**
+   * 权限组折扣（% off）。预留必须用**折前**的最坏价：折后价低于实际应收时
+   * 一样会漏损，所以这里刻意不传 discountPercent 给 `computeAmount`。
+   */
+  discountPercent?: number | undefined;
   /** 请求体原文（用于估 prompt）。 */
   bodyText: string;
   /** 客户端给的 max_tokens / max_completion_tokens / maxOutputTokens。 */
@@ -77,6 +82,10 @@ export interface ReserveEstimateInput {
  *
  * 注意 prompt 侧用字符粗估（`estimateTokens`）。Estimate 偏小会把余额不足的
  * 请求放过头，所以对超长 body 额外留 1.5 倍余量。
+ *
+ * **按最坏情况估价**（`worstCasePrice`）：阶梯价可能比基础价贵一个数量级，而
+ * 内核 `settleHold` 把结算额夹在冻结额以内（契约，有测试）。预留少一分，结算
+ * 就永久少收一分。多冻的部分结算时全额退还，因此这里必须取上界。
  */
 export function estimateReserve(input: ReserveEstimateInput): number {
   const promptRough = estimateTokens(input.bodyText);
@@ -89,13 +98,18 @@ export function estimateReserve(input: ReserveEstimateInput): number {
   const imageCount = input.imageCount && input.imageCount > 0 ? Math.floor(input.imageCount) : 0;
   const audioSeconds =
     input.audioSeconds && input.audioSeconds > 0 ? Math.ceil(input.audioSeconds) : 0;
-  return computeAmount(input.price, {
-    promptTokens: promptBound,
-    completionTokens: completion,
-    totalTokens: promptBound + completion,
-    ...(imageCount > 0 ? { imageCount } : {}),
-    ...(audioSeconds > 0 ? { audioSeconds } : {}),
-  });
+  return computeAmount(
+    worstCasePrice(input.price),
+    {
+      promptTokens: promptBound,
+      completionTokens: completion,
+      totalTokens: promptBound + completion,
+      ...(imageCount > 0 ? { imageCount } : {}),
+      ...(audioSeconds > 0 ? { audioSeconds } : {}),
+    },
+    // 折前价：预留偏小同样漏损，折扣只在结算时生效。
+    {},
+  );
 }
 
 /* ------------------------------ 计费上下文 ------------------------------ */
@@ -449,6 +463,27 @@ export async function settle(input: SettleInput): Promise<SettleResult> {
       entitlementAmount,
     });
     return { amount, log, settled: true };
+  }
+
+  /**
+   * 漏损防护：内核 `settleHold` 会按契约把结算额夹到冻结额上限
+   * （`Math.min(settledAmount, hold.amount)`，`wallet-holds.test.ts` 有断言）。
+   * 也就是说「实际应付 > 预留」时，超出部分不会被扣，且**不会报错**。
+   *
+   * 预留已经改用 `worstCasePrice` 取上界，正常情况下不会触发。但 config 在
+   * 请求中途被改价、表达式定价、上游 token 计数异常都可能让实际价突破上界。
+   * 这种钱不能静默丢：留一条 error 日志（带 log id 可对账），并把差额写进
+   * 台账备注的下游可查字段（`undeclaredAmount`）。
+   */
+  const shortfall =
+    context.hold && context.hold.amount < walletAmount ? walletAmount - context.hold.amount : 0;
+  if (shortfall > 0) {
+    input.logger.error(
+      `llm-gateway: settle shortfall ${shortfall} ${context.currency} for usage ${log.id} ` +
+        `(model=${context.model}, hold=${context.hold?.id ?? '-'}, ` +
+        `frozen=${context.hold?.amount ?? 0}, due=${walletAmount}) — ` +
+        `reserve was under-estimated; the excess is NOT charged (kernel caps settlement at the frozen amount)`,
+    );
   }
 
   try {

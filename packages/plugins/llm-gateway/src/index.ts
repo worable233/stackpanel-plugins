@@ -293,6 +293,10 @@ const modelsField = z.preprocess(
 const optionalInt = (min: number, max: number) =>
   z.preprocess(blankToUndefined, z.coerce.number().int().min(min).max(max).optional());
 
+/** 允许小数的可选数值（配额窗口按小时，允许 0.5 小时这类设置）。 */
+const optionalNumber = (min: number, max: number) =>
+  z.preprocess(blankToUndefined, z.coerce.number().min(min).max(max).optional());
+
 const optionalString = (max: number) =>
   z.preprocess(blankToUndefined, z.string().min(1).max(max).optional());
 
@@ -304,6 +308,14 @@ const createKeySchema = z.object({
   models: modelsField,
   rpmLimit: optionalInt(0, 1_000_000),
   concurrencyLimit: optionalInt(0, 10_000),
+  /**
+   * 长周期配额（P1）：每 `quotaWindowHours` 小时最多 `quotaMaxRequests` 次 /
+   * `quotaMaxTokens` 个 token。0 = 不限。用于「零元免费模型每 6 小时 100 次」
+   * 这类公平分配；与 60 秒窗口的 `rpmLimit` 互补，不是替代。
+   */
+  quotaWindowHours: optionalNumber(0, 8760),
+  quotaMaxRequests: optionalInt(0, 10_000_000),
+  quotaMaxTokens: optionalInt(0, 2_000_000_000),
   quotaLimit: z.preprocess(
     blankToUndefined,
     z.number().int().min(0).max(2_000_000_000).nullable().optional(),
@@ -317,6 +329,14 @@ const updateKeySchema = z.object({
   models: modelsField,
   rpmLimit: optionalInt(0, 1_000_000),
   concurrencyLimit: optionalInt(0, 10_000),
+  /**
+   * 长周期配额（P1）：每 `quotaWindowHours` 小时最多 `quotaMaxRequests` 次 /
+   * `quotaMaxTokens` 个 token。0 = 不限。用于「零元免费模型每 6 小时 100 次」
+   * 这类公平分配；与 60 秒窗口的 `rpmLimit` 互补，不是替代。
+   */
+  quotaWindowHours: optionalNumber(0, 8760),
+  quotaMaxRequests: optionalInt(0, 10_000_000),
+  quotaMaxTokens: optionalInt(0, 2_000_000_000),
   quotaLimit: z.preprocess(
     blankToUndefined,
     z.number().int().min(0).max(2_000_000_000).nullable().optional(),
@@ -1575,6 +1595,9 @@ export const llmGatewayPlugin = definePlugin({
               concurrencyLimit: policy?.concurrencyLimit ?? 0,
               quotaLimit: policy?.quotaLimit ?? null,
               quotaUsed: policy?.quotaUsed ?? 0,
+              quotaWindowHours: policy?.quotaWindowHours ?? 0,
+              quotaMaxRequests: policy?.quotaMaxRequests ?? 0,
+              quotaMaxTokens: policy?.quotaMaxTokens ?? 0,
               expiresAt: token.expiresAt,
               lastUsedAt: token.lastUsedAt,
               createdAt: token.createdAt,
@@ -1609,6 +1632,9 @@ export const llmGatewayPlugin = definePlugin({
           rpmLimit: parsed.data.rpmLimit ?? 0,
           concurrencyLimit: parsed.data.concurrencyLimit ?? 0,
           quotaLimit: parsed.data.quotaLimit ?? null,
+          quotaWindowHours: parsed.data.quotaWindowHours ?? 0,
+          quotaMaxRequests: parsed.data.quotaMaxRequests ?? 0,
+          quotaMaxTokens: parsed.data.quotaMaxTokens ?? 0,
         });
         await state()
           .set(`gw:reveal:${userId}`, created.plaintext, 5 * 60 * 1000)
@@ -1637,7 +1663,17 @@ export const llmGatewayPlugin = definePlugin({
           (item) => item.id === params.data.id && item.scopes.includes(GATEWAY_SCOPE),
         );
         if (!token) throw new GatewayError(404, '密钥不存在');
-        const { name, status, models, rpmLimit, concurrencyLimit, quotaLimit } = body.data;
+        const {
+          name,
+          status,
+          models,
+          rpmLimit,
+          concurrencyLimit,
+          quotaLimit,
+          quotaWindowHours,
+          quotaMaxRequests,
+          quotaMaxTokens,
+        } = body.data;
         const tokenPatch = defined({ name, status });
         if (Object.keys(tokenPatch).length > 0) {
           await auth().updatePlatformToken(token.id, tokenPatch);
@@ -1647,6 +1683,9 @@ export const llmGatewayPlugin = definePlugin({
           rpmLimit,
           concurrencyLimit,
           quotaLimit,
+          quotaWindowHours,
+          quotaMaxRequests,
+          quotaMaxTokens,
         });
         if (Object.keys(policyPatch).length > 0) {
           await upsertPolicy(token.id, policyPatch);

@@ -36,6 +36,10 @@ export interface GatewayKey {
   concurrencyLimit: number;
   quotaLimit: number | null;
   quotaUsed: number;
+  /** 长周期配额（P1）：每 `quotaWindowHours` 小时最多 X 次 / Y token；0 = 不限。 */
+  quotaWindowHours: number;
+  quotaMaxRequests: number;
+  quotaMaxTokens: number;
   expiresAt: string | null;
   /** 凭证来源：内核平台凭证，或历史表兜底。 */
   source: 'token' | 'legacy';

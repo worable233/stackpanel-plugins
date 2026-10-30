@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "revision": "a8d6d9a691fd",
+  "revision": "48cbd7404f8e",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
@@ -171,6 +171,21 @@
           "name": "concurrencyLimit",
           "type": "integer",
           "min": 0
+        },
+        {
+          "name": "quotaWindowHours",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "quotaMaxRequests",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "quotaMaxTokens",
+          "type": "integer",
+          "min": 0
         }
       ]
     },
@@ -211,6 +226,21 @@
         },
         {
           "name": "concurrencyLimit",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "quotaWindowHours",
+          "type": "number",
+          "min": 0
+        },
+        {
+          "name": "quotaMaxRequests",
+          "type": "integer",
+          "min": 0
+        },
+        {
+          "name": "quotaMaxTokens",
           "type": "integer",
           "min": 0
         }
@@ -904,7 +934,11 @@
       "keys.models": "模型白名单（逗号分隔，留空=不限）",
       "keys.name": "名称",
       "keys.namePlaceholder": "例如：生产环境",
+      "keys.quotaMaxRequests": "每窗口最多请求次数",
+      "keys.quotaMaxTokens": "每窗口最多 token 数",
       "keys.quotaUsed": "{models} · 已用 {used}",
+      "keys.quotaWindowHours": "配额窗口（小时）",
+      "keys.quotaWindowHoursHelp": "0 = 不限。例如填 6 表示「每 6 小时」重新计一次额度；与上面按分钟的限制互补。",
       "keys.revealed": "新密钥已生成（仅显示一次，请立即保存）",
       "keys.rpm": "每分钟请求上限（0=不限）",
       "keys.saveEdit": "保存修改",
@@ -1252,7 +1286,11 @@
       "keys.models": "模型白名單（逗號分隔，留空=不限）",
       "keys.name": "名稱",
       "keys.namePlaceholder": "例如：生產環境",
+      "keys.quotaMaxRequests": "每視窗最多請求次數",
+      "keys.quotaMaxTokens": "每視窗最多 token 數",
       "keys.quotaUsed": "{models} · 已用 {used}",
+      "keys.quotaWindowHours": "配額視窗（小時）",
+      "keys.quotaWindowHoursHelp": "0 = 不限。例如填 6 表示「每 6 小時」重新計一次額度；與上面按分鐘的限制互補。",
       "keys.revealed": "新金鑰已生成（僅顯示一次，請立即儲存）",
       "keys.rpm": "每分鐘請求上限（0=不限）",
       "keys.saveEdit": "儲存修改",
@@ -1600,7 +1638,11 @@
       "keys.models": "模型白名單（逗號分隔，留空=不限）",
       "keys.name": "名稱",
       "keys.namePlaceholder": "例如：生產環境",
+      "keys.quotaMaxRequests": "每視窗最多請求次數",
+      "keys.quotaMaxTokens": "每視窗最多 token 數",
       "keys.quotaUsed": "{models} · 已用 {used}",
+      "keys.quotaWindowHours": "配額視窗（小時）",
+      "keys.quotaWindowHoursHelp": "0 = 不限。例如填 6 表示「每 6 小時」重新計一次額度；與上面按分鐘的限制互補。",
       "keys.revealed": "新金鑰已生成（僅顯示一次，請立即儲存）",
       "keys.rpm": "每分鐘請求上限（0=不限）",
       "keys.saveEdit": "儲存修改",
@@ -1948,7 +1990,11 @@
       "keys.models": "Model allowlist (comma separated, empty = unrestricted)",
       "keys.name": "Name",
       "keys.namePlaceholder": "e.g. production",
+      "keys.quotaMaxRequests": "Max requests per window",
+      "keys.quotaMaxTokens": "Max tokens per window",
       "keys.quotaUsed": "{models} · used {used}",
+      "keys.quotaWindowHours": "Quota window (hours)",
+      "keys.quotaWindowHoursHelp": "0 = unlimited. E.g. 6 means the quota resets every 6 hours; complements the per-minute limits above.",
       "keys.revealed": "A new key was generated (shown once, save it now)",
       "keys.rpm": "Requests per minute (0 = unlimited)",
       "keys.saveEdit": "Save changes",
@@ -2296,7 +2342,11 @@
       "keys.models": "Model allowlist (comma separated, empty = unrestricted)",
       "keys.name": "Name",
       "keys.namePlaceholder": "e.g. production",
+      "keys.quotaMaxRequests": "期間あたりの最大リクエスト数",
+      "keys.quotaMaxTokens": "期間あたりの最大トークン数",
       "keys.quotaUsed": "{models} · used {used}",
+      "keys.quotaWindowHours": "クォータ期間（時間）",
+      "keys.quotaWindowHoursHelp": "0 = 無制限。例：6 を指定すると 6 時間ごとにクォータがリセットされます。上の毎分制限と補完関係にあります。",
       "keys.revealed": "A new key was generated (shown once, save it now)",
       "keys.rpm": "Requests per minute (0 = unlimited)",
       "keys.saveEdit": "Save changes",
@@ -2644,7 +2694,11 @@
       "keys.models": "Model allowlist (comma separated, empty = unrestricted)",
       "keys.name": "Name",
       "keys.namePlaceholder": "e.g. production",
+      "keys.quotaMaxRequests": "기간당 최대 요청 수",
+      "keys.quotaMaxTokens": "기간당 최대 토큰 수",
       "keys.quotaUsed": "{models} · used {used}",
+      "keys.quotaWindowHours": "할당량 기간(시간)",
+      "keys.quotaWindowHoursHelp": "0 = 무제한. 예: 6을 입력하면 6시간마다 할당량이 초기화됩니다. 위의 분당 제한과 상호 보완적입니다.",
       "keys.revealed": "A new key was generated (shown once, save it now)",
       "keys.rpm": "Requests per minute (0 = unlimited)",
       "keys.saveEdit": "Save changes",
@@ -2992,7 +3046,11 @@
       "keys.models": "Model allowlist (comma separated, empty = unrestricted)",
       "keys.name": "Name",
       "keys.namePlaceholder": "e.g. production",
+      "keys.quotaMaxRequests": "Requêtes max par fenêtre",
+      "keys.quotaMaxTokens": "Tokens max par fenêtre",
       "keys.quotaUsed": "{models} · used {used}",
+      "keys.quotaWindowHours": "Fenêtre de quota (heures)",
+      "keys.quotaWindowHoursHelp": "0 = illimité. Ex. 6 signifie que le quota se réinitialise toutes les 6 heures ; complète les limites par minute ci-dessus.",
       "keys.revealed": "A new key was generated (shown once, save it now)",
       "keys.rpm": "Requests per minute (0 = unlimited)",
       "keys.saveEdit": "Save changes",

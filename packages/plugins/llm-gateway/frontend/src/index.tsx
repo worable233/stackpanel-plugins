@@ -577,6 +577,30 @@ function CreateKeyDialog({
               <Label htmlFor="key-concurrency">{tr('keys.concurrency')}</Label>
               <Input id="key-concurrency" name="concurrencyLimit" type="number" min={0} />
             </div>
+            {/*
+              长周期配额：每 N 小时 X 次 / Y token。与上面的「每分钟请求数」互补——
+              前者挡瞬时突发，这里管长期公平分配（零元免费模型就靠它）。
+            */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="key-quota-hours">{tr('keys.quotaWindowHours')}</Label>
+              <Input
+                id="key-quota-hours"
+                name="quotaWindowHours"
+                type="number"
+                min={0}
+                step={0.5}
+                placeholder="6"
+              />
+              <p className="text-xs text-muted-foreground">{tr('keys.quotaWindowHoursHelp')}</p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="key-quota-req">{tr('keys.quotaMaxRequests')}</Label>
+              <Input id="key-quota-req" name="quotaMaxRequests" type="number" min={0} />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="key-quota-tok">{tr('keys.quotaMaxTokens')}</Label>
+              <Input id="key-quota-tok" name="quotaMaxTokens" type="number" min={0} />
+            </div>
           </div>
           <DialogFooter>
             <Button type="submit">{tr('keys.create')}</Button>
@@ -756,6 +780,46 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
                               defaultValue={key.concurrencyLimit}
                             />
                           </div>
+                          <div className="grid gap-1.5">
+                            <Label htmlFor={`key-quota-hours-${key.id}`}>
+                              {tr('keys.quotaWindowHours')}
+                            </Label>
+                            <Input
+                              id={`key-quota-hours-${key.id}`}
+                              name="quotaWindowHours"
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              defaultValue={key.quotaWindowHours}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {tr('keys.quotaWindowHoursHelp')}
+                            </p>
+                          </div>
+                          <div className="grid gap-1.5">
+                            <Label htmlFor={`key-quota-req-${key.id}`}>
+                              {tr('keys.quotaMaxRequests')}
+                            </Label>
+                            <Input
+                              id={`key-quota-req-${key.id}`}
+                              name="quotaMaxRequests"
+                              type="number"
+                              min={0}
+                              defaultValue={key.quotaMaxRequests}
+                            />
+                          </div>
+                          <div className="grid gap-1.5">
+                            <Label htmlFor={`key-quota-tok-${key.id}`}>
+                              {tr('keys.quotaMaxTokens')}
+                            </Label>
+                            <Input
+                              id={`key-quota-tok-${key.id}`}
+                              name="quotaMaxTokens"
+                              type="number"
+                              min={0}
+                              defaultValue={key.quotaMaxTokens}
+                            />
+                          </div>
                         </div>
                         <DialogFooter>
                           <Button type="submit">{tr('keys.saveEdit')}</Button>
@@ -876,6 +940,9 @@ const frontend: FrontendPackage = {
           { name: 'expiresInDays', type: 'integer', min: 1, max: 3650 },
           { name: 'rpmLimit', type: 'integer', min: 0 },
           { name: 'concurrencyLimit', type: 'integer', min: 0 },
+          { name: 'quotaWindowHours', type: 'number', min: 0 },
+          { name: 'quotaMaxRequests', type: 'integer', min: 0 },
+          { name: 'quotaMaxTokens', type: 'integer', min: 0 },
         ],
       },
       {
@@ -891,6 +958,9 @@ const frontend: FrontendPackage = {
           { name: 'models', type: 'string', maxLength: 500 },
           { name: 'rpmLimit', type: 'integer', min: 0 },
           { name: 'concurrencyLimit', type: 'integer', min: 0 },
+          { name: 'quotaWindowHours', type: 'number', min: 0 },
+          { name: 'quotaMaxRequests', type: 'integer', min: 0 },
+          { name: 'quotaMaxTokens', type: 'integer', min: 0 },
         ],
       },
       {

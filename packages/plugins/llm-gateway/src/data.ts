@@ -105,6 +105,17 @@ export const gatewayKeyPolicyModel = defineModel({
     concurrencyLimit: z.number().int().default(0),
     quotaLimit: z.number().int().nullable().optional(),
     quotaUsed: z.number().default(0),
+    /**
+     * 长周期请求配额（P1）：每 `quotaWindowHours` 小时最多 `quotaMaxRequests` 次、
+     * `quotaMaxTokens` 个 token。0 = 不限。
+     *
+     * 与 `quotaLimit` 的区别：`quotaLimit` 是**累计金额**上限（用完即止，充值也不
+     * 复位）；这里是**滚动窗口**内的用量（换窗口自动清零），适合「零元模型每 6
+     * 小时 100 次」这类长期公平分配。两者可同时启用。
+     */
+    quotaWindowHours: z.number().default(0),
+    quotaMaxRequests: z.number().int().default(0),
+    quotaMaxTokens: z.number().int().default(0),
   }),
   indexes: [
     { fields: ['apiTokenId'], unique: true, types: { apiTokenId: 'string' } },
@@ -625,6 +636,17 @@ export const gatewayLegacyKeyModel = defineModel({
     concurrencyLimit: z.number().int().default(0),
     quotaLimit: z.number().int().nullable().optional(),
     quotaUsed: z.number().default(0),
+    /**
+     * 长周期请求配额（P1）：每 `quotaWindowHours` 小时最多 `quotaMaxRequests` 次、
+     * `quotaMaxTokens` 个 token。0 = 不限。
+     *
+     * 与 `quotaLimit` 的区别：`quotaLimit` 是**累计金额**上限（用完即止，充值也不
+     * 复位）；这里是**滚动窗口**内的用量（换窗口自动清零），适合「零元模型每 6
+     * 小时 100 次」这类长期公平分配。两者可同时启用。
+     */
+    quotaWindowHours: z.number().default(0),
+    quotaMaxRequests: z.number().int().default(0),
+    quotaMaxTokens: z.number().int().default(0),
     expiresAt: z.string().nullable().optional(),
     lastUsedAt: z.string().nullable().optional(),
   }),
@@ -681,6 +703,13 @@ export interface GatewayKeyPolicyData {
   concurrencyLimit: number;
   quotaLimit?: number | null;
   quotaUsed: number;
+  /**
+   * 长周期配额（P1）：每 N 小时最多 X 次 / Y token；0 = 不限。
+   * 可选是历史数据兼容需要（旧行没有这三个字段），读取方统一用 `?? 0`。
+   */
+  quotaWindowHours?: number;
+  quotaMaxRequests?: number;
+  quotaMaxTokens?: number;
 }
 
 export interface GatewayUserSettingData {
@@ -894,6 +923,10 @@ export interface GatewayLegacyKeyData {
   concurrencyLimit: number;
   quotaLimit?: number | null;
   quotaUsed: number;
+  /** 长周期配额（P1）：每 N 小时最多 X 次 / Y token；0 = 不限。 */
+  quotaWindowHours: number;
+  quotaMaxRequests: number;
+  quotaMaxTokens: number;
   expiresAt?: string | null;
   lastUsedAt?: string | null;
 }
