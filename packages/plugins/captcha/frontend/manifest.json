@@ -28,9 +28,8 @@
   "accountRoutes": [],
   "accountWidgets": [],
   "files": [
-    "frontend/dist/admin.js",
-    "frontend/dist/chunk-XMRNXGGG.js",
-    "frontend/dist/index.js"
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
   ],
   "locales": [
     "zh-CN",

@@ -292,9 +292,16 @@ function CaptchaSettings(props: AdminPageComponentProps): ReactElement {
   );
 }
 
+// The host resolves a manifest route's `component` against the loaded module's
+// `adminPages` map, so the export name is part of the ABI, not a convenience.
+// Only `src/index.tsx` is bundled (shared tsup preset), which makes a separate
+// `admin.tsx` a file nothing loads — it is folded in here instead.
+export const adminPages = { 'admin/settings': CaptchaSettings } as const;
+
 const frontend: FrontendPackage = {
   locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
   messages,
+  adminPages,
   ui: {
     adminRoutes: [
       {
@@ -302,6 +309,8 @@ const frontend: FrontendPackage = {
         component: 'admin/settings',
         permission: 'captcha.admin',
         systemSettings: { labelKey: 'admin.systemSettings', order: 125 },
+        // Declarative data (ADR-0027): the host performs the kernel GET, so this
+        // settings panel works without granting the package server execution.
         data: [{ fetch: { path: '/captcha/admin/config' }, as: 'status' }],
       },
     ],

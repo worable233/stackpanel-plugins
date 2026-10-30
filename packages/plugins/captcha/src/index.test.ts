@@ -33,10 +33,12 @@ function settings(overrides: Partial<Parameters<typeof verifyChallenge>[0]> = {}
 }
 
 describe('presets', () => {
-  it('covers the factory family and the custom-element family', () => {
-    const kinds = PRESETS.map((item) => (item.widget.tag ? 'element' : 'script'));
+  it('covers the factory family and the DOM-scanning family', () => {
+    const kinds = PRESETS.map((item) =>
+      item.widget.containerClass ? 'container' : item.widget.tag ? 'element' : 'script',
+    );
     expect(kinds).toContain('script');
-    expect(kinds).toContain('element');
+    expect(kinds).toContain('container');
   });
 
   it('rejects a non-public verify endpoint', () => {
@@ -184,16 +186,32 @@ describe('buildClientConfig', () => {
     expect(JSON.stringify(config)).not.toContain('sk_secret');
   });
 
-  it('publishes the element protocol for a custom-element widget', () => {
+  it('publishes the container protocol for a DOM-scanning loader', () => {
     const config = buildClientConfig(
-      resolveConfig({ ...base, preset: 'cap', widgetAttributes: { 'data-cap-api-endpoint': 'https://cap.example.test/' } }),
+      resolveConfig({
+        ...base,
+        preset: 'cap',
+      }),
     );
     expect(config).toMatchObject({
-      kind: 'element',
-      tag: 'cap-widget',
-      tokenAttribute: 'data-cap-token',
-      attributes: { 'data-cap-api-endpoint': 'https://cap.example.test/' },
+      kind: 'container',
+      script: 'https://cap.bug.im/v1.js',
+      containerClass: 'cap-captcha',
+      siteKey: 'site-key',
+      hiddenField: 'cap-response',
+      // Without the re-scan hook a React-mounted container is never bound.
+      remount: 'capCaptcha.mount',
     });
+  });
+
+  it('declares the stylesheet and blob-worker origins a PoW widget needs', () => {
+    const config = buildClientConfig(resolveConfig({ ...base, preset: 'cap' })) as {
+      sources?: { style?: string[]; worker?: string[] };
+    };
+    // ALTCHA injects a theme CSS and solves in a blob worker; omitting either from
+    // the CSP leaves the widget invisible or unable to compute.
+    expect(config.sources?.style).toContain('https://cap.bug.im');
+    expect(config.sources?.worker).toContain('https://cap.bug.im');
   });
 
   it('declares the CSP origins its widget needs', () => {
@@ -201,5 +219,61 @@ describe('buildClientConfig', () => {
       sources?: { script?: string[]; frame?: string[] };
     };
     expect(config.sources?.frame).toContain('https://challenges.cloudflare.com');
+  });
+});
+
+describe('verifyChallenge — JSON siteverify', () => {
+  const cap = presetById('cap')!;
+  const capSettings = {
+    preset: cap,
+    verifyUrl: 'https://cap.bug.im/v1/siteverify',
+    secret: 'csk_secret',
+  };
+
+  it('posts JSON, not a form, when the preset says so', async () => {
+    const fetchMock = vi.fn(async () => response({ success: true }));
+    const outcome = await verifyChallenge(capSettings, { token: 'tok' }, {
+      fetch: fetchMock as unknown as typeof fetch,
+      resolveUnsafe: neverUnsafe,
+    });
+    expect(outcome.success).toBe(true);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers['content-type']).toBe('application/json');
+    // A JSON-only endpoint answers `bad-request` to a form post, which reads like a
+    // credential error and sends the operator hunting for the wrong thing.
+    expect(JSON.parse(String(init.body))).toEqual({ secret: 'csk_secret', response: 'tok' });
+  });
+
+  it('rejects a degraded pass', async () => {
+    const fetchMock = vi.fn(async () => response({ success: true, degraded: true }));
+    const outcome = await verifyChallenge(capSettings, { token: 'tok' }, {
+      fetch: fetchMock as unknown as typeof fetch,
+      resolveUnsafe: neverUnsafe,
+    });
+    // The vendor could not fully verify. Treating this as a pass turns a transient
+    // service degradation into a free bypass.
+    expect(outcome).toMatchObject({ success: false, reason: 'denied_degraded' });
+  });
+
+  it('accepts an explicit degraded:false alongside success', async () => {
+    const fetchMock = vi.fn(async () => response({ success: true, degraded: false }));
+    const outcome = await verifyChallenge(capSettings, { token: 'tok' }, {
+      fetch: fetchMock as unknown as typeof fetch,
+      resolveUnsafe: neverUnsafe,
+    });
+    expect(outcome.success).toBe(true);
+  });
+
+  it('surfaces the vendor error code on rejection', async () => {
+    const fetchMock = vi.fn(async () =>
+      response({ success: false, 'error-codes': ['timeout-or-duplicate'] }),
+    );
+    const outcome = await verifyChallenge(capSettings, { token: 'tok' }, {
+      fetch: fetchMock as unknown as typeof fetch,
+      resolveUnsafe: neverUnsafe,
+    });
+    expect(outcome).toMatchObject({ success: false, reason: 'timeout-or-duplicate' });
   });
 });

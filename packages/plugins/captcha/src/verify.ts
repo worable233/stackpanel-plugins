@@ -21,8 +21,40 @@ import type { Preset } from './presets.js';
  *    body, or the browser.
  */
 
-/** Hard ceiling on one verification. The user is waiting on this. */
-export const VERIFY_TIMEOUT_MS = 8_000;
+/**
+ * Hard ceiling on one verification. The user is waiting on this.
+ *
+ * Measured against a live siteverify endpoint: 1.0s, 1.9s, 2.3s, 3.2s, 7.1s over
+ * five consecutive calls. An 8s budget therefore rejected a perfectly valid
+ * challenge under normal jitter — the first live login test failed exactly that
+ * way (`reason=timeout`) and passed on immediate retry with the same token.
+ * Correctness beats latency here: the request only happens after a human solved a
+ * challenge, so a patient ceiling is better than a false "verification failed".
+ */
+export const VERIFY_TIMEOUT_MS = 15_000;
+
+function abortError(): Error {
+  return Object.assign(new Error('aborted'), { name: 'AbortError' });
+}
+
+// DNS verdicts are cached to keep the SSRF pre-flight off the hot path: every
+// login re-resolves the same hostname. Safe verdicts expire quickly so a rebind
+// cannot ride a long-lived "safe" answer; unsafe verdicts stay cached, because
+// caching a refusal only ever fails closed.
+const DNS_SAFE_TTL_MS = 60_000;
+const DNS_UNSAFE_TTL_MS = 5 * 60_000;
+const dnsVerdicts = new Map<string, { unsafe: boolean; expiresAt: number }>();
+
+async function cachedResolveUnsafe(hostname: string): Promise<boolean> {
+  const cached = dnsVerdicts.get(hostname);
+  if (cached && cached.expiresAt > Date.now()) return cached.unsafe;
+  const unsafe = await resolvesToUnsafeAddress(hostname);
+  dnsVerdicts.set(hostname, {
+    unsafe,
+    expiresAt: Date.now() + (unsafe ? DNS_UNSAFE_TTL_MS : DNS_SAFE_TTL_MS),
+  });
+  return unsafe;
+}
 
 export interface VerifyInput {
   token: string;
@@ -77,8 +109,7 @@ export async function verifyChallenge(
   deps: VerifyDeps = {},
 ): Promise<VerifyOutcome> {
   const doFetch = deps.fetch ?? fetch;
-  const resolveUnsafe =
-    deps.resolveUnsafe ?? ((hostname: string) => resolvesToUnsafeAddress(hostname));
+  const resolveUnsafe = deps.resolveUnsafe ?? cachedResolveUnsafe;
 
   if (!settings.verifyUrl) {
     return { success: false, reason: 'missing_verify_url' };
@@ -95,37 +126,51 @@ export async function verifyChallenge(
   } catch {
     return { success: false, reason: 'invalid_verify_url' };
   }
-  if (await resolveUnsafe(hostname)) {
-    return { success: false, reason: 'unsafe_verify_url' };
-  }
-
-  const form = new URLSearchParams();
-  form.set(settings.fieldMap?.['secret'] ?? settings.preset.secretField, settings.secret);
-  form.set(settings.fieldMap?.['token'] ?? settings.preset.tokenField, input.token);
-  if (input.remoteIp && settings.preset.optionalFields.includes('remoteip')) {
-    form.set(settings.fieldMap?.['remoteIp'] ?? 'remoteip', input.remoteIp);
-  }
-  if (input.action && settings.preset.supportsAction) {
-    form.set(settings.actionField ?? 'action', input.action);
-  }
-  for (const [name, value] of Object.entries(settings.extraFields ?? {})) {
-    form.set(name, value);
-  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
+  const aborted = new Promise<never>((_resolve, reject) => {
+    controller.signal.addEventListener('abort', () => reject(abortError()), { once: true });
+  });
+  // A race loser that rejects later must not surface as an unhandled rejection.
+  void aborted.catch(() => {});
+
   try {
+    // Bound the pre-flight DNS check by the same budget: an unresponsive resolver
+    // must not outlive the request it was supposed to protect.
+    if (await Promise.race([resolveUnsafe(hostname), aborted])) {
+      return { success: false, reason: 'unsafe_verify_url' };
+    }
+
+    const fields: Record<string, string> = {};
+    fields[settings.fieldMap?.['secret'] ?? settings.preset.secretField] = settings.secret;
+    fields[settings.fieldMap?.['token'] ?? settings.preset.tokenField] = input.token;
+    if (input.remoteIp && settings.preset.optionalFields.includes('remoteip')) {
+      fields[settings.fieldMap?.['remoteIp'] ?? 'remoteip'] = input.remoteIp;
+    }
+    if (input.action && settings.preset.supportsAction) {
+      fields[settings.actionField ?? 'action'] = input.action;
+    }
+    for (const [name, value] of Object.entries(settings.extraFields ?? {})) {
+      fields[name] = value;
+    }
+
+    // Encoding is a property of the endpoint, not of the call: a JSON-only
+    // siteverify answers `bad-request` to a form post, which reads like a
+    // credential error and sends the operator hunting for the wrong thing.
+    const asJson = settings.preset.requestFormat === 'json';
+
     const response = await doFetch(settings.verifyUrl, {
       method: 'POST',
       headers: {
-        'content-type': 'application/x-www-form-urlencoded',
+        'content-type': asJson ? 'application/json' : 'application/x-www-form-urlencoded',
         accept: 'application/json',
         // Vendors such as Turnstile use this to bind the response to the widget.
         ...(settings.extraFields?.['idempotency_key']
           ? { 'Idempotency-Key': settings.extraFields['idempotency_key'] }
           : {}),
       },
-      body: form.toString(),
+      body: asJson ? JSON.stringify(fields) : new URLSearchParams(fields).toString(),
       signal: controller.signal,
       // Never follow a redirect: a 30x could walk a validated URL to an internal
       // host that was never checked.
@@ -137,6 +182,16 @@ export async function verifyChallenge(
     }
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!payload) return { success: false, reason: 'invalid_response' };
+
+    const veto = settings.preset.denyFields.find((name) => {
+      const value = payload[name];
+      return value !== undefined && value !== null && value !== false && value !== '';
+    });
+    if (veto) {
+      // `{ success: true, degraded: true }` means the vendor could not fully
+      // verify. Accepting it would turn a transient degradation into a pass.
+      return { success: false, reason: `denied_${veto}`, raw: payload };
+    }
 
     const successField = settings.fieldMap?.['success'] ?? settings.preset.successField;
     const passed = payload[successField] === true;

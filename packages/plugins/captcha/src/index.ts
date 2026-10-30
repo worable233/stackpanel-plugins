@@ -136,6 +136,21 @@ export function buildClientConfig(config: CaptchaConfig): Record<string, unknown
     };
   }
 
+  if (widget.containerClass && widget.hiddenField) {
+    // Third protocol: the loader owns the DOM inside the container and reports
+    // the solution through a hidden input it injects into the surrounding form.
+    return {
+      kind: 'container',
+      script: widget.script ?? '',
+      containerClass: widget.containerClass,
+      siteKey: config.siteKey,
+      ...(Object.keys(attributes).length > 0 ? { attributes } : {}),
+      hiddenField: widget.hiddenField,
+      ...(widget.remount ? { remount: widget.remount } : {}),
+      ...(sources ? { sources } : {}),
+    };
+  }
+
   return {
     kind: 'script',
     script: widget.script ?? '',

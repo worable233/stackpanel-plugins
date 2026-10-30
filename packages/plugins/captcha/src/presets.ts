@@ -18,13 +18,25 @@ import { isPublicHttpUrl } from '@stackpanel/net-guard';
 export interface PresetWidget {
   script?: string;
   globalFn?: string;
+  /** `container` protocol: the class the loader scans for. */
+  containerClass?: string;
+  /** `container` protocol: dotted path of the re-scan hook, e.g. `capCaptcha.mount`. */
+  remount?: string;
+  /** `container` protocol: hidden field the loader injects to carry the token. */
+  hiddenField?: string;
   tag?: string;
   attributes?: Record<string, string>;
   tokenAttribute?: string;
   event?: string;
   resetEvent?: string;
   renderOptions?: Record<string, unknown>;
-  sources?: { script?: string[]; frame?: string[]; connect?: string[] };
+  sources?: {
+    script?: string[];
+    style?: string[];
+    frame?: string[];
+    connect?: string[];
+    worker?: string[];
+  };
 }
 
 export interface Preset {
@@ -33,6 +45,12 @@ export interface Preset {
   label: string;
   /** Default `siteverify` endpoint. Overridable per deployment. */
   verifyUrl: string;
+  /**
+   * How the request body is encoded. The siteverify family is mostly
+   * form-encoded, but not universally: a provider that only accepts JSON answers
+   * `bad-request` to a form post, which reads like a credential problem.
+   */
+  requestFormat: 'form' | 'json';
   /** Request field carrying the challenge response. */
   tokenField: string;
   /** Request field carrying the secret. */
@@ -45,6 +63,15 @@ export interface Preset {
    * (they land in the kernel's `PluginError.detail` and the server log).
    */
   errorFields: string[];
+  /**
+   * Response fields whose *truthy* value vetoes an otherwise successful verdict.
+   *
+   * Some services answer `{ success: true, degraded: true }` when they could not
+   * fully verify (e.g. a challenge minted while the backend was degraded). Those
+   * must not be treated as a pass, and "check one extra flag" belongs in data —
+   * not in a vendor branch in `verify.ts`.
+   */
+  denyFields: string[];
   /** Extra request fields a vendor accepts (e.g. `remoteip`). */
   optionalFields: string[];
   /** `action` is forwarded only when the vendor understands it. */
@@ -66,6 +93,8 @@ const TURNSTILE: Preset = {
   secretField: 'secret',
   successField: 'success',
   errorFields: ['error-codes'],
+  denyFields: [],
+  requestFormat: 'form',
   optionalFields: ['remoteip'],
   supportsAction: true,
   widget: {
@@ -92,6 +121,8 @@ const HCAPTCHA: Preset = {
   secretField: 'secret',
   successField: 'success',
   errorFields: ['error-codes'],
+  denyFields: [],
+  requestFormat: 'form',
   optionalFields: ['remoteip', 'sitekey'],
   supportsAction: false,
   widget: {
@@ -118,6 +149,8 @@ const RECAPTCHA: Preset = {
   secretField: 'secret',
   successField: 'success',
   errorFields: ['error-codes'],
+  denyFields: [],
+  requestFormat: 'form',
   optionalFields: ['remoteip'],
   supportsAction: false,
   widget: {
@@ -133,34 +166,51 @@ const RECAPTCHA: Preset = {
 };
 
 /**
- * Cap — a self-hostable proof-of-work widget. It exposes a custom element rather
- * than a factory, which is exactly why the host supports the second protocol:
- * without it, every non-factory widget would require a new host component.
- * `https://capjs.js.org/guide/`
+ * Cap (cap.bug.im) — proof-of-work challenge, ALTCHA under the hood.
+ *
+ * Deliberately used as the reference for the **third** widget protocol. Cap is
+ * neither a factory (`script`) nor a custom element the host can read from
+ * (`element`): its loader scans the page for `div.cap-captcha`,
+ * renders an `<altcha-widget>` inside it, and writes the solution into a hidden
+ * input it injects into the surrounding `<form>`. A React form has three
+ * consequences, all handled by the host's `container` branch:
+ *
+ *  - the container must be *inside* the form, or the injected input never joins
+ *    the submission;
+ *  - a loader that already scanned `DOMContentLoaded` cannot see a container
+ *    mounted later, hence `remount` (`window.capCaptcha.mount()`);
+ *  - the token arrives through the DOM, not a callback.
+ *
+ * `siteverify` takes **JSON** and may answer `{success:true, degraded:true}` when
+ * it could not fully verify — that is honoured as a rejection via `denyFields`.
+ * `https://cap.bug.im/docs`
  */
 const CAP: Preset = {
   id: 'cap',
-  label: 'Cap（自托管 PoW）',
-  verifyUrl: 'https://cap.bug.im/siteverify',
+  label: 'Cap（cap.bug.im / ALTCHA PoW）',
+  verifyUrl: 'https://cap.bug.im/v1/siteverify',
+  requestFormat: 'json',
   tokenField: 'response',
   secretField: 'secret',
   successField: 'success',
-  errorFields: ['error-codes'],
+  errorFields: ['error-codes', 'error'],
+  denyFields: ['degraded'],
   optionalFields: [],
   supportsAction: false,
   widget: {
-    script: 'https://cdn.jsdelivr.net/npm/@cap.js/widget',
-    tag: 'cap-widget',
-    attributes: { 'data-cap-api-endpoint': 'https://cap.bug.im/' },
-    tokenAttribute: 'data-cap-token',
-    event: 'solve',
-    resetEvent: 'reset',
+    script: 'https://cap.bug.im/v1.js',
+    containerClass: 'cap-captcha',
+    remount: 'capCaptcha.mount',
+    hiddenField: 'cap-response',
     sources: {
-      script: ['https://cdn.jsdelivr.net'],
+      script: ['https://cap.bug.im'],
+      style: ['https://cap.bug.im'],
       connect: ['https://cap.bug.im'],
+      // ALTCHA solves in `new Worker(URL.createObjectURL(blob))`.
+      worker: ['https://cap.bug.im'],
     },
   },
-  hint: 'Cap 自托管：把校验地址与 data-cap-api-endpoint 指向自己的实例。',
+  hint: 'cap.bug.im：填 sitekey 与 csk_ 密钥即可。允许域名需包含页面实际 hostname，本地测试要把 127.0.0.1 单独加入。',
 };
 
 /**
@@ -176,6 +226,8 @@ const GENERIC: Preset = {
   secretField: 'secret',
   successField: 'success',
   errorFields: ['error-codes', 'error', 'message'],
+  denyFields: [],
+  requestFormat: 'form',
   optionalFields: ['remoteip'],
   supportsAction: true,
   widget: {
