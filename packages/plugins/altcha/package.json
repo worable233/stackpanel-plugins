@@ -1,0 +1,37 @@
+{
+  "name": "@stackpanel/plugin-altcha",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "stackpanel": {
+    "builtin": false
+  },
+  "description": "自托管人机验证：插件自己签发并校验 ALTCHA 工作量证明挑战，无第三方服务、无需配置即可保护登录、注册、改密码、改邮箱等操作。",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "embed": "node scripts/embed-widget.mjs",
+    "messages": "node scripts/sync-messages.mjs",
+    "prepare": "node scripts/sync-messages.mjs && node scripts/embed-widget.mjs && tsc -p tsconfig.build.json",
+    "build": "node scripts/sync-messages.mjs && node scripts/embed-widget.mjs && node ../../../scripts/build-plugin.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@stackpanel/sdk": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
