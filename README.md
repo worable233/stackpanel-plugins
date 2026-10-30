@@ -99,7 +99,9 @@ pnpm --filter @stackpanel/plugin-<id> build
 
 首次生成锁文件或有意更新依赖时使用 `pnpm dev:setup --no-frozen-lockfile`。切换内核分支或升级内核依赖后，先重新安装内核，再运行插件仓的 `dev:setup` 与 `deps:check`。
 
-内核检出不在 `../StackPanel` 时，用环境变量 `STACKPANEL_KERNEL_ROOT` 指定，并把 `pnpm-workspace.yaml` 里的 `link:` 路径改成同样的位置。`pnpm deps:check` 会校验「内核已安装、内核包已构建、`@stackpanel/*` 与 `zod` 都解析到内核那一份」。
+内核检出不在 `../StackPanel` 时，把 `pnpm-workspace.yaml` 里 4 处 `link:` 与 `zod` 那一行的路径改成实际位置。**这是内核位置的唯一事实来源**：pnpm 不对 `link:` 做环境变量插值（写 `${VAR}/…` 会被当成字面量目录名），所以不能靠环境变量代替改文件。`check-dependencies.mjs` 与 `install-into-kernel.mjs` 都从这一行读取内核根目录，保证「装到哪个内核」和「校验哪个内核」不会各说各话。`STACKPANEL_KERNEL_ROOT` 与 `--kernel <path>` 仍可临时覆盖（优先级高于文件）。`pnpm deps:check` 会校验「内核已安装、内核包已构建、`@stackpanel/*` 与 `zod` 都解析到内核那一份」。
+
+> `pnpm install` 会触发各包的 `prepare`。`llm-gateway` 的 `prepare` 是 `tsc`，而它交付的是 `build-plugin.mjs` 的 esbuild 单文件产物——**安装后必须重跑一次 `build-plugin.mjs`**，否则 `dist/index.js` 会被拆成 30+ 个模块，装进内核时报 `Cannot find module '@stackpanel/llm-protocol'`。
 
 若要在内核开发环境中读取本仓插件源，将 `STACKPANEL_PLUGIN_SOURCES` 指向 `../StackPanel-plugins/packages/plugins`，然后在内核仓库运行 `pnpm build:frontend`。外部同名插件源优先于内核内置副本；生产环境请使用已验证的市场包或 ZIP，而不是开发源目录。
 

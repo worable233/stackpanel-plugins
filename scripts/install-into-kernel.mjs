@@ -14,6 +14,7 @@
  *   node ../../../scripts/install-into-kernel.mjs [--kernel /path/to/StackPanel]
  */
 import { createHash } from 'node:crypto';
+import { kernelRoot as kernelRootFromWorkspace } from './check-dependencies.mjs';
 import {
   cpSync,
   existsSync,
@@ -32,9 +33,11 @@ const args = process.argv.slice(2);
 const kernelArg = args.indexOf('--kernel');
 
 /**
- * 内核检出位置：`--kernel` 优先，其次环境变量 `STACKPANEL_KERNEL_ROOT`，最后按
- * 「两个仓库并排放置」的约定从本脚本位置推导（`<parent>/StackPanel`）。
- * 不写死任何人的绝对路径。
+ * 内核检出位置：`--kernel` 优先，其次环境变量 `STACKPANEL_KERNEL_ROOT`，
+ * 最后从 `pnpm-workspace.yaml` 的 `link:` 覆盖里读。
+ *
+ * 最后那一步必须与 `check-dependencies.mjs` 用同一个来源，否则「装到哪个内核」
+ * 和「校验哪个内核」会各说各话——那正是把产物装进旧内核、却报告依赖正常的成因。
  */
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const kernelRoot = (() => {
@@ -45,7 +48,7 @@ const kernelRoot = (() => {
   }
   const fromEnv = process.env['STACKPANEL_KERNEL_ROOT'];
   if (fromEnv && fromEnv.trim()) return resolve(fromEnv.trim());
-  return resolve(repoRoot, '..', 'StackPanel');
+  return kernelRootFromWorkspace;
 })();
 
 if (!existsSync(join(kernelRoot, 'package.json'))) {

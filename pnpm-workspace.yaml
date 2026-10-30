@@ -20,15 +20,20 @@ packages:
 # 实例，跨边界的 schema 校验会失效。`link:` 则让插件直接复用内核已安装的依赖，
 # 物理上只有一份。
 #
-# 前提：内核检出必须与插件仓并排放置（默认 `../StackPanel`），且内核已完成
-# `pnpm install` + 相关包 `build`。`pnpm deps:check` 会校验这两点。
+# 前提：内核检出已完成 `pnpm install` + 相关包 `build`，`pnpm deps:check` 会校验。
+#
+# 下面是**内核位置的唯一事实来源**。pnpm 不对 `link:` 做环境变量插值（实测
+# `${VAR}/…` 会被当成字面量目录名），所以换内核时必须改这里；改成什么，
+# `check-dependencies.mjs` 与 `install-into-kernel.mjs` 都从这一行读。
+# 本机同时存在 StackPanel / StackPanel-main / StackPanel-merge 多份检出，
+# 且包名都叫 stackpanel，写死目录名会让依赖链到旧内核上而报出误导性错误。
 overrides:
-  '@stackpanel/sdk': link:../StackPanel/packages/sdk
-  '@stackpanel/spec': link:../StackPanel/packages/spec
-  '@stackpanel/ui': link:../StackPanel/packages/ui
-  '@stackpanel/net-guard': link:../StackPanel/packages/net-guard
+  '@stackpanel/sdk': link:../StackPanel-main/packages/sdk
+  '@stackpanel/spec': link:../StackPanel-main/packages/spec
+  '@stackpanel/ui': link:../StackPanel-main/packages/ui
+  '@stackpanel/net-guard': link:../StackPanel-main/packages/net-guard
   # SDK 的 schema 会穿过插件边界；必须与内核解析到同一个 zod 实例。
-  zod: link:../StackPanel/node_modules/zod
+  zod: link:../StackPanel-main/node_modules/zod
 
 # pnpm 11: allowBuilds 取代 onlyBuiltDependencies。
 allowBuilds:

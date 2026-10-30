@@ -4,7 +4,38 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const kernelRoot = resolve(root, '../StackPanel');
+
+/**
+ * 内核检出位置：解析 `pnpm-workspace.yaml` 里 `link:` 覆盖的**实际**路径。
+ *
+ * 为什么不再写死 `../StackPanel`：本机上同时存在多份内核检出（`StackPanel`、
+ * `StackPanel-main`、`StackPanel-merge` …），它们的 package.json 都叫
+ * `stackpanel`，无法自动区分哪个是正在开发的那一份。写死目录名的结果是：
+ * 依赖被 link 到一份旧内核上，插件用了新 SDK 的导出就再也编译不过，而且
+ * 报错信息（`has no exported member named 'ServiceChangeOption'`）完全指向
+ * 错误的方向——看起来像插件写错了。
+ *
+ * `pnpm-workspace.yaml` 的 `link:` 是 pnpm 安装时真正生效的那份配置，因此
+ * 它必须是唯一事实来源：脚本校验的路径与实际装上的路径不可能再不一致。
+ */
+function readKernelRoot() {
+  const fromEnv = process.env['STACKPANEL_KERNEL_ROOT'];
+  if (fromEnv && fromEnv.trim()) return resolve(fromEnv.trim());
+
+  const workspaceFile = resolve(root, 'pnpm-workspace.yaml');
+  const text = readFileSync(workspaceFile, 'utf8');
+  // 只取第一条 `@stackpanel/sdk` 的 link 目标；其余包共享同一内核根目录。
+  // 要削掉尾部 `/packages/sdk`：link 指向的是**包内**目录，而内核根是它的上两级。
+  const match = /^\s*'@stackpanel\/sdk':\s*link:(.+?)\/packages\/sdk\s*$/m.exec(text);
+  if (!match) {
+    throw new Error(
+      `无法从 ${workspaceFile} 解析内核位置：缺少 '@stackpanel/sdk': link:…/packages/sdk 覆盖。`,
+    );
+  }
+  return resolve(root, match[1].trim());
+}
+
+export const kernelRoot = readKernelRoot();
 
 export function checkDependencies(beforeInstall = false) {
   const problems = [];
@@ -19,7 +50,7 @@ export function checkDependencies(beforeInstall = false) {
   }
 
   if (!existsSync(resolve(kernelRoot, 'node_modules/.modules.yaml'))) {
-    problems.push('内核依赖未完整安装，请先在 ../StackPanel 执行 pnpm install --frozen-lockfile。');
+    problems.push(`内核依赖未完整安装，请先在 ${kernelRoot} 执行 pnpm install --frozen-lockfile。`);
   }
   const hostRequire = createRequire(resolve(kernelRoot, 'package.json'));
   for (const name of ['sdk', 'net-guard', 'ui', 'spec']) {

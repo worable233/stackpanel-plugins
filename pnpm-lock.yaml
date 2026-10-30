@@ -5,11 +5,11 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@stackpanel/sdk': link:../StackPanel/packages/sdk
-  '@stackpanel/net-guard': link:../StackPanel/packages/net-guard
-  '@stackpanel/spec': link:../StackPanel/packages/spec
-  '@stackpanel/ui': link:../StackPanel/packages/ui
-  zod: link:../StackPanel/node_modules/zod
+  '@stackpanel/sdk': link:../StackPanel-main/packages/sdk
+  '@stackpanel/spec': link:../StackPanel-main/packages/spec
+  '@stackpanel/ui': link:../StackPanel-main/packages/ui
+  '@stackpanel/net-guard': link:../StackPanel-main/packages/net-guard
+  zod: link:../StackPanel-main/node_modules/zod
 
 importers:
 
@@ -34,11 +34,11 @@ importers:
   packages/plugins/alipay:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -56,20 +56,20 @@ importers:
         specifier: ^2.0.8
         version: 2.0.8(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/api-market:
     dependencies:
       '@stackpanel/net-guard':
-        specifier: link:../../../../StackPanel/packages/net-guard
-        version: link:../../../../StackPanel/packages/net-guard
+        specifier: link:../../../../StackPanel-main/packages/net-guard
+        version: link:../../../../StackPanel-main/packages/net-guard
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -84,17 +84,17 @@ importers:
   packages/plugins/api-market/frontend:
     dependencies:
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/catalog:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -121,17 +121,17 @@ importers:
         specifier: ^4.19.1
         version: 4.22.3(react@19.3.1)
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/cms:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -146,17 +146,17 @@ importers:
   packages/plugins/cms/frontend:
     dependencies:
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/epay:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -174,14 +174,14 @@ importers:
         specifier: ^2.0.8
         version: 2.0.8(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/hello:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
     devDependencies:
       typescript:
         specifier: ^6.0.3
@@ -190,11 +190,11 @@ importers:
   packages/plugins/invoice:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -206,8 +206,8 @@ importers:
   packages/plugins/invoice/frontend:
     dependencies:
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/llm-gateway:
     dependencies:
@@ -215,14 +215,14 @@ importers:
         specifier: workspace:*
         version: link:../../protocol
       '@stackpanel/net-guard':
-        specifier: link:../../../../StackPanel/packages/net-guard
-        version: link:../../../../StackPanel/packages/net-guard
+        specifier: link:../../../../StackPanel-main/packages/net-guard
+        version: link:../../../../StackPanel-main/packages/net-guard
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -240,17 +240,17 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1(react-dom@19.3.1(react@19.3.1))(react-is@19.3.1)(react@19.3.1)(redux@5.0.1)
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/media-library:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -267,8 +267,8 @@ importers:
   packages/plugins/minimal:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -280,11 +280,11 @@ importers:
   packages/plugins/notice:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -296,17 +296,17 @@ importers:
   packages/plugins/notice/frontend:
     dependencies:
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/referral:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -321,17 +321,17 @@ importers:
   packages/plugins/referral/frontend:
     dependencies:
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/smtp:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -352,8 +352,8 @@ importers:
   packages/plugins/template:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -365,11 +365,11 @@ importers:
   packages/plugins/ticket:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -381,17 +381,17 @@ importers:
   packages/plugins/ticket/frontend:
     dependencies:
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/wechatpay:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -409,14 +409,14 @@ importers:
         specifier: ^2.0.8
         version: 2.0.8(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/plugins/wowid:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       jose:
         specifier: ^6.2.6
         version: 6.2.12
@@ -434,11 +434,11 @@ importers:
   packages/plugins/zjmf-compat:
     dependencies:
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -453,14 +453,14 @@ importers:
   packages/plugins/zjmf-upstream:
     dependencies:
       '@stackpanel/net-guard':
-        specifier: link:../../../../StackPanel/packages/net-guard
-        version: link:../../../../StackPanel/packages/net-guard
+        specifier: link:../../../../StackPanel-main/packages/net-guard
+        version: link:../../../../StackPanel-main/packages/net-guard
       '@stackpanel/sdk':
-        specifier: link:../../../../StackPanel/packages/sdk
-        version: link:../../../../StackPanel/packages/sdk
+        specifier: link:../../../../StackPanel-main/packages/sdk
+        version: link:../../../../StackPanel-main/packages/sdk
       zod:
-        specifier: link:../../../../StackPanel/node_modules/zod
-        version: link:../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../StackPanel-main/node_modules/zod
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -475,8 +475,8 @@ importers:
   packages/plugins/zjmf-upstream/frontend:
     dependencies:
       zod:
-        specifier: link:../../../../../StackPanel/node_modules/zod
-        version: link:../../../../../StackPanel/node_modules/zod
+        specifier: link:../../../../../StackPanel-main/node_modules/zod
+        version: link:../../../../../StackPanel-main/node_modules/zod
 
   packages/protocol:
     devDependencies:
