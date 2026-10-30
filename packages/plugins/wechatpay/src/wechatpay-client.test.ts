@@ -55,7 +55,10 @@ function baseConfig() {
 }
 
 /** 微信发来的通知：JSON 信封 + 签名头。 */
-function signedNotification(transaction: Record<string, unknown>, options?: { timestamp?: number; key?: string }) {
+function signedNotification(
+  transaction: Record<string, unknown>,
+  options?: { timestamp?: number; key?: string },
+) {
   const nonce = randomBytes(6).toString('hex');
   const ciphertext = encryptResource({
     plaintext: JSON.stringify(transaction),
@@ -83,9 +86,7 @@ function signedNotification(transaction: Record<string, unknown>, options?: { ti
 
 describe('pem handling', () => {
   it('accepts a bare base64 private key (what the console copies)', () => {
-    const bare = merchant.privateKey
-      .replace(/-----[A-Z ]+-----/g, '')
-      .replace(/\s+/g, '');
+    const bare = merchant.privateKey.replace(/-----[A-Z ]+-----/g, '').replace(/\s+/g, '');
     expect(() => loadPrivateKey(bare)).not.toThrow();
   });
 
@@ -172,7 +173,10 @@ describe('response / notification verification', () => {
   });
 
   it('rejects a signature made with the wrong key', () => {
-    const { body, headers } = signedNotification({ trade_state: 'SUCCESS' }, { key: merchant.privateKey });
+    const { body, headers } = signedNotification(
+      { trade_state: 'SUCCESS' },
+      { key: merchant.privateKey },
+    );
     expect(() =>
       verifyNotification({ headers, body, platformPublicKey: loadPublicKey(platform.publicKey) }),
     ).toThrow(/签名无效/);
@@ -280,7 +284,9 @@ describe('order payloads', () => {
   });
 
   it('parses code_url and reports a malformed body as definitive', () => {
-    expect(parseNativeOrderResponse('{"code_url":"weixin://wxpay/1"}').code_url).toBe('weixin://wxpay/1');
+    expect(parseNativeOrderResponse('{"code_url":"weixin://wxpay/1"}').code_url).toBe(
+      'weixin://wxpay/1',
+    );
     expect(() => parseNativeOrderResponse('<html>502</html>')).toThrow(/不是 JSON/);
   });
 
@@ -329,7 +335,6 @@ describe('config validation', () => {
   });
 });
 
-
 describe('platform certificate list', () => {
   function certificateResponse(options?: { serialNo?: string; expiresAtMs?: number }): string {
     const nonce = 'abcdefghijkl';
@@ -368,9 +373,9 @@ describe('platform certificate list', () => {
 
   it('drops certificates that already expired instead of trusting them', () => {
     // now 放到 2037 年：整张证书都过期，列表为空 ⇒ 明确报错，而不是装一张废证书。
-    expect(() => parseCertificateList(certificateResponse(), API_V3_KEY, Date.parse('2037-01-01T00:00:00Z'))).toThrow(
-      /没有可用证书/,
-    );
+    expect(() =>
+      parseCertificateList(certificateResponse(), API_V3_KEY, Date.parse('2037-01-01T00:00:00Z')),
+    ).toThrow(/没有可用证书/);
   });
 
   it('rejects a body that is not the documented envelope', () => {

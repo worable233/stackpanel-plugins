@@ -218,12 +218,22 @@ export function verifyNotification(input: {
   const nonce = input.headers.nonce;
   const signature = input.headers.signature;
   if (!timestamp || !nonce || !signature) {
-    throw new WechatPayError('notification-invalid', WECHATPAY_ERROR_CODES['notification-invalid'], 401, true);
+    throw new WechatPayError(
+      'notification-invalid',
+      WECHATPAY_ERROR_CODES['notification-invalid'],
+      401,
+      true,
+    );
   }
   const now = input.now ?? Math.floor(Date.now() / 1000);
   const age = Math.abs(now - Number(timestamp));
   if (!Number.isFinite(age) || age > NOTIFICATION_TIMESTAMP_TOLERANCE_S) {
-    throw new WechatPayError('notification-expired', WECHATPAY_ERROR_CODES['notification-expired'], 401, true);
+    throw new WechatPayError(
+      'notification-expired',
+      WECHATPAY_ERROR_CODES['notification-expired'],
+      401,
+      true,
+    );
   }
   const ok = rsaVerify(
     notificationSignMessage({ timestamp, nonce, body: input.body }),
@@ -293,7 +303,13 @@ export function encryptResource(input: {
 
 export function buildNativeOrderBody(
   config: Pick<WechatPayConfig, 'appId' | 'mchId'>,
-  request: { merchantOrderNo: string; amount: number; subject: string; notifyUrl: string; expiresInMs?: number },
+  request: {
+    merchantOrderNo: string;
+    amount: number;
+    subject: string;
+    notifyUrl: string;
+    expiresInMs?: number;
+  },
 ): Record<string, unknown> {
   const timeExpire =
     request.expiresInMs === undefined
@@ -448,11 +464,16 @@ export class PlatformKeyring {
   describe(now: number = Date.now()): Array<{ serialNo: string; expiresAtMs: number }> {
     return [...this.keys.values()]
       .filter((certificate) => certificate.expiresAtMs > now)
-      .map((certificate) => ({ serialNo: certificate.serialNo, expiresAtMs: certificate.expiresAtMs }));
+      .map((certificate) => ({
+        serialNo: certificate.serialNo,
+        expiresAtMs: certificate.expiresAtMs,
+      }));
   }
 }
 
-export function buildCloseOrderBody(config: Pick<WechatPayConfig, 'mchId'>): Record<string, unknown> {
+export function buildCloseOrderBody(
+  config: Pick<WechatPayConfig, 'mchId'>,
+): Record<string, unknown> {
   return { mchid: config.mchId };
 }
 

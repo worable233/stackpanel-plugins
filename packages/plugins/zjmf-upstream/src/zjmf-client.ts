@@ -494,10 +494,9 @@ export class ZJMFClient {
    */
   async getRemoteInfo(serviceId: string): Promise<{ rescue: boolean } | null> {
     if (this.connection.protocol !== 'finance') return null;
-    const data = await this.authorizedPost(
-      `provision/custom/${encodeURIComponent(serviceId)}`,
-      { func: 'remoteInfo' },
-    );
+    const data = await this.authorizedPost(`provision/custom/${encodeURIComponent(serviceId)}`, {
+      func: 'remoteInfo',
+    });
     const payload = object(data['data'] ?? data);
     const rescue = payload['rescue'];
     if (rescue === undefined || rescue === null) return null;
@@ -765,7 +764,10 @@ export class ZJMFClient {
         sinceMs: attemptStartedMs,
       });
       if (rescued === 'unknown') {
-        throw new ZJMFClientError(409, '上游结算结果无法确认，且账单反查未成功；请稍后自动重试核对');
+        throw new ZJMFClientError(
+          409,
+          '上游结算结果无法确认，且账单反查未成功；请稍后自动重试核对',
+        );
       }
       if (rescued === 'no-trace') {
         const error = new ZJMFClientError(409, '上游未留下账单痕迹，可安全重试下单');
@@ -786,7 +788,10 @@ export class ZJMFClient {
         providerServiceId = afterPay?.serviceIds.length === 1 ? afterPay.serviceIds[0]! : null;
       }
       if (!providerServiceId) {
-        const error = new ZJMFClientError(409, `上游账单 ${invoiceId} 已定位，但实例尚未建立；请稍后自动重试核对`);
+        const error = new ZJMFClientError(
+          409,
+          `上游账单 ${invoiceId} 已定位，但实例尚未建立；请稍后自动重试核对`,
+        );
         Object.assign(error, { evidence: { invoiceId } });
         throw error;
       }
@@ -794,7 +799,8 @@ export class ZJMFClient {
 
     // 有金额才需要支付；0 元单直接算已支付。
     const amount = Number(payload['amount'] ?? 0);
-    let paid = settledPaid || (payload['amount'] !== undefined && Number.isFinite(amount) && amount === 0);
+    let paid =
+      settledPaid || (payload['amount'] !== undefined && Number.isFinite(amount) && amount === 0);
     const orderId = invoiceId;
     const checkpointRuntime: Record<string, unknown> = {
       invoiceId: orderId,
@@ -956,18 +962,13 @@ export class ZJMFClient {
   }
 
   /** 只读：最近账单（响应丢失后按金额＋时间窗定位）。`null` 同样表示「未知」而非「没有」。 */
-  async listRecentInvoices(
-    options: { sinceMs?: number; limit?: number } = {},
-  ): Promise<
-    | Array<{
-        id: string;
-        status: string;
-        paid: boolean;
-        amount: string | null;
-        createdMs: number | null;
-      }>
-    | null
-  > {
+  async listRecentInvoices(options: { sinceMs?: number; limit?: number } = {}): Promise<Array<{
+    id: string;
+    status: string;
+    paid: boolean;
+    amount: string | null;
+    createdMs: number | null;
+  }> | null> {
     const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
     try {
       // V10 的账单列表端点在上游没有稳定证据（实测 404），宁可不猜也不乱调。
@@ -1158,7 +1159,10 @@ export class ZJMFClient {
         sinceMs: attemptStartedMs,
       });
       if (rescued === 'unknown') {
-        throw new ZJMFClientError(409, '上游结算结果无法确认，且账单反查未成功；请稍后自动重试核对');
+        throw new ZJMFClientError(
+          409,
+          '上游结算结果无法确认，且账单反查未成功；请稍后自动重试核对',
+        );
       }
       if (rescued === 'no-trace') {
         const error = new ZJMFClientError(409, '上游未留下账单痕迹，可安全重试下单');
@@ -1182,7 +1186,10 @@ export class ZJMFClient {
       });
       providerServiceId = resolvedHost ? stringOrNull(resolvedHost['id']) : null;
       if (!providerServiceId) {
-        const error = new ZJMFClientError(409, `上游账单 ${invoiceId} 已定位，但实例尚未建立；请稍后自动重试核对`);
+        const error = new ZJMFClientError(
+          409,
+          `上游账单 ${invoiceId} 已定位，但实例尚未建立；请稍后自动重试核对`,
+        );
         Object.assign(error, { evidence: { invoiceId } });
         throw error;
       }
@@ -1285,9 +1292,7 @@ export class ZJMFClient {
       // （部分上游只在 header 里给凭证/IP/OS），字段以列表优先。
       const hosts = await this.listHosts();
       const listed = hosts.find((entry) => entry.id === String(serviceId))?.raw ?? {};
-      const header = await this
-        .authorizedGet(`/host/header?host_id=${encoded}`)
-        .catch(() => null);
+      const header = await this.authorizedGet(`/host/header?host_id=${encoded}`).catch(() => null);
       const hostData = object(object(header?.['data'])['host_data']);
       if (Object.keys(listed).length === 0 && Object.keys(hostData).length === 0) {
         throw new ZJMFClientError(404, `上游主机 ${serviceId} 不存在`);
@@ -2169,7 +2174,8 @@ function serviceIdFromDetailUrl(value: unknown): string | null {
   return match ? match[1]! : null;
 }
 
-function object(value: unknown): Record<string, unknown> {  return value !== null && typeof value === 'object' && !Array.isArray(value)
+function object(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
@@ -2673,7 +2679,11 @@ function buildChangeQuote(
     }
     if (total !== undefined && subtotal !== undefined && total !== subtotal) {
       // 展示正数优惠额，price 保留负号供对账。
-      breakdown.push({ label: '上游优惠', value: yuanText(subtotal - total), price: total - subtotal });
+      breakdown.push({
+        label: '上游优惠',
+        value: yuanText(subtotal - total),
+        price: total - subtotal,
+      });
     }
     if (total !== undefined) {
       breakdown.push({ label: '应付', value: yuanText(total), price: total });
@@ -2766,7 +2776,8 @@ function chartToMetrics(
       })
       .filter((point): point is { t: number; v: number } => point !== null);
     if (points.length === 0) return;
-    const label = labels[index] ?? (rows.length > 1 ? `${fallbackLabel} ${index + 1}` : fallbackLabel);
+    const label =
+      labels[index] ?? (rows.length > 1 ? `${fallbackLabel} ${index + 1}` : fallbackLabel);
     metrics.push({
       id: `${id}-${labels.length > 1 ? index : 0}`,
       label,
@@ -2813,7 +2824,9 @@ function pickServiceDetail(payload: Record<string, unknown>): Record<string, unk
     ...(Array.isArray(payload['extraIps']) && payload['extraIps'].length > 0
       ? { extraIps: payload['extraIps'] }
       : {}),
-    ...(stringOrNull(payload['flowLimit']) ? { flowLimit: stringOrNull(payload['flowLimit']) } : {}),
+    ...(stringOrNull(payload['flowLimit'])
+      ? { flowLimit: stringOrNull(payload['flowLimit']) }
+      : {}),
     username:
       stringOrNull(payload['username']) ??
       stringOrNull(payload['root']) ??

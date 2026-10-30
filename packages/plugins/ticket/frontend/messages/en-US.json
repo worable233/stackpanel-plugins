@@ -79,5 +79,13 @@
   "feedback.replied": "Reply sent",
   "feedback.closed": "Ticket closed",
   "feedback.reminded": "Reminder sent",
-  "feedback.updated": "Ticket updated"
+  "feedback.updated": "Ticket updated",
+  "admin.previous": "Previous",
+  "admin.next": "Next",
+  "admin.paginationSummary": "Page {page} · {total} tickets / {pages} pages",
+  "overview.unavailable": "Ticket data is temporarily unavailable.",
+  "overview.manageTitle": "Manage tickets",
+  "overview.manageDescription": "Review and reply to user requests.",
+  "overview.activityDescription": "Recently submitted tickets.",
+  "overview.empty": "No tickets yet"
 }

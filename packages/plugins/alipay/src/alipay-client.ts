@@ -25,16 +25,16 @@ const ALIPAY_ERROR_CODES: Record<string, string> = {
   '支付宝仅支持 CNY 币种': 'alipay.currency_unsupported',
   支付金额无效: 'alipay.amount_invalid',
   'RSA 密钥材料无效': 'alipay.keys_invalid',
-  '网关返回了无效的响应体': 'alipay.gateway_invalid_json',
-  '网关响应缺少签名': 'alipay.response_sign_missing',
-  '网关响应签名无效': 'alipay.response_signature_invalid',
-  '网关拒绝了支付请求': 'alipay.gateway_rejected',
-  '无法连接支付网关': 'alipay.gateway_unreachable',
+  网关返回了无效的响应体: 'alipay.gateway_invalid_json',
+  网关响应缺少签名: 'alipay.response_sign_missing',
+  网关响应签名无效: 'alipay.response_signature_invalid',
+  网关拒绝了支付请求: 'alipay.gateway_rejected',
+  无法连接支付网关: 'alipay.gateway_unreachable',
   回调签名无效: 'alipay.callback_signature_invalid',
-  '回调参数无效': 'alipay.callback_params_invalid',
-  '回调商户不匹配': 'alipay.callback_app_mismatch',
-  '回调金额无效': 'alipay.callback_amount_invalid',
-  '回调交易状态不可结算': 'alipay.callback_status_invalid',
+  回调参数无效: 'alipay.callback_params_invalid',
+  回调商户不匹配: 'alipay.callback_app_mismatch',
+  回调金额无效: 'alipay.callback_amount_invalid',
+  回调交易状态不可结算: 'alipay.callback_status_invalid',
   支付宝配置参数无效: 'alipay.config_invalid',
   支付宝尚未配置: 'alipay.not_configured',
   支付宝插件未就绪: 'alipay.not_ready',
@@ -74,8 +74,7 @@ export type AlipayParams = Record<string, string | number | undefined | null>;
 export function canonicalize(params: AlipayParams): string {
   return Object.entries(params)
     .filter(
-      ([key, value]) =>
-        key !== 'sign' && value !== undefined && value !== null && value !== '',
+      ([key, value]) => key !== 'sign' && value !== undefined && value !== null && value !== '',
     )
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([key, value]) => `${key}=${String(value)}`)

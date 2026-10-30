@@ -32,5 +32,10 @@
   "overview.disabled": "未启用",
   "overview.settingsLink": "配置",
   "overview.settingsLinkDescription": "设置网关地址、商户信息与密钥。",
-  "overview.activity": "支付方式"
+  "overview.activity": "支付方式",
+  "overview.unavailable": "支付网关状态暂时不可用。",
+  "overview.manageTitle": "管理支付网关",
+  "overview.manageDescription": "配置网关地址、商户信息与密钥。",
+  "overview.activityDescription": "当前支持的支付方式。",
+  "overview.empty": "暂无支付方式"
 }

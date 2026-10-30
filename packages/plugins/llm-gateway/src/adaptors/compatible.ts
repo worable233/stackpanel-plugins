@@ -19,7 +19,7 @@
  */
 
 import { createAdaptor, genericExtractUsage } from './base.js';
-import type { IRUsage } from '../protocol.js';
+import type { IRUsage } from '@stackpanel/llm-protocol';
 import type { AdaptorErrorInput, ProviderAdaptor } from './types.js';
 import { GatewayError } from '../errors.js';
 import { parseUpstreamError } from './types.js';
@@ -191,6 +191,166 @@ export const customAdaptor: ProviderAdaptor = createAdaptor({
   preservedFields: [],
 });
 
+/* ------------------------------ C5：国内/边缘厂商预设 ------------------------------ */
+
+/**
+ * 火山方舟（Volcengine Ark）：`/api/v3`，模型 id 形如 `doubao-seed-1-6-...`。
+ * 推理开关字段名是 `thinking`（不是 OpenAI 的 `reasoning_effort`），必须保留。
+ */
+export const volcengineAdaptor: ProviderAdaptor = createAdaptor({
+  id: 'volcengine',
+  label: '火山方舟（豆包）',
+  protocol: 'openai-chat',
+  capabilities: {
+    operations: ['embeddings', 'images.generations'],
+    streaming: true,
+    websocket: false,
+    customSigning: false,
+    toolCalls: true,
+    images: true,
+    promptCache: true,
+  },
+  preservedFields: ['thinking', 'caching', 'seed'],
+});
+
+/**
+ * 阿里云百炼（DashScope 兼容模式）：`/compatible-mode/v1`。
+ * Qwen 系列用 `enable_thinking` 开关思考，`prompt_tokens_details.cached_tokens` 报命中。
+ */
+export const dashscopeAdaptor: ProviderAdaptor = createAdaptor({
+  id: 'dashscope',
+  label: '阿里云百炼（通义）',
+  protocol: 'openai-chat',
+  capabilities: {
+    operations: ['embeddings', 'images.generations', 'audio.speech', 'audio.transcriptions'],
+    streaming: true,
+    websocket: false,
+    customSigning: false,
+    toolCalls: true,
+    images: true,
+    promptCache: true,
+  },
+  preservedFields: ['enable_thinking', 'thinking_budget', 'vl_high_resolution_images'],
+});
+
+/** 智谱 GLM：OpenAI 兼容，`thinking` 开关；embedding 是 `embedding-3`。 */
+export const zhipuAdaptor: ProviderAdaptor = createAdaptor({
+  id: 'zhipu',
+  label: '智谱 GLM',
+  protocol: 'openai-chat',
+  capabilities: {
+    operations: ['embeddings', 'images.generations'],
+    streaming: true,
+    websocket: false,
+    customSigning: false,
+    toolCalls: true,
+    images: true,
+    promptCache: false,
+  },
+  preservedFields: ['thinking', 'request_id'],
+});
+
+/** Moonshot（Kimi）：`/v1`，长上下文；思考模型用 `thinking` 字段。 */
+export const moonshotAdaptor: ProviderAdaptor = createAdaptor({
+  id: 'moonshot',
+  label: 'Moonshot（Kimi）',
+  protocol: 'openai-chat',
+  capabilities: {
+    operations: ['embeddings'],
+    streaming: true,
+    websocket: false,
+    customSigning: false,
+    toolCalls: true,
+    images: false,
+    promptCache: true,
+  },
+  preservedFields: ['thinking', 'partial'],
+});
+
+/** MiniMax：`/v1`，语音/音乐是它真正的差异点。 */
+export const minimaxAdaptor: ProviderAdaptor = createAdaptor({
+  id: 'minimax',
+  label: 'MiniMax',
+  protocol: 'openai-chat',
+  capabilities: {
+    operations: ['audio.speech', 'images.generations'],
+    streaming: true,
+    websocket: false,
+    customSigning: false,
+    toolCalls: true,
+    images: false,
+    promptCache: false,
+  },
+  preservedFields: ['enable_thinking', 'audio_setting', 'voice_setting'],
+});
+
+/**
+ * 讯飞星火（Spark）：HTTP 兼容端点是 `/v1`，鉴权仍是 Bearer。
+ * 它**没有** embeddings / images，声明能力位可以避免策略把请求路由过来。
+ */
+export const xunfeiAdaptor: ProviderAdaptor = createAdaptor({
+  id: 'xunfei',
+  label: '讯飞星火',
+  protocol: 'openai-chat',
+  capabilities: {
+    operations: [],
+    streaming: true,
+    websocket: false,
+    customSigning: false,
+    toolCalls: true,
+    images: false,
+    promptCache: false,
+  },
+  preservedFields: ['search_disable', 'domain'],
+});
+
+/**
+ * Cloudflare Workers AI：baseUrl 形如
+ * `https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1`。
+ * 账户 id 必须写进 baseUrl（适配器不解析它）。
+ */
+export const cloudflareAdaptor: ProviderAdaptor = createAdaptor({
+  id: 'cloudflare',
+  label: 'Cloudflare Workers AI',
+  protocol: 'openai-chat',
+  capabilities: {
+    operations: ['embeddings', 'images.generations'],
+    streaming: false,
+    websocket: false,
+    customSigning: false,
+    toolCalls: true,
+    images: true,
+    promptCache: false,
+    // Workers AI 的 stream 与 usage 结构不稳定：不注入 stream_options。
+    streamUsage: false,
+  },
+  preservedFields: [],
+});
+
+/** 302.AI：聚合网关，能力最宽（含 rerank / 语音 / 图像）。 */
+export const ai302Adaptor: ProviderAdaptor = createAdaptor({
+  id: 'ai302',
+  label: '302.AI',
+  protocol: 'openai-chat',
+  capabilities: {
+    operations: [
+      'embeddings',
+      'images.generations',
+      'audio.speech',
+      'audio.transcriptions',
+      'moderations',
+      'rerank',
+    ],
+    streaming: true,
+    websocket: false,
+    customSigning: false,
+    toolCalls: true,
+    images: true,
+    promptCache: true,
+  },
+  preservedFields: [],
+});
+
 /**
  * 所有「也说 OpenAI Chat」的 adaptor。`resolveAdaptor` 在 id 未命中时
  * 会把 `<custom>` 或未知 id 回落到 `customAdaptor`。
@@ -202,5 +362,13 @@ export const OPENAI_COMPATIBLE_ADAPTORS: readonly ProviderAdaptor[] = [
   ollamaAdaptor,
   openrouterAdaptor,
   siliconflowAdaptor,
+  volcengineAdaptor,
+  dashscopeAdaptor,
+  zhipuAdaptor,
+  moonshotAdaptor,
+  minimaxAdaptor,
+  xunfeiAdaptor,
+  cloudflareAdaptor,
+  ai302Adaptor,
   customAdaptor,
 ];

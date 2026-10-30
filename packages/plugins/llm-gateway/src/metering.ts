@@ -11,7 +11,7 @@
  * 精度提升，不改变本模块的接口。
  */
 
-import type { IRUsage } from './protocol.js';
+import type { IRUsage } from '@stackpanel/llm-protocol';
 import type { TokenUsage } from './pricing.js';
 import { estimateTokens } from './pricing.js';
 

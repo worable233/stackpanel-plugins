@@ -1,0 +1,28 @@
+{
+  "name": "@stackpanel/llm-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "LLM 线协议与中间表示（IR）：四种协议编解码、SSE 解析、请求/响应规范化。从 llm-gateway 抽离，供网关与其它模型类插件共用。",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

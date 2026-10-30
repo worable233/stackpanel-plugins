@@ -98,6 +98,16 @@ export const accountSchema = z.object({
   maxConcurrency: z.number(),
   lastUsedAt: z.string().nullable(),
   createdAt: z.string(),
+  /** 额外 key 元数据（A1）：只含 id/label/weight，永不回显 secret。 */
+  keys: z.array(z.object({ id: z.string(), label: z.string(), weight: z.number() })).default([]),
+  keyCount: z.number().default(1),
+  /** 上游余额快照（A2）；null = 未探测 / 该厂商不支持。 */
+  balance: z.number().nullable().default(null),
+  balanceCurrency: z.string().default(''),
+  balanceUpdatedAt: z.string().nullable().default(null),
+  /** 最近一次上游失败摘要（自动摘号证据，A7）。 */
+  lastError: z.string().nullable().default(null),
+  lastErrorAt: z.string().nullable().default(null),
 });
 
 /** 上游协议选项（与后端 PROTOCOLS 对齐）。 */
@@ -161,6 +171,58 @@ export const priceSchema = z.object({
   outputPrice: z.number(),
   cacheReadPrice: z.number(),
   cacheWritePrice: z.number(),
+  /** 成本价（A3）：只用于毛利核算。 */
+  costInputPrice: z.number().default(0),
+  costOutputPrice: z.number().default(0),
+  costCacheReadPrice: z.number().default(0),
+  costCacheWritePrice: z.number().default(0),
+  /** 该模型输出上限（token），用于预授权估算（A8）。 */
+  maxOutputTokens: z.number().default(0),
+  /** 是否叠加用户权限组折扣（A4）。 */
+  groupDiscount: z.boolean().default(true),
+  /** 计费模式（B2）：flat / tiered / expr；空串 = 自动推断。 */
+  strategy: z.string().default(''),
+  /** 受限算术表达式（B2）。 */
+  expr: z.string().default(''),
+  /** 阶梯价（A4）：按输入 token 选阶，未填字段继承基础价。 */
+  tiers: z
+    .array(
+      z.object({
+        from: z.number(),
+        inputPrice: z.number().optional(),
+        outputPrice: z.number().optional(),
+        cacheReadPrice: z.number().optional(),
+        cacheWritePrice: z.number().optional(),
+        reasoningPrice: z.number().optional(),
+      }),
+    )
+    .default([]),
+  /** 时段价（峰谷）：按请求到达时刻命中第一个窗口。 */
+  windows: z
+    .array(
+      z.object({
+        timezone: z.string().default(''),
+        weekdays: z.array(z.number()).default([]),
+        hours: z.string(),
+        percent: z.number().default(0),
+        inputPrice: z.number().optional(),
+        outputPrice: z.number().optional(),
+        cacheReadPrice: z.number().optional(),
+        cacheWritePrice: z.number().optional(),
+        reasoningPrice: z.number().optional(),
+        costInputPrice: z.number().optional(),
+        costOutputPrice: z.number().optional(),
+        costCacheReadPrice: z.number().optional(),
+        costCacheWritePrice: z.number().optional(),
+      }),
+    )
+    .default([]),
+  /** 公开参考价（minor/百万 token）：只给管理员对照，不参与计费。 */
+  refInputPrice: z.number().default(0),
+  refOutputPrice: z.number().default(0),
+  refCacheReadPrice: z.number().default(0),
+  refSource: z.string().default(''),
+  refFetchedAt: z.string().default(''),
   multiplier: z.number(),
   capabilities: z.array(z.string()),
   enabled: z.boolean(),
@@ -169,7 +231,18 @@ export const priceSchema = z.object({
 export const adminOverviewSchema = z.object({
   accounts: z.number(),
   keys: z.number(),
-  summary: z.object({ requests: z.number(), amount: z.number(), totalTokens: z.number() }),
+  summary: z.object({
+    requests: z.number(),
+    amount: z.number(),
+    totalTokens: z.number(),
+    /** 成本与毛利（A3）；旧数据没有坐标时为 0。 */
+    cost: z.number().default(0),
+    margin: z.number().default(0),
+    /** 成本覆盖率（已填成本价的请求占比）。 */
+    costCoverage: z.number().default(1),
+    /** 应用了权限组折扣的请求数。 */
+    discounted: z.number().default(0),
+  }),
   topModels: z.array(
     z.object({
       model: z.string(),
@@ -190,8 +263,90 @@ export const adminOverviewSchema = z.object({
   ),
 });
 
+export const adminUsageLogRowSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  apiKeyId: z.string(),
+  accountId: z.string().nullable().default(null),
+  upstreamKeyId: z.string().default(''),
+  model: z.string(),
+  protocol: z.string(),
+  endpoint: z.string(),
+  totalTokens: z.number(),
+  amount: z.number(),
+  costAmount: z.number().default(0),
+  discountPercent: z.number().default(0),
+  status: z.string(),
+  estimated: z.boolean().default(false),
+  aborted: z.boolean().default(false),
+  httpStatus: z.number().nullable().default(null),
+  latencyMs: z.number().nullable().default(null),
+  error: z.string().nullable().default(null),
+  createdAt: z.string(),
+});
+
+export const adminUsageLogsSchema = z.object({
+  logs: z.array(adminUsageLogRowSchema),
+  total: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
+});
+
 export const adminAccountsSchema = z.object({ accounts: z.array(accountSchema) });
 export const adminPricesSchema = z.object({ prices: z.array(priceSchema) });
+
+/* ------------------------------ 运营面（B） ------------------------------ */
+
+export const modelMapSchema = z.object({
+  id: z.string(),
+  from: z.string(),
+  mode: z.string(),
+  targets: z.array(z.object({ model: z.string(), weight: z.number() })).default([]),
+  priority: z.number().default(0),
+  enabled: z.boolean().default(true),
+  note: z.string().default(''),
+});
+
+export const adminModelMapsSchema = z.object({
+  maps: z.array(modelMapSchema).default([]),
+});
+
+export const budgetLimitSchema = z.object({
+  id: z.string(),
+  userId: z.string().default(''),
+  period: z.string(),
+  amountLimit: z.number(),
+  warnPercent: z.number().default(80),
+  action: z.string().default('warn'),
+  enabled: z.boolean().default(true),
+});
+
+export const adminBudgetLimitsSchema = z.object({
+  limits: z.array(budgetLimitSchema).default([]),
+});
+
+export const entitlementSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  name: z.string().default(''),
+  source: z.string().default('admin'),
+  quotaAmount: z.number(),
+  usedAmount: z.number(),
+  /** 不限量套餐为 null。 */
+  remaining: z.number().nullable().default(null),
+  models: z.array(z.string()).default([]),
+  startsAt: z.string().default(''),
+  expiresAt: z.string().nullable().default(null),
+  status: z.string().default('ACTIVE'),
+  /** 派生状态（含过期/用尽）。 */
+  liveStatus: z.string().default('ACTIVE'),
+  priority: z.number().default(0),
+  createdAt: z.string().default(''),
+});
+
+export const adminEntitlementsSchema = z.object({
+  entitlements: z.array(entitlementSchema).default([]),
+});
 
 export const billingSchema = z.object({
   enabled: z.boolean(),
@@ -368,5 +523,46 @@ export function Field({
         className="h-10 rounded-lg border bg-background px-3 outline-none focus-visible:border-ring"
       />
     </label>
+  );
+}
+
+/**
+ * 内联错误 / 提示条。
+ *
+ * 宿主 `@stackpanel/ui` 契约中没有这两个组件（其他插件各写各的），客户端
+ * admin bundle 又确实需要它们：从 `@stackpanel/ui` 导入会在运行期解析为
+ * `undefined`（ABI 适配器按名重导，宿主命名空间缺名），React 直接抛
+ * 「Element type is invalid」。因此定义在插件本地，随 bundle 自带。
+ */
+export function InlineError({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string | undefined;
+}): ReactElement {
+  return (
+    <p
+      role="alert"
+      className={`rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive ${className}`.trim()}
+    >
+      {children}
+    </p>
+  );
+}
+
+export function InlineNotice({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string | undefined;
+}): ReactElement {
+  return (
+    <p
+      className={`rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground ${className}`.trim()}
+    >
+      {children}
+    </p>
   );
 }

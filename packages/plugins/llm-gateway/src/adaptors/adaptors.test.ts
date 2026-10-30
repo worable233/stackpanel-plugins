@@ -14,7 +14,7 @@ import { customAdaptor } from './compatible.js';
 import type { AdaptorAccount, AdaptorRequestInput } from './types.js';
 import { parseRetryAfter, parseUpstreamError, stripUpstreamNoise } from './types.js';
 import { GatewayError } from '../errors.js';
-import type { IRRequest } from '../protocol.js';
+import type { IRRequest } from '@stackpanel/llm-protocol';
 
 registerBuiltinAdaptors();
 
@@ -48,9 +48,19 @@ function request(overrides: Partial<AdaptorRequestInput> = {}): AdaptorRequestIn
 }
 
 describe('provider registry', () => {
-  it('exposes all 13 builtin providers', () => {
+  it('Responses 原生通道：协议直通且不注入 stream_options', () => {
+    const adaptor = resolveAdaptor('openai-responses');
+    expect(adaptor).not.toBeNull();
+    expect(adaptor?.protocol).toBe('openai-responses');
+    // 注入 chat 的 stream_options 会让 Responses 上游 400。
+    expect(adaptor?.capabilities.streamUsage).toBe(false);
+    expect(adaptor?.capabilities.toolCalls).toBe(true);
+  });
+
+  it('exposes all builtin providers（含 C5 新增预设）', () => {
     expect([...BUILTIN_PROVIDERS]).toEqual([
       'openai',
+      'openai-responses',
       'azure-openai',
       'anthropic',
       'gemini',
@@ -62,6 +72,15 @@ describe('provider registry', () => {
       'ollama',
       'openrouter',
       'siliconflow',
+      'volcengine',
+      'dashscope',
+      'zhipu',
+      'moonshot',
+      'minimax',
+      'xunfei',
+      'cloudflare',
+      'ai302',
+      'custom',
       'openai-compatible',
     ]);
     for (const id of BUILTIN_PROVIDERS) {

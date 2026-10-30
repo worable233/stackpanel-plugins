@@ -2,7 +2,7 @@
  * Provider adaptor 契约。
  *
  * 目标三要求「先实现统一 adaptor 接口，再实现各个 provider」。本仓库已有的
- * `ProtocolCodec`（`codecs/types.ts`）解决的是**线协议**问题：一段 JSON 是
+ * `ProtocolCodec`（`@stackpanel/llm-protocol`）解决的是**线协议**问题：一段 JSON 是
  * OpenAI Chat 形态还是 Anthropic Messages 形态，以及两者如何互转。它**不**
  * 解决厂商问题：DeepSeek 说 OpenAI Chat，但 baseUrl、错误体、usage 字段、可重试
  * 判定都不同；Azure 说 OpenAI Chat，但路径要带 `api-version`、鉴权用 `api-key`
@@ -11,7 +11,7 @@
  *
  * 所以分两层，各管各的：
  *
- *   ProtocolCodec  = 方言（payload 形状）      → codecs/
+ *   ProtocolCodec  = 方言（payload 形状）      → llm-protocol
  *   ProviderAdaptor = 厂商（端点/鉴权/信封/错误/重试） → adaptors/
  *
  * adaptor 通过 `protocol` 声明自己说哪种方言，内核转发时把 codec 的产物交给
@@ -19,9 +19,9 @@
  * 一个 adaptor 文件，不必碰任何 codec。
  */
 
-import type { Protocol } from '../protocol.js';
-import type { IRRequest, IRResponse, IRUsage } from '../protocol.js';
-import type { StreamDecoder } from '../codecs/types.js';
+import type { Protocol } from '@stackpanel/llm-protocol';
+import type { IRRequest, IRResponse, IRUsage } from '@stackpanel/llm-protocol';
+import type { StreamDecoder } from '@stackpanel/llm-protocol';
 import type { OperationKind } from '../endpoints.js';
 import type { GatewayError } from '../errors.js';
 

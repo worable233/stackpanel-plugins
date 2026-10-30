@@ -96,8 +96,12 @@ const catalogFinders: Record<string, FinderProvider> = {
       (await ctx.api.get('/catalog/admin/categories', categoriesSchema)).categories,
   },
   'catalog.adminProducts': {
-    handler: async (_input, ctx) =>
-      ctx.api.get('/catalog/admin/products?page=1&pageSize=100', adminProductsSchema),
+    handler: async (input, ctx) => {
+      const query = (input['$query'] ?? {}) as Record<string, string | string[] | undefined>;
+      const rawPage = Array.isArray(query.page) ? query.page[0] : query.page;
+      const page = Math.max(1, Number(rawPage) || 1);
+      return ctx.api.get(`/catalog/admin/products?page=${page}&pageSize=20`, adminProductsSchema);
+    },
   },
 };
 

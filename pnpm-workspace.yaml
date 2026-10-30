@@ -1,4 +1,7 @@
 packages:
+  # 本仓自己的共享包。与下面 `overrides` 里的内核包不同：它们属于本仓，会被
+  # `scripts/build-plugin.mjs` **内联进插件产物**（内核运行时看不到本仓 packages/）。
+  - packages/protocol
   - packages/plugins/*
   - packages/plugins/*/frontend
 

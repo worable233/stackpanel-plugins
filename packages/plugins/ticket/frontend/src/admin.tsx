@@ -89,19 +89,51 @@ function useClientData<T>(initial: T | undefined, load: () => Promise<T>): T | u
 }
 
 function AdminTicketListPage(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
   const initial = props.data.tickets as Ticket[] | undefined;
-  const tickets = useClientData(initial, async () => {
-    const result = await bffGet<{ tickets: Ticket[] }>('/ticket/admin/tickets?page=1&pageSize=50');
-    return result.tickets;
-  });
+  const [page, setPage] = useState(1);
+  const [result, setResult] = useState<
+    { tickets: Ticket[]; total: number; page: number; pageSize: number } | undefined
+  >(initial ? { tickets: initial, total: initial.length, page: 1, pageSize: 50 } : undefined);
+
+  useEffect(() => {
+    let live = true;
+    bffGet<{ tickets: Ticket[]; total: number; page: number; pageSize: number }>(
+      `/ticket/admin/tickets?page=${page}&pageSize=20`,
+    )
+      .then((next) => {
+        if (live) setResult(next);
+      })
+      .catch(() => {
+        if (live) setResult(undefined);
+      });
+    return () => {
+      live = false;
+    };
+  }, [page, initial]);
+
+  const tickets = result?.tickets ?? [];
+  const pageSize = result?.pageSize ?? 20;
+  const total = result?.total ?? tickets.length;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+
   return (
     <TicketWorkspace
       mode="list"
       admin
       basePath="/admin/plugin/ticket/tickets"
-      tickets={tickets ?? []}
+      tickets={tickets}
       locale={props.locale}
       labels={ticketWorkspaceLabels(props.locale)}
+      pagination={{
+        page: result?.page ?? page,
+        pages,
+        total,
+        summary: tr('admin.paginationSummary', { page: result?.page ?? page, total, pages }),
+        previousLabel: tr('admin.previous'),
+        nextLabel: tr('admin.next'),
+        onPageChange: setPage,
+      }}
     />
   );
 }
@@ -183,6 +215,13 @@ function SupportAdminOverview(props: AdminPageComponentProps): ReactElement {
       title={tr('overview.adminTitle')}
       description={tr('overview.adminDescription')}
       unavailable={!summary}
+      labels={{
+        unavailable: tr('overview.unavailable'),
+        manageTitle: tr('overview.manageTitle'),
+        manageDescription: tr('overview.manageDescription'),
+        activityDescription: tr('overview.activityDescription'),
+        empty: tr('overview.empty'),
+      }}
       metrics={[{ label: tr('overview.total'), value: summary?.total ?? '—' }]}
       links={[
         {

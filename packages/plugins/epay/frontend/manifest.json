@@ -1,5 +1,6 @@
 {
   "version": "0.1.0",
+  "revision": "10c191bddc04",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
@@ -91,7 +92,6 @@
     "frontend/dist/admin.js.map",
     "frontend/dist/admin.runtime.js",
     "frontend/dist/admin.runtime.js.map",
-    "frontend/dist/chunk-SJGPEWRC.js",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ],
@@ -131,7 +131,12 @@
       "overview.disabled": "未启用",
       "overview.settingsLink": "配置",
       "overview.settingsLinkDescription": "设置网关地址、商户信息与密钥。",
-      "overview.activity": "支付方式"
+      "overview.activity": "支付方式",
+      "overview.unavailable": "支付网关状态暂时不可用。",
+      "overview.manageTitle": "管理支付网关",
+      "overview.manageDescription": "配置网关地址、商户信息与密钥。",
+      "overview.activityDescription": "当前支持的支付方式。",
+      "overview.empty": "暂无支付方式"
     },
     "zh-TW": {
       "nav.group": "易支付",
@@ -167,7 +172,12 @@
       "overview.disabled": "未啟用",
       "overview.settingsLink": "配置",
       "overview.settingsLinkDescription": "設定閘道器地址、商戶資訊與金鑰。",
-      "overview.activity": "支付方式"
+      "overview.activity": "支付方式",
+      "overview.unavailable": "支付閘道器狀態暫時不可用。",
+      "overview.manageTitle": "管理支付閘道器",
+      "overview.manageDescription": "配置閘道器地址、商戶資訊與金鑰。",
+      "overview.activityDescription": "當前支援的支付方式。",
+      "overview.empty": "暫無支付方式"
     },
     "zh-HK": {
       "nav.group": "易支付",
@@ -203,7 +213,12 @@
       "overview.disabled": "未啟用",
       "overview.settingsLink": "配置",
       "overview.settingsLinkDescription": "設置閘道器地址、商戶資訊與金鑰。",
-      "overview.activity": "支付方式"
+      "overview.activity": "支付方式",
+      "overview.unavailable": "支付閘道器狀態暫時不可用。",
+      "overview.manageTitle": "管理支付閘道器",
+      "overview.manageDescription": "配置閘道器地址、商戶資訊與金鑰。",
+      "overview.activityDescription": "當前支援的支付方式。",
+      "overview.empty": "暫無支付方式"
     },
     "en-US": {
       "nav.group": "Epay",
@@ -239,7 +254,12 @@
       "overview.disabled": "Disabled",
       "overview.settingsLink": "Settings",
       "overview.settingsLinkDescription": "Set the gateway URL, merchant details and keys.",
-      "overview.activity": "Payment methods"
+      "overview.activity": "Payment methods",
+      "overview.unavailable": "Payment gateway status is temporarily unavailable.",
+      "overview.manageTitle": "Manage payment gateway",
+      "overview.manageDescription": "Configure the gateway URL, merchant details and keys.",
+      "overview.activityDescription": "Currently supported payment methods.",
+      "overview.empty": "No payment methods yet"
     }
   }
 }

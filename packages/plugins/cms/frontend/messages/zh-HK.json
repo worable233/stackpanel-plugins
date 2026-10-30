@@ -99,5 +99,13 @@
   "overview.postsLink": "撰寫與釋出文章。",
   "overview.pagesLink": "維護站點獨立頁面。",
   "overview.redirectsLink": "管理內容遷移後的訪問路徑。",
-  "overview.recent": "最近文章"
+  "overview.recent": "最近文章",
+  "history.previous": "上一頁",
+  "history.next": "下一頁",
+  "history.pageSummary": "第 {page} / {pages} 頁 · 共 {total} 條",
+  "overview.unavailable": "內容資料暫時不可用。",
+  "overview.manageTitle": "管理內容",
+  "overview.manageDescription": "進入內容管理頁面，維護文章和獨立頁面。",
+  "overview.activityDescription": "最近更新的內容。",
+  "overview.empty": "暫無內容"
 }

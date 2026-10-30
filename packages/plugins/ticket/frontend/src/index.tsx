@@ -222,6 +222,13 @@ function SupportOverview(props: AccountPageComponentProps): ReactElement {
       title={tr('overview.accountTitle')}
       description={tr('overview.accountDescription')}
       unavailable={!summary}
+      labels={{
+        unavailable: tr('overview.unavailable'),
+        manageTitle: tr('overview.manageTitle'),
+        manageDescription: tr('overview.manageDescription'),
+        activityDescription: tr('overview.activityDescription'),
+        empty: tr('overview.empty'),
+      }}
       metrics={[{ label: tr('overview.total'), value: summary?.total ?? '—' }]}
       links={[
         {

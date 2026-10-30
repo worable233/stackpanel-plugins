@@ -156,7 +156,10 @@ function WechatPayAdminPage(props: AdminPageComponentProps): ReactElement {
         </section>
       ) : null}
 
-      <form onSubmit={handleSubmit} className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
+      <form
+        onSubmit={handleSubmit}
+        className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2"
+      >
         <Field label={tr('field.appId')} name="appId" value={appId} onChange={setAppId} required />
         <Field label={tr('field.mchId')} name="mchId" value={mchId} onChange={setMchId} required />
         <Field

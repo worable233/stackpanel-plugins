@@ -32,50 +32,58 @@ export const anthropicCodec: ProtocolCodec = {
       if (!isRecord(raw)) continue;
       const role = asString(raw['role']) === 'assistant' ? 'assistant' : 'user';
       const parts: IRPart[] = [];
-      for (const block of asArray(raw['content'])) {
-        if (!isRecord(block)) {
-          if (typeof block === 'string') parts.push({ type: 'text', text: block });
-          continue;
-        }
-        const type = asString(block['type']);
-        if (type === 'text') {
-          parts.push({ type: 'text', text: asString(block['text']) ?? '' });
-        } else if (type === 'image') {
-          const source = isRecord(block['source']) ? block['source'] : {};
-          if (asString(source['type']) === 'base64') {
-            parts.push({
-              type: 'image',
-              data: asString(source['data']) ?? '',
-              mediaType: asString(source['media_type']) ?? 'image/png',
-            });
-          } else {
-            parts.push({ type: 'image', url: asString(source['url']) ?? '' });
+      /**
+       * Anthropic 允许 `content` 直接是一个字符串（单轮纯文本的最常见写法）。
+       * `asArray` 对字符串返回空数组，之前因此把这类消息解析成 `parts: []`，
+       * 转成上游 `input: [{content: []}]` 后被对方以「消息内容为空」拒绝。
+       */
+      if (typeof raw['content'] === 'string') {
+        if (raw['content'].length > 0) parts.push({ type: 'text', text: raw['content'] });
+      } else
+        for (const block of asArray(raw['content'])) {
+          if (!isRecord(block)) {
+            if (typeof block === 'string') parts.push({ type: 'text', text: block });
+            continue;
           }
-        } else if (type === 'tool_use') {
-          parts.push({
-            type: 'tool-call',
-            id: asString(block['id']) ?? '',
-            name: asString(block['name']) ?? '',
-            arguments: parseToolArguments(block['input']),
-          });
-        } else if (type === 'tool_result') {
-          const id = asString(block['tool_use_id']) ?? '';
-          parts.push({
-            type: 'tool-result',
-            id,
-            content: toolResultText(block['content']),
-            ...(block['is_error'] === true ? { isError: true } : {}),
-          });
-        } else if (type === 'thinking') {
-          parts.push({
-            type: 'thinking',
-            text: asString(block['thinking']) ?? '',
-            ...(asString(block['signature']) !== undefined
-              ? { signature: asString(block['signature']) as string }
-              : {}),
-          });
+          const type = asString(block['type']);
+          if (type === 'text') {
+            parts.push({ type: 'text', text: asString(block['text']) ?? '' });
+          } else if (type === 'image') {
+            const source = isRecord(block['source']) ? block['source'] : {};
+            if (asString(source['type']) === 'base64') {
+              parts.push({
+                type: 'image',
+                data: asString(source['data']) ?? '',
+                mediaType: asString(source['media_type']) ?? 'image/png',
+              });
+            } else {
+              parts.push({ type: 'image', url: asString(source['url']) ?? '' });
+            }
+          } else if (type === 'tool_use') {
+            parts.push({
+              type: 'tool-call',
+              id: asString(block['id']) ?? '',
+              name: asString(block['name']) ?? '',
+              arguments: parseToolArguments(block['input']),
+            });
+          } else if (type === 'tool_result') {
+            const id = asString(block['tool_use_id']) ?? '';
+            parts.push({
+              type: 'tool-result',
+              id,
+              content: toolResultText(block['content']),
+              ...(block['is_error'] === true ? { isError: true } : {}),
+            });
+          } else if (type === 'thinking') {
+            parts.push({
+              type: 'thinking',
+              text: asString(block['thinking']) ?? '',
+              ...(asString(block['signature']) !== undefined
+                ? { signature: asString(block['signature']) as string }
+                : {}),
+            });
+          }
         }
-      }
       messages.push({ role, parts });
     }
 

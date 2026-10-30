@@ -57,6 +57,10 @@ export function checkDependencies(beforeInstall = false) {
             name.startsWith('@types/') ? `${name}/package.json` : name,
           );
           if (name.startsWith('@stackpanel/')) {
+            // 本仓自己的工作区包（`packages/protocol` 等）复用 `@stackpanel/` 前缀，
+            // 但它们不来自内核检出，不能按内核包校验路径。
+            const ownPackages = realpathSync(resolve(root, 'packages'));
+            if (realpathSync(entry).startsWith(ownPackages + '/')) continue;
             const expected = resolve(kernelRoot, 'packages', name.slice('@stackpanel/'.length));
             if (!realpathSync(entry).startsWith(realpathSync(expected) + '/')) {
               problems.push(`${pkg.name}: ${name} 指向了错误的内核工作区。`);

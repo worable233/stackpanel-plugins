@@ -7,7 +7,17 @@
  * - 无 usage 时的估算**必须计入 prompt**（旧实现把 prompt 记成 0 是白送输入量）。
  */
 import { describe, expect, it } from 'vitest';
-import { computeAmount, estimateTokens, extractUsage, type ModelPrice } from './pricing.js';
+import {
+  applyDiscount,
+  bestDiscountPercent,
+  computeAmount,
+  computeCostAmount,
+  estimateTokens,
+  extractUsage,
+  priceForUsage,
+  reservedOutputTokens,
+  type ModelPrice,
+} from './pricing.js';
 import {
   OutputAccumulator,
   estimateUsage,
@@ -198,5 +208,81 @@ describe('metering fallbacks', () => {
     const acc = new OutputAccumulator();
     acc.push('a'.repeat(300_000));
     expect(acc.value.length).toBe(131_072);
+  });
+});
+
+describe('阶梯价与权限组折扣（A4）', () => {
+  const tiered: ModelPrice = {
+    inputPrice: 1_000,
+    outputPrice: 2_000,
+    multiplier: 100,
+    tiers: [
+      { from: 0, inputPrice: 1_000 },
+      { from: 100_000, inputPrice: 2_000, outputPrice: 3_000 },
+    ],
+  };
+
+  it('selects the highest threshold not above the prompt size', () => {
+    expect(priceForUsage(tiered, 99_999).inputPrice).toBe(1_000);
+    expect(priceForUsage(tiered, 100_000).inputPrice).toBe(2_000);
+    expect(priceForUsage(tiered, 500_000).outputPrice).toBe(3_000);
+  });
+
+  it('inherits base price for fields the tier does not override', () => {
+    const plateau: ModelPrice = { ...tiered, tiers: [{ from: 10, outputPrice: 9_000 }] };
+    expect(priceForUsage(plateau, 20).inputPrice).toBe(1_000);
+    expect(priceForUsage(plateau, 20).outputPrice).toBe(9_000);
+  });
+
+  it('charges the tier price through computeAmount', () => {
+    // 1M 输入落到第二阶（2_000 minor/百万）= 2000 分。
+    expect(computeAmount(tiered, { promptTokens: 1_000_000, completionTokens: 0 })).toBe(2_000);
+  });
+
+  it('applies the permission-group discount to the final amount', () => {
+    const base = computeAmount(price, { promptTokens: 1_000_000, completionTokens: 0 });
+    const discounted = computeAmount(
+      price,
+      { promptTokens: 1_000_000, completionTokens: 0 },
+      { discountPercent: 20 },
+    );
+    expect(discounted).toBe(Math.round(base * 0.8));
+  });
+
+  it('never discounts below one minor unit and caps the percentage', () => {
+    expect(applyDiscount(1, 90)).toBe(1);
+    expect(applyDiscount(1_000, 500)).toBe(applyDiscount(1_000, 99));
+  });
+
+  it('takes the best discount across groups and ignores missing ones', () => {
+    expect(bestDiscountPercent([{ discount: 5 }, { discount: null }, { discount: 15 }])).toBe(15);
+    expect(bestDiscountPercent([{}, { discount: -3 }])).toBe(0);
+    expect(bestDiscountPercent([{ discount: 200 }])).toBe(99);
+  });
+});
+
+describe('成本价与预留上限（A3/A8）', () => {
+  it('returns zero cost when no cost price is configured', () => {
+    expect(computeCostAmount(price, { promptTokens: 1_000_000, completionTokens: 0 })).toBe(0);
+  });
+
+  it('computes cost without multiplier and without discount', () => {
+    const priced: ModelPrice = {
+      inputPrice: 4_000,
+      outputPrice: 8_000,
+      multiplier: 200,
+      costInputPrice: 1_000,
+      costOutputPrice: 2_000,
+    };
+    const usage = { promptTokens: 1_000_000, completionTokens: 500_000 };
+    // 成本：1000 + 1000 = 2000，与售价倍率/折扣无关。
+    expect(computeCostAmount(priced, usage)).toBe(2_000);
+    expect(computeCostAmount(priced, usage)).toBeLessThan(computeAmount(priced, usage));
+  });
+
+  it('exposes the per-model output cap for reserve estimation', () => {
+    expect(reservedOutputTokens(price)).toBe(0);
+    expect(reservedOutputTokens({ ...price, maxOutputTokens: 16_384 })).toBe(16_384);
+    expect(reservedOutputTokens({ ...price, maxOutputTokens: -1 })).toBe(0);
   });
 });

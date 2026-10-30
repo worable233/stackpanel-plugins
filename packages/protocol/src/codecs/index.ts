@@ -40,6 +40,7 @@ const GEMINI_PATH = /^v1beta\/models\/([^/:]+):(streamGenerateContent|generateCo
  * - `v1/messages`、`messages` → anthropic
  * - `v1beta/models/{model}:generateContent|streamGenerateContent` → gemini
  * - `v1/models`、`models` → 模型发现（返回 openai-chat 形态）
+ * - `v1beta/openai/{...}` → 剥掉前缀后按 OpenAI 方言处理（Gemini 兼容入口）
  */
 export function matchIngress(rest: string, query: URLSearchParams): IngressMatch | null {
   const path = rest.replace(/^\/+/, '').replace(/\/+$/, '');
@@ -55,6 +56,13 @@ export function matchIngress(rest: string, query: URLSearchParams): IngressMatch
         streaming: match[2] === 'streamGenerateContent',
       };
     }
+  }
+
+  // Gemini 的「OpenAI 兼容入口」：客户端把 baseUrl 配成 `<网关>/v1beta/openai`，
+  // 请求于是落到 `v1beta/openai/chat/completions`。剥掉前缀再按 OpenAI 方言匹配，
+  // 子路径也归一化成 `v1/...`——否则 endpoint registry 认不出它，会当成未知端点 501。
+  if (path.startsWith('v1beta/openai/')) {
+    return matchIngress(`v1/${path.slice('v1beta/openai/'.length)}`, query);
   }
 
   if (/^(v1\/)?chat\/completions$/.test(path)) {

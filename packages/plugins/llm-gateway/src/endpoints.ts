@@ -2,7 +2,7 @@
  * 公网 endpoint 注册表。
  *
  * 目标二的硬要求：**不支持的 endpoint 必须明确返回 404 或 501，不能默认当作
- * Chat 请求转发**。旧实现（`codecs/index.ts` 的 `matchIngress`）在路径不匹配时
+ * Chat 请求转发**。旧实现（`@stackpanel/llm-protocol` 的 `matchIngress`）在路径不匹配时
  * 一律回落到 openai-chat 并把路径原样拼到上游 baseUrl —— 于是
  * `POST /llm-gateway/v1/embeddings` 会被当成 chat 打到 `…/v1/embeddings`，
  * 上游返回的 404 再被包装成一个语焉不详的 `upstream_error`。注册表把这件事

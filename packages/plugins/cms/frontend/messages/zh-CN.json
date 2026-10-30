@@ -99,5 +99,13 @@
   "overview.postsLink": "撰写与发布文章。",
   "overview.pagesLink": "维护站点独立页面。",
   "overview.redirectsLink": "管理内容迁移后的访问路径。",
-  "overview.recent": "最近文章"
+  "overview.recent": "最近文章",
+  "history.previous": "上一页",
+  "history.next": "下一页",
+  "history.pageSummary": "第 {page} / {pages} 页 · 共 {total} 条",
+  "overview.unavailable": "内容数据暂时不可用。",
+  "overview.manageTitle": "管理内容",
+  "overview.manageDescription": "进入内容管理页面，维护文章和独立页面。",
+  "overview.activityDescription": "最近更新的内容。",
+  "overview.empty": "暂无内容"
 }

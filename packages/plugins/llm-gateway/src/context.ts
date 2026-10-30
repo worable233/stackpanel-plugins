@@ -91,6 +91,18 @@ export const GATEWAY_NOTIFICATION_TYPES = [
     label: 'API 额度用尽',
     order: 60,
   },
+  {
+    type: 'gateway.budget.warned',
+    category: 'wallet' as const,
+    label: 'API 预算接近上限',
+    order: 61,
+  },
+  {
+    type: 'gateway.budget.exceeded',
+    category: 'wallet' as const,
+    label: 'API 预算已达上限',
+    order: 62,
+  },
 ];
 
 /**

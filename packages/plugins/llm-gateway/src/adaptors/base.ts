@@ -7,7 +7,7 @@
  * 避免 13 份复制粘贴的请求构造代码各自漂移。
  */
 
-import type { Protocol } from '../protocol.js';
+import type { Protocol } from '@stackpanel/llm-protocol';
 import { GatewayError } from '../errors.js';
 import {
   parseRetryAfter,
@@ -19,7 +19,7 @@ import {
   type ProviderAdaptor,
   type UpstreamCall,
 } from './types.js';
-import type { IRUsage } from '../protocol.js';
+import type { IRUsage } from '@stackpanel/llm-protocol';
 
 /** 大多数 adaptor 的能力基座（对话 + 流式 + 工具 + 图片）。 */
 export const DEFAULT_CAPABILITIES: AdaptorCapabilities = {

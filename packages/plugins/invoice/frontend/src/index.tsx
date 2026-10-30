@@ -99,8 +99,12 @@ function absoluteAssetUrl(assetPath: string | null, baseUrl: string): string | n
 /** 服务端数据提供者：管理端列表/详情 + 商店订单 + 平台信息/图标。 */
 const invoiceFinders: Record<string, FinderProvider> = {
   'invoice.adminInvoices': {
-    handler: async (_input, ctx) =>
-      ctx.api.get('/invoice/admin/invoices?page=1&pageSize=100', invoiceListSchema),
+    handler: async (input, ctx) => {
+      const query = (input['$query'] ?? {}) as Record<string, string | string[] | undefined>;
+      const rawPage = Array.isArray(query.page) ? query.page[0] : query.page;
+      const page = Math.max(1, Number(rawPage) || 1);
+      return ctx.api.get(`/invoice/admin/invoices?page=${page}&pageSize=20`, invoiceListSchema);
+    },
   },
   'invoice.adminInvoice': {
     handler: async (input, ctx) =>
@@ -241,7 +245,7 @@ export const frontend: FrontendPackage = {
         component: 'admin/invoices',
         permission: 'invoice.admin',
         nav: { labelKey: 'nav.label', groupKey: 'nav.group', order: 20 },
-        data: [{ finder: 'invoice.adminInvoices', as: 'invoices' }],
+        data: [{ finder: 'invoice.adminInvoices', as: 'invoices', input: { $query: '1' } }],
       },
       {
         path: '/invoices/new',

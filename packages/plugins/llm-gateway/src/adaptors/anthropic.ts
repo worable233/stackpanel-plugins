@@ -12,7 +12,7 @@
  */
 
 import { createAdaptor, genericExtractUsage } from './base.js';
-import type { IRUsage } from '../protocol.js';
+import type { IRUsage } from '@stackpanel/llm-protocol';
 import type { AdaptorErrorInput, AdaptorAccount, ProviderAdaptor } from './types.js';
 import { GatewayError } from '../errors.js';
 import { parseRetryAfter, parseUpstreamError } from './types.js';

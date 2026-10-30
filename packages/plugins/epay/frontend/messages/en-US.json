@@ -32,5 +32,10 @@
   "overview.disabled": "Disabled",
   "overview.settingsLink": "Settings",
   "overview.settingsLinkDescription": "Set the gateway URL, merchant details and keys.",
-  "overview.activity": "Payment methods"
+  "overview.activity": "Payment methods",
+  "overview.unavailable": "Payment gateway status is temporarily unavailable.",
+  "overview.manageTitle": "Manage payment gateway",
+  "overview.manageDescription": "Configure the gateway URL, merchant details and keys.",
+  "overview.activityDescription": "Currently supported payment methods.",
+  "overview.empty": "No payment methods yet"
 }

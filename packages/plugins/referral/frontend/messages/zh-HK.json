@@ -93,5 +93,8 @@
   "feedback.codeCreated": "邀請碼已建立",
   "feedback.configSaved": "配置已儲存",
   "feedback.adjusted": "餘額已調整",
-  "state.clawedBack": "已追回（退款）"
+  "state.clawedBack": "已追回（退款）",
+  "admin.previous": "上一頁",
+  "admin.next": "下一頁",
+  "admin.pageSummary": "第 {page} / {pages} 頁 · 共 {total} 條"
 }

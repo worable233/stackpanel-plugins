@@ -1,9 +1,10 @@
-import { defineFrontend } from '@stackpanel/sdk';
+import { defineFrontend, type FinderProvider } from '@stackpanel/sdk';
 import type {
   AccountPageComponentProps,
   AccountWidgetProps,
   FrontendPackage,
 } from '@stackpanel/sdk';
+import { z } from 'zod';
 import type { ReactElement } from 'react';
 import Link from 'next/link';
 import {
@@ -39,7 +40,6 @@ import {
   Label,
   PageHeader,
 } from '@stackpanel/ui';
-import type { z } from 'zod';
 import {
   Empty,
   IconBadge,
@@ -808,11 +808,51 @@ export function GatewayAccountWidget(props: AccountWidgetProps): ReactElement {
   );
 }
 
+/* --------------------------------- 数据供给（finder） --------------------------------- */
+
+/**
+ * 页面数据的宿主侧供给器。
+ *
+ * 内核的 `adminRoutes[].data` 只支持 `finder` 型声明（`finder` + `as`），
+ * 不存在 `fetch: { path }` 形式——之前误用导致 manifest 过不了
+ * `frontendManifestSchema`，整个前端包被静默丢弃（侧边栏无菜单、路由 404）。
+ * 这里的 handler 只是把对应的 GET 接口原样透传；schema 用宽松的
+ * `passthrough()`，因为页面对数据形状自有自己的容错。
+ */
+const zAny = z.object({}).passthrough();
+
+const gatewayFinders: Record<string, FinderProvider> = {
+  'llm-gateway.adminOverview': {
+    handler: (_input, ctx) => ctx.api.get('/llm-gateway/admin/overview', zAny),
+  },
+  'llm-gateway.adminAccounts': {
+    handler: (_input, ctx) => ctx.api.get('/llm-gateway/admin/accounts', zAny),
+  },
+  'llm-gateway.adminPrices': {
+    handler: (_input, ctx) => ctx.api.get('/llm-gateway/admin/prices', zAny),
+  },
+  'llm-gateway.billing': {
+    handler: (_input, ctx) => ctx.api.get('/llm-gateway/billing', zAny),
+  },
+  'llm-gateway.usage': {
+    handler: (_input, ctx) => ctx.api.get('/llm-gateway/usage', zAny),
+  },
+  'llm-gateway.prices': {
+    handler: (_input, ctx) => ctx.api.get('/llm-gateway/prices', zAny),
+  },
+  'llm-gateway.keys': {
+    handler: (_input, ctx) => ctx.api.get('/llm-gateway/keys', zAny),
+  },
+};
+
 /* --------------------------------- 导出 --------------------------------- */
 
 const frontend: FrontendPackage = {
-  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US'],
+  locales: ['zh-CN', 'zh-TW', 'zh-HK', 'en-US', 'ja-JP', 'ko-KR', 'fr-FR'],
   messages,
+  // 服务端 route data 提供者：adminRoutes[].data[].finder 按名从这里解析。
+  // 没有这一行，`llm-gateway.adminPrices` 等_finder 永远「未注册」，页面拿到空 data。
+  finders: gatewayFinders,
   ui: {
     actions: [
       {
@@ -930,7 +970,27 @@ const frontend: FrontendPackage = {
           { name: 'outputPrice', type: 'integer', required: true, min: 0 },
           { name: 'cacheReadPrice', type: 'integer', min: 0 },
           { name: 'cacheWritePrice', type: 'integer', min: 0 },
+          // 以下字段以前漏声明：内核 coerceActionInput 只提交 action.input 里的
+          // 名字，表单里有输入框但值进不了 body，成本/上限/计费模式会被静默丢弃。
+          { name: 'reasoningPrice', type: 'integer', min: 0 },
+          { name: 'imagePrice', type: 'integer', min: 0 },
+          { name: 'audioPrice', type: 'integer', min: 0 },
+          { name: 'costInputPrice', type: 'integer', min: 0 },
+          { name: 'costOutputPrice', type: 'integer', min: 0 },
+          { name: 'costCacheReadPrice', type: 'integer', min: 0 },
+          { name: 'costCacheWritePrice', type: 'integer', min: 0 },
+          { name: 'costReasoningPrice', type: 'integer', min: 0 },
+          { name: 'costImagePrice', type: 'integer', min: 0 },
+          { name: 'costAudioPrice', type: 'integer', min: 0 },
+          { name: 'maxOutputTokens', type: 'integer', min: 0 },
+          { name: 'strategy', type: 'string', maxLength: 16 },
+          { name: 'expr', type: 'string', maxLength: 512 },
+          { name: 'groupDiscount', type: 'boolean' },
           { name: 'capabilities', type: 'ids', maxLength: 32, max: 8 },
+          // 阶梯价 / 峰谷时段：嵌套结构只能序列化成 JSON 字符串提交
+          // （内核 action input 仅支持 string|integer|number|money|boolean|ids）。
+          { name: 'tiers', type: 'string', maxLength: 4000 },
+          { name: 'windows', type: 'string', maxLength: 4000 },
           { name: 'multiplier', type: 'integer', min: 0 },
           { name: 'enabled', type: 'boolean' },
         ],
@@ -950,27 +1010,27 @@ const frontend: FrontendPackage = {
         component: 'admin/overview',
         permission: 'llm-gateway.admin',
         nav: { labelKey: 'nav.overview', groupKey: 'nav.group', order: 0 },
-        data: [{ fetch: { path: '/llm-gateway/admin/overview' }, as: 'overview' }],
+        data: [{ finder: 'llm-gateway.adminOverview', as: 'overview' }],
       },
       {
         path: '/accounts/new',
         component: 'admin/account-editor',
         permission: 'llm-gateway.admin',
-        data: [{ fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' }],
+        data: [{ finder: 'llm-gateway.adminAccounts', as: 'accounts' }],
       },
       {
         path: '/accounts/:id/edit',
         component: 'admin/account-editor',
         permission: 'llm-gateway.admin',
-        data: [{ fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' }],
+        data: [{ finder: 'llm-gateway.adminAccounts', as: 'accounts' }],
       },
       {
         path: '/prices/new',
         component: 'admin/price-editor',
         permission: 'llm-gateway.admin',
         data: [
-          { fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' },
-          { fetch: { path: '/llm-gateway/admin/prices' }, as: 'prices' },
+          { finder: 'llm-gateway.adminAccounts', as: 'accounts' },
+          { finder: 'llm-gateway.adminPrices', as: 'prices' },
         ],
       },
       {
@@ -978,9 +1038,17 @@ const frontend: FrontendPackage = {
         component: 'admin/price-editor',
         permission: 'llm-gateway.admin',
         data: [
-          { fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' },
-          { fetch: { path: '/llm-gateway/admin/prices' }, as: 'prices' },
+          { finder: 'llm-gateway.adminAccounts', as: 'accounts' },
+          { finder: 'llm-gateway.adminPrices', as: 'prices' },
         ],
+      },
+      {
+        path: '/playground',
+        component: 'admin/playground',
+        permission: 'llm-gateway.admin',
+        // 放在账号页之前：排查「这个号通不通」是最常开的一页。
+        nav: { labelKey: 'nav.playground', groupKey: 'nav.group', order: 5 },
+        data: [{ finder: 'llm-gateway.adminPrices', as: 'prices' }],
       },
       {
         path: '/accounts',
@@ -993,8 +1061,8 @@ const frontend: FrontendPackage = {
           activePaths: ['/prices'],
         },
         data: [
-          { fetch: { path: '/llm-gateway/admin/accounts' }, as: 'accounts' },
-          { fetch: { path: '/llm-gateway/admin/prices' }, as: 'prices' },
+          { finder: 'llm-gateway.adminAccounts', as: 'accounts' },
+          { finder: 'llm-gateway.adminPrices', as: 'prices' },
         ],
       },
     ],
@@ -1005,8 +1073,8 @@ const frontend: FrontendPackage = {
         permission: 'llm-gateway.use',
         nav: { labelKey: 'nav.overview', groupKey: 'nav.group' },
         data: [
-          { fetch: { path: '/llm-gateway/billing' }, as: 'billing' },
-          { fetch: { path: '/llm-gateway/usage' }, as: 'usage' },
+          { finder: 'llm-gateway.billing', as: 'billing' },
+          { finder: 'llm-gateway.usage', as: 'usage' },
         ],
       },
       {
@@ -1014,7 +1082,7 @@ const frontend: FrontendPackage = {
         component: 'account/gateway-pricing',
         permission: 'llm-gateway.use',
         nav: { labelKey: 'nav.pricing', groupKey: 'nav.group' },
-        data: [{ fetch: { path: '/llm-gateway/prices' }, as: 'prices' }],
+        data: [{ finder: 'llm-gateway.prices', as: 'prices' }],
       },
       {
         path: '/gateway/keys',
@@ -1022,8 +1090,8 @@ const frontend: FrontendPackage = {
         permission: 'llm-gateway.use',
         nav: { labelKey: 'nav.keys', groupKey: 'nav.group' },
         data: [
-          { fetch: { path: '/llm-gateway/billing' }, as: 'billing' },
-          { fetch: { path: '/llm-gateway/keys' }, as: 'keys' },
+          { finder: 'llm-gateway.billing', as: 'billing' },
+          { finder: 'llm-gateway.keys', as: 'keys' },
         ],
       },
     ],

@@ -1,5 +1,6 @@
 {
   "version": "0.1.0",
+  "revision": "f86a1ee3e239",
   "entry": "frontend/dist/index.js",
   "pages": [
     {
@@ -224,7 +225,15 @@
       "overview.postsLink": "撰写与发布文章。",
       "overview.pagesLink": "维护站点独立页面。",
       "overview.redirectsLink": "管理内容迁移后的访问路径。",
-      "overview.recent": "最近文章"
+      "overview.recent": "最近文章",
+      "history.previous": "上一页",
+      "history.next": "下一页",
+      "history.pageSummary": "第 {page} / {pages} 页 · 共 {total} 条",
+      "overview.unavailable": "内容数据暂时不可用。",
+      "overview.manageTitle": "管理内容",
+      "overview.manageDescription": "进入内容管理页面，维护文章和独立页面。",
+      "overview.activityDescription": "最近更新的内容。",
+      "overview.empty": "暂无内容"
     },
     "zh-TW": {
       "nav.group": "內容",
@@ -327,7 +336,15 @@
       "overview.postsLink": "撰寫與釋出文章。",
       "overview.pagesLink": "維護站點獨立頁面。",
       "overview.redirectsLink": "管理內容遷移後的訪問路徑。",
-      "overview.recent": "最近文章"
+      "overview.recent": "最近文章",
+      "history.previous": "上一頁",
+      "history.next": "下一頁",
+      "history.pageSummary": "第 {page} / {pages} 頁 · 共 {total} 條",
+      "overview.unavailable": "內容資料暫時不可用。",
+      "overview.manageTitle": "管理內容",
+      "overview.manageDescription": "進入內容管理頁面，維護文章和獨立頁面。",
+      "overview.activityDescription": "最近更新的內容。",
+      "overview.empty": "暫無內容"
     },
     "zh-HK": {
       "nav.group": "內容",
@@ -430,7 +447,15 @@
       "overview.postsLink": "撰寫與釋出文章。",
       "overview.pagesLink": "維護站點獨立頁面。",
       "overview.redirectsLink": "管理內容遷移後的訪問路徑。",
-      "overview.recent": "最近文章"
+      "overview.recent": "最近文章",
+      "history.previous": "上一頁",
+      "history.next": "下一頁",
+      "history.pageSummary": "第 {page} / {pages} 頁 · 共 {total} 條",
+      "overview.unavailable": "內容資料暫時不可用。",
+      "overview.manageTitle": "管理內容",
+      "overview.manageDescription": "進入內容管理頁面，維護文章和獨立頁面。",
+      "overview.activityDescription": "最近更新的內容。",
+      "overview.empty": "暫無內容"
     },
     "en-US": {
       "nav.group": "Content",
@@ -533,7 +558,15 @@
       "overview.postsLink": "Write and publish posts.",
       "overview.pagesLink": "Maintain standalone site pages.",
       "overview.redirectsLink": "Manage access paths after content moves.",
-      "overview.recent": "Recent posts"
+      "overview.recent": "Recent posts",
+      "history.previous": "Previous",
+      "history.next": "Next",
+      "history.pageSummary": "Page {page} of {pages} · {total} revisions",
+      "overview.unavailable": "Content data is temporarily unavailable.",
+      "overview.manageTitle": "Manage content",
+      "overview.manageDescription": "Open content management to maintain posts and pages.",
+      "overview.activityDescription": "Recently updated content.",
+      "overview.empty": "No content yet"
     }
   }
 }

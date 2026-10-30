@@ -380,7 +380,10 @@ async function readStream(stream: AsyncIterable<unknown>): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function headerValue(headers: Record<string, string | string[] | undefined>, name: string): string | undefined {
+function headerValue(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | undefined {
   const value = headers[name];
   if (Array.isArray(value)) return value[0];
   return value ?? undefined;
@@ -409,7 +412,8 @@ function handle(handler: (req: HttpRequest, reply: HttpReply) => Promise<unknown
     try {
       return await handler(req, reply);
     } catch (error) {
-      if (error instanceof WechatPayError) throw new PluginError(error.code, error.status, error.message);
+      if (error instanceof WechatPayError)
+        throw new PluginError(error.code, error.status, error.message);
       throw error;
     }
   };

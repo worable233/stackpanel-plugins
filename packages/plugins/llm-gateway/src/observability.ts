@@ -25,8 +25,12 @@ export type MetricName =
   | 'upstream.429'
   | 'upstream.5xx'
   | 'upstream.timeout'
+  | 'upstream.key_rotate'
+  | 'upstream.status_mapped'
   | 'breaker.open'
   | 'account.failover'
+  | 'account.auto_disabled'
+  | 'account.key_exhausted'
   | 'billing.settle_failed'
   | 'billing.compensation_settled'
   | 'billing.compensation_failed'
@@ -107,6 +111,13 @@ export class Metrics {
     };
   }
 
+  /** 记一次延迟样本（D5）。 */
+  private async recordLatency(kind: HistogramKind, ms: number): Promise<void> {
+    if (!Number.isFinite(ms) || ms < 0) return;
+    const key = histogramKey(kind, bucketIndexOf(ms), Date.now());
+    await this.state.incr(key, HISTOGRAM_WINDOW_MS).catch(() => null);
+  }
+
   /**
    * 汇总一次请求。所有子计数都在这里统一落库，调用点不必重复。
    *
@@ -124,6 +135,12 @@ export class Metrics {
     if (observation.status >= 500) await this.bump('upstream.5xx');
     if (!observation.settled) await this.bump('billing.settle_failed');
 
+    // 延迟分布（D5）：分桶计数，1 小时窗口。失败静默。
+    await this.recordLatency('latency', observation.latencyMs);
+    if (observation.firstTokenMs !== null) {
+      await this.recordLatency('first_token', observation.firstTokenMs);
+    }
+
     // 慢请求与首 token 时间进日志：指标只能给数量，分布要靠日志侧聚合。
     // 注意：日志里**绝不含** API key（只记账号 id 与 endpoint）。
     if (observation.latencyMs > 60_000 || (observation.firstTokenMs ?? 0) > 30_000) {
@@ -134,6 +151,95 @@ export class Metrics {
       );
     }
   }
+}
+
+/* ------------------------------ 延迟分布（D5） ------------------------------ */
+
+/**
+ * 延迟直方图的分桶上界（毫秒）。
+ *
+ * 为什么用直方图而不是存原始样本：state 里只有字符串计数（没有 list/zset），
+ * 存样本等于在 Redis 里堆几十万条键。分桶的上界按「用户能感知的档位」选
+ * （100ms 内很快、300ms 可接受、1s 开始不耐烦、5s 以上是故障），
+ * 算出的 p50/p95 是**该档位的上界**，用于看趋势和告警足够，不用于 SLA 台账。
+ */
+export const LATENCY_BOUNDS_MS: readonly number[] = [
+  50, 100, 200, 300, 500, 800, 1200, 2000, 3000, 5000, 8000, 12_000, 20_000, 30_000, 60_000,
+];
+
+/** 直方图保留 1 小时（按小时分键，最多 16 个键/类，读取代价可控）。 */
+const HISTOGRAM_WINDOW_MS = 60 * 60 * 1000;
+
+export type HistogramKind = 'latency' | 'first_token';
+
+export interface PercentileStats {
+  /** 该分位对应的档位上界（ms）；样本为空时为 null。 */
+  p50: number | null;
+  p95: number | null;
+  count: number;
+}
+
+function histogramKey(kind: HistogramKind, index: number, now: number): string {
+  return `gw:hist:${kind}:${index}:${Math.floor(now / HISTOGRAM_WINDOW_MS)}`;
+}
+
+/** 延迟 → 分桶下标（大于最后一个上界时落到「溢出桶」）。 */
+export function bucketIndexOf(ms: number): number {
+  if (!Number.isFinite(ms) || ms <= 0) return 0;
+  for (let index = 0; index < LATENCY_BOUNDS_MS.length; index += 1) {
+    if (ms <= (LATENCY_BOUNDS_MS[index] as number)) return index;
+  }
+  return LATENCY_BOUNDS_MS.length;
+}
+
+/**
+ * 从分桶计数估算分位数。
+ *
+ * 返回命中档位的**上界**（不做桶内插值）：插值会造出「p95 = 733ms」这种
+ * 比真实精度更细的假象，而我们的桶宽本来就不支持这个精度。
+ */
+export function percentileOfBuckets(counts: readonly number[], percentile: number): number | null {
+  const total = counts.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return null;
+  const target = Math.max(1, Math.ceil((percentile / 100) * total));
+  let cumulative = 0;
+  for (let index = 0; index < counts.length; index += 1) {
+    cumulative += counts[index] ?? 0;
+    if (cumulative >= target) {
+      // 溢出桶：返回最后一个上界（代表「≥ 60s」）。
+      if (index >= LATENCY_BOUNDS_MS.length)
+        return LATENCY_BOUNDS_MS[LATENCY_BOUNDS_MS.length - 1] as number;
+      return LATENCY_BOUNDS_MS[index] as number;
+    }
+  }
+  return LATENCY_BOUNDS_MS[LATENCY_BOUNDS_MS.length - 1] as number;
+}
+
+/**
+ * 读某类延迟的分位数（p50/p95 + 样本数）。
+ *
+ * 读 16 个键（并行），保留 1 小时。观测失败一律静默降级为「无样本」——
+ * 看板不能因为 Redis 抖动而 500。
+ */
+export async function readLatencyStats(
+  state: StateService,
+  kind: HistogramKind,
+  now = Date.now(),
+): Promise<PercentileStats> {
+  const counts = await Promise.all(
+    Array.from({ length: LATENCY_BOUNDS_MS.length + 1 }, (_unused, index) =>
+      state
+        .get(histogramKey(kind, index, now))
+        .then((value) => Number(value ?? 0) || 0)
+        .catch(() => 0),
+    ),
+  );
+  const total = counts.reduce((sum, value) => sum + value, 0);
+  return {
+    p50: percentileOfBuckets(counts, 50),
+    p95: percentileOfBuckets(counts, 95),
+    count: total,
+  };
 }
 
 /** 供管理端一次性读全部指标（避免逐个 await 产生的 N 次往返）。 */

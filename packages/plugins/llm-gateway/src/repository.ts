@@ -2,18 +2,24 @@ import type { CustomModelDefinition, ExtensionInstance, ExtensionWhere } from '@
 import {
   gatewayAccountModel,
   gatewayBillingEntryModel,
+  gatewayBudgetLimitModel,
   gatewayConfigModel,
+  gatewayEntitlementModel,
   gatewayKeyPolicyModel,
   gatewayLegacyKeyModel,
+  gatewayModelMapModel,
   gatewayModelPriceModel,
   gatewayTaskModel,
   gatewayUsageLogModel,
   gatewayUserSettingModel,
   type GatewayAccountData,
   type GatewayBillingEntryData,
+  type GatewayBudgetLimitData,
   type GatewayConfigData,
+  type GatewayEntitlementData,
   type GatewayKeyPolicyData,
   type GatewayLegacyKeyData,
+  type GatewayModelMapData,
   type GatewayModelPriceData,
   type GatewayTaskData,
   type GatewayUsageLogData,
@@ -31,6 +37,20 @@ const DEFAULT_GATEWAY_CONFIG: GatewayConfigData = {
   retryAttempts: 3,
   maxResponseBytes: 32 * 1024 * 1024,
   holdTtlMs: 15 * 60 * 1000,
+  autoDisableKeywords: [
+    'insufficient balance',
+    'insufficient_quota',
+    '余额不足',
+    '已欠费',
+    'account has been disabled',
+    'invalid api key',
+  ],
+  autoDisableStatusCodes: [],
+  autoDisableCooldownMs: 10 * 60 * 1000,
+  budgetPeriod: 'month',
+  sensitiveWords: [],
+  sensitiveWordAction: 'block',
+  usdRateMinor: 700,
 };
 
 /** Extension instance flattened into `{ id, ...spec, createdAt, updatedAt }`. */
@@ -208,7 +228,11 @@ export async function getConfig(): Promise<GatewayConfigData> {
     .get<GatewayConfigData>(gatewayConfigModel, CONFIG_INSTANCE_ID)
     .catch(() => null);
   if (!instance) return { ...DEFAULT_GATEWAY_CONFIG };
-  return { ...DEFAULT_GATEWAY_CONFIG, ...instance.spec };
+  const merged = { ...DEFAULT_GATEWAY_CONFIG, ...instance.spec };
+  // 历史行没有敏感词字段；同时容忍被手工改坏的词表（非数组 → 视为关闭）。
+  if (!Array.isArray(merged.sensitiveWords)) merged.sensitiveWords = [];
+  if (merged.sensitiveWordAction !== 'log') merged.sensitiveWordAction = 'block';
+  return merged;
 }
 
 /** 写平台配置（整体替换，未给的字段回落默认）。 */
@@ -255,6 +279,17 @@ export async function createUsageLog(spec: GatewayUsageLogData): Promise<UsageLo
   return toRow(instance);
 }
 
+export async function patchUsageLog(
+  id: string,
+  patch: Partial<GatewayUsageLogData>,
+): Promise<void> {
+  const current = await extensions().get<GatewayUsageLogData>(gatewayUsageLogModel, id);
+  if (!current) return;
+  await extensions()
+    .update(gatewayUsageLogModel, id, { ...current.spec, ...patch })
+    .catch(() => undefined);
+}
+
 export async function setUsageLogError(id: string, error: string): Promise<void> {
   const current = await extensions().get<GatewayUsageLogData>(gatewayUsageLogModel, id);
   if (!current) return;
@@ -298,6 +333,53 @@ export async function listRecentAllLogs(take: number): Promise<UsageLogRow[]> {
     pageSize: Math.min(take, 200),
   });
   return rows.items.map(toRow);
+}
+
+/** 管理端用量日志筛选条件（A5）。`since` 走 createdAt 索引下界，不支持上界。 */
+export interface UsageLogQuery {
+  userId?: string | undefined;
+  apiKeyId?: string | undefined;
+  accountId?: string | undefined;
+  model?: string | undefined;
+  status?: string | undefined;
+  since?: Date | undefined;
+  page: number;
+  pageSize: number;
+}
+
+export interface UsageLogPage {
+  items: UsageLogRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * 管理端分页查询用量流水。
+ *
+ * 引擎的 `where` 每个字段只能带一个操作符，所以时间条件只支持下界
+ * （`since` → `createdAt gte`）。默认看最近窗口，上界由调用方的预设区间保证。
+ */
+export async function listUsageLogs(query: UsageLogQuery): Promise<UsageLogPage> {
+  const where: ExtensionWhere = {};
+  if (query.userId) where['userId'] = { eq: query.userId };
+  if (query.apiKeyId) where['apiKeyId'] = { eq: query.apiKeyId };
+  if (query.accountId) where['accountId'] = { eq: query.accountId };
+  if (query.model) where['model'] = { eq: query.model };
+  if (query.status) where['status'] = { eq: query.status };
+  if (query.since) where['createdAt'] = { gte: query.since as unknown as number };
+  const rows = await extensions().list<GatewayUsageLogData>(gatewayUsageLogModel, {
+    ...(Object.keys(where).length > 0 ? { where } : {}),
+    orderBy: { field: 'createdAt', desc: true },
+    page: query.page,
+    pageSize: Math.min(Math.max(1, query.pageSize), 200),
+  });
+  return {
+    items: rows.items.map(toRow),
+    total: rows.total,
+    page: rows.page,
+    pageSize: rows.pageSize,
+  };
 }
 
 /* ------------------------------ 计费台账 ------------------------------ */
@@ -401,6 +483,35 @@ export async function listTasks(take = 100, status?: string): Promise<TaskRow[]>
   return result.items.map(toRow);
 }
 
+export async function listUserTasks(userId: string, take = 50): Promise<TaskRow[]> {
+  const result = await extensions().list<GatewayTaskData>(gatewayTaskModel, {
+    where: { userId: { eq: userId } },
+    orderBy: { field: 'createdAt', desc: true },
+    page: 1,
+    pageSize: Math.min(take, 200),
+  });
+  return result.items.map(toRow);
+}
+
+/**
+ * 到期需要轮询的任务（执行器用）。
+ *
+ * 只取 `QUEUED` / `RUNNING`：终态任务即使 `nextPollAt` 残留也不会被重新拉起。
+ * 结果按 `nextPollAt` 升序，保证「先到期的先推进」，避免少数慢任务排在队尾饿死。
+ */
+export async function listDueTasks(now: number, take = 10): Promise<TaskRow[]> {
+  const result = await extensions().list<GatewayTaskData>(gatewayTaskModel, {
+    where: {
+      status: { in: ['QUEUED', 'RUNNING'] },
+      nextPollAt: { lte: now },
+    },
+    orderBy: { field: 'nextPollAt', desc: false },
+    page: 1,
+    pageSize: Math.min(take, 50),
+  });
+  return result.items.map(toRow);
+}
+
 /* ------------------------------ 模型定价 ------------------------------ */
 
 export type PriceRow = Row<GatewayModelPriceData>;
@@ -495,4 +606,245 @@ export async function addLegacyUsage(id: string, amount: number, lastUsedAt: Dat
     { name: { eq: id } },
     { quotaUsed: { inc: amount }, lastUsedAt: { set: lastUsedAt.toISOString() } },
   );
+}
+
+/* ------------------------------ 套餐权益（B1） ------------------------------ */
+
+export type EntitlementRow = Row<GatewayEntitlementData>;
+
+export async function createEntitlement(spec: GatewayEntitlementData): Promise<EntitlementRow> {
+  const instance = await extensions().create(gatewayEntitlementModel, spec);
+  return toRow(instance);
+}
+
+export async function getEntitlement(id: string): Promise<EntitlementRow | null> {
+  const instance = await extensions().get<GatewayEntitlementData>(gatewayEntitlementModel, id);
+  return instance ? toRow(instance) : null;
+}
+
+export async function listUserEntitlements(userId: string): Promise<EntitlementRow[]> {
+  const rows = await extensions().listAll<GatewayEntitlementData>(gatewayEntitlementModel, {
+    where: { userId: { eq: userId } },
+    orderBy: { field: 'createdAt', desc: true },
+  });
+  return rows.map(toRow);
+}
+
+/**
+ * 该用户可用于抵扣的权益（未按模型/有效期过滤，由 `pickEntitlement` 判断）。
+ *
+ * 只按 `status` + `userId` 走索引，避免把「已耗尽」的行也拉回来：
+ * 结算热路径上这张表的行数会随购买量增长。
+ */
+export async function listActiveEntitlements(userId: string): Promise<EntitlementRow[]> {
+  const rows = await extensions().listAll<GatewayEntitlementData>(gatewayEntitlementModel, {
+    where: { userId: { eq: userId }, status: { eq: 'ACTIVE' } },
+    orderBy: { field: 'priority' },
+  });
+  return rows.map(toRow);
+}
+
+export async function listAllEntitlements(take = 200): Promise<EntitlementRow[]> {
+  const rows = await extensions().list<GatewayEntitlementData>(gatewayEntitlementModel, {
+    orderBy: { field: 'createdAt', desc: true },
+    page: 1,
+    pageSize: Math.min(take, 200),
+  });
+  return rows.items.map(toRow);
+}
+
+export async function updateEntitlement(
+  id: string,
+  patch: Partial<GatewayEntitlementData>,
+): Promise<EntitlementRow | null> {
+  const current = await extensions().get<GatewayEntitlementData>(gatewayEntitlementModel, id);
+  if (!current) return null;
+  const instance = await extensions().update(gatewayEntitlementModel, id, {
+    ...current.spec,
+    ...patch,
+  });
+  return toRow(instance);
+}
+
+export async function removeEntitlement(id: string): Promise<boolean> {
+  const current = await extensions().get<GatewayEntitlementData>(gatewayEntitlementModel, id);
+  if (!current) return false;
+  await extensions().delete(gatewayEntitlementModel, id);
+  return true;
+}
+
+/**
+ * 原子抵扣一段额度。
+ *
+ * 通过 `updateWhere` 的**条件**（`usedAmount <= quota - amount`）保证并发下不会
+ * 把套餐扣穿：条件不满足时更新 0 行，调用方据此把差额改走钱包。
+ * 这也是选择「结算时扣减」而非「预留时冻结」的原因——不需要额外的预留表，
+ * 条件更新本身就是原子的。
+ */
+export async function consumeEntitlement(id: string, amount: number): Promise<boolean> {
+  if (!(amount > 0)) return false;
+  const current = await extensions().get<GatewayEntitlementData>(gatewayEntitlementModel, id);
+  if (!current) return false;
+  const quota = current.spec.quotaAmount;
+  const where: ExtensionWhere =
+    quota > 0
+      ? { name: { eq: id }, usedAmount: { lte: Math.max(0, quota - amount) } }
+      : { name: { eq: id } };
+  const result = await extensions()
+    .updateWhere(gatewayEntitlementModel, where, { usedAmount: { inc: amount } })
+    .catch(() => ({ updated: 0 }));
+  if (result.updated === 0) return false;
+  if (quota > 0 && current.spec.usedAmount + amount >= quota) {
+    // 只把状态置为已用尽，不再写 `usedAmount`——并发结算下用读到的旧值回写
+    // 会覆盖别人的增量（丢失更新）。额度本身就是条件更新的守卫。
+    await extensions()
+      .updateWhere(gatewayEntitlementModel, { name: { eq: id } }, { status: { set: 'EXHAUSTED' } })
+      .catch(() => undefined);
+  }
+  return true;
+}
+
+/** 到期权益置为 EXPIRED（清扫任务用；内核读路径不依赖它）。 */
+export async function expireEntitlements(now: Date): Promise<number> {
+  const rows = await extensions().listAll<GatewayEntitlementData>(gatewayEntitlementModel, {
+    where: { status: { eq: 'ACTIVE' } },
+  });
+  let count = 0;
+  for (const row of rows) {
+    const expiresAt = row.spec.expiresAt;
+    if (!expiresAt) continue;
+    if (Date.parse(expiresAt) > now.getTime()) continue;
+    await extensions()
+      .update(gatewayEntitlementModel, row.name, {
+        ...row.spec,
+        status: 'EXPIRED',
+      })
+      .catch(() => undefined);
+    count += 1;
+  }
+  return count;
+}
+
+/* ------------------------------ 模型映射（B4） ------------------------------ */
+
+export type ModelMapRow = Row<GatewayModelMapData>;
+
+export async function listEnabledModelMaps(): Promise<ModelMapRow[]> {
+  const rows = await extensions().listAll<GatewayModelMapData>(gatewayModelMapModel, {
+    where: { enabled: { eq: true } },
+    orderBy: { field: 'priority', desc: true },
+  });
+  return rows.map(toRow);
+}
+
+export async function listModelMaps(): Promise<ModelMapRow[]> {
+  const rows = await extensions().listAll<GatewayModelMapData>(gatewayModelMapModel, {
+    orderBy: { field: 'priority', desc: true },
+  });
+  return rows.map(toRow);
+}
+
+export async function getModelMap(id: string): Promise<ModelMapRow | null> {
+  const instance = await extensions().get<GatewayModelMapData>(gatewayModelMapModel, id);
+  return instance ? toRow(instance) : null;
+}
+
+export async function createModelMap(spec: GatewayModelMapData): Promise<ModelMapRow> {
+  const instance = await extensions().create(gatewayModelMapModel, spec);
+  return toRow(instance);
+}
+
+export async function updateModelMap(
+  id: string,
+  patch: Partial<GatewayModelMapData>,
+): Promise<ModelMapRow | null> {
+  const current = await extensions().get<GatewayModelMapData>(gatewayModelMapModel, id);
+  if (!current) return null;
+  const instance = await extensions().update(gatewayModelMapModel, id, {
+    ...current.spec,
+    ...patch,
+  });
+  return toRow(instance);
+}
+
+export async function removeModelMap(id: string): Promise<boolean> {
+  const current = await extensions().get<GatewayModelMapData>(gatewayModelMapModel, id);
+  if (!current) return false;
+  await extensions().delete(gatewayModelMapModel, id);
+  return true;
+}
+
+/* ------------------------------ 预算限额（B3） ------------------------------ */
+
+export type BudgetLimitRow = Row<GatewayBudgetLimitData>;
+
+export async function listBudgetLimits(): Promise<BudgetLimitRow[]> {
+  const rows = await extensions().listAll<GatewayBudgetLimitData>(gatewayBudgetLimitModel, {
+    orderBy: { field: 'createdAt', desc: true },
+  });
+  return rows.map(toRow);
+}
+
+/** 取某用户生效的限额（用户自己的 + 全局默认）。 */
+export async function listBudgetLimitsFor(userId: string): Promise<BudgetLimitRow[]> {
+  const rows = await extensions().listAll<GatewayBudgetLimitData>(gatewayBudgetLimitModel, {
+    where: { enabled: { eq: true }, userId: { in: [userId, ''] } },
+  });
+  return rows.map(toRow);
+}
+
+export async function getBudgetLimit(id: string): Promise<BudgetLimitRow | null> {
+  const instance = await extensions().get<GatewayBudgetLimitData>(gatewayBudgetLimitModel, id);
+  return instance ? toRow(instance) : null;
+}
+
+export async function createBudgetLimit(spec: GatewayBudgetLimitData): Promise<BudgetLimitRow> {
+  const instance = await extensions().create(gatewayBudgetLimitModel, spec);
+  return toRow(instance);
+}
+
+export async function updateBudgetLimit(
+  id: string,
+  patch: Partial<GatewayBudgetLimitData>,
+): Promise<BudgetLimitRow | null> {
+  const current = await extensions().get<GatewayBudgetLimitData>(gatewayBudgetLimitModel, id);
+  if (!current) return null;
+  const instance = await extensions().update(gatewayBudgetLimitModel, id, {
+    ...current.spec,
+    ...patch,
+  });
+  return toRow(instance);
+}
+
+export async function removeBudgetLimit(id: string): Promise<boolean> {
+  const current = await extensions().get<GatewayBudgetLimitData>(gatewayBudgetLimitModel, id);
+  if (!current) return false;
+  await extensions().delete(gatewayBudgetLimitModel, id);
+  return true;
+}
+
+/* ------------------------------ 对账单（B5） ------------------------------ */
+
+/**
+ * 取某个时间区间的流水。
+ *
+ * 引擎的 `where` 每个字段只允许一个操作符，所以时间下界走 `gte`、上界在内存里
+ * 过滤（月区间最多 31 天，数量可控）。`take` 上界防止极端用户把内存打满。
+ */
+export async function listLogsBetween(
+  since: Date,
+  until: Date,
+  take = 50_000,
+  filter: { userId?: string | undefined } = {},
+): Promise<UsageLogRow[]> {
+  const where: ExtensionWhere = filter.userId
+    ? { userId: { eq: filter.userId }, createdAt: { gte: since as unknown as number } }
+    : { createdAt: { gte: since as unknown as number } };
+  const rows = await pageTake<GatewayUsageLogData>(gatewayUsageLogModel, {
+    where,
+    orderBy: { field: 'createdAt', desc: true },
+    take,
+  });
+  const untilMs = until.getTime();
+  return rows.filter((row) => row.createdAt.getTime() < untilMs).map(toRow);
 }

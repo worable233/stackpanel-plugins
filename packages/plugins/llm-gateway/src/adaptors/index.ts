@@ -9,9 +9,10 @@
 
 import type { ProviderAdaptor } from './types.js';
 import { customAdaptor, OPENAI_COMPATIBLE_ADAPTORS } from './compatible.js';
+import { customRouteAdaptor } from './custom-route.js';
 import { anthropicAdaptor, bedrockAnthropicAdaptor } from './anthropic.js';
 import { geminiAdaptor, vertexAdaptor } from './gemini.js';
-import { azureAdaptor, openaiAdaptor } from './openai.js';
+import { azureAdaptor, openaiAdaptor, openaiResponsesAdaptor } from './openai.js';
 // 副作用导入：加载时向 anthropic adaptor 注册 SigV4 签名器。
 import './aws.js';
 
@@ -20,6 +21,7 @@ const REGISTRY = new Map<string, ProviderAdaptor>();
 /** 内置厂商 id 列表（账号 provider 字段的合法取值）。 */
 export const BUILTIN_PROVIDERS: readonly string[] = [
   'openai',
+  'openai-responses',
   'azure-openai',
   'anthropic',
   'gemini',
@@ -31,6 +33,17 @@ export const BUILTIN_PROVIDERS: readonly string[] = [
   'ollama',
   'openrouter',
   'siliconflow',
+  // C5：国内/边缘厂商预设
+  'volcengine',
+  'dashscope',
+  'zhipu',
+  'moonshot',
+  'minimax',
+  'xunfei',
+  'cloudflare',
+  'ai302',
+  // C3：声明式自定义路由（URL 模板 + 鉴权方式，不含可执行转换器）
+  'custom',
   'openai-compatible',
 ];
 
@@ -63,11 +76,13 @@ export function resolveAdaptor(provider: string): ProviderAdaptor | null {
 export function registerBuiltinAdaptors(): void {
   for (const adaptor of [
     openaiAdaptor,
+    openaiResponsesAdaptor,
     azureAdaptor,
     anthropicAdaptor,
     bedrockAnthropicAdaptor,
     geminiAdaptor,
     vertexAdaptor,
+    customRouteAdaptor,
     ...OPENAI_COMPATIBLE_ADAPTORS,
   ]) {
     REGISTRY.set(adaptor.id, adaptor);

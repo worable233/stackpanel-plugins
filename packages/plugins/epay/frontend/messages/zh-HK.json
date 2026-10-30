@@ -32,5 +32,10 @@
   "overview.disabled": "未啟用",
   "overview.settingsLink": "配置",
   "overview.settingsLinkDescription": "設置閘道器地址、商戶資訊與金鑰。",
-  "overview.activity": "支付方式"
+  "overview.activity": "支付方式",
+  "overview.unavailable": "支付閘道器狀態暫時不可用。",
+  "overview.manageTitle": "管理支付閘道器",
+  "overview.manageDescription": "配置閘道器地址、商戶資訊與金鑰。",
+  "overview.activityDescription": "當前支援的支付方式。",
+  "overview.empty": "暫無支付方式"
 }

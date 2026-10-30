@@ -75,7 +75,14 @@ async function activate(storedConfig: unknown = config()) {
       return () => undefined;
     },
   } as never);
-  return { provider: provider as Record<string, unknown>, settles, secrets, ctx, schedules, jobHandlers };
+  return {
+    provider: provider as Record<string, unknown>,
+    settles,
+    secrets,
+    ctx,
+    schedules,
+    jobHandlers,
+  };
 }
 
 function signedNotification(transaction: Record<string, unknown>, overrideKey?: string) {
@@ -98,7 +105,14 @@ function signedNotification(transaction: Record<string, unknown>, overrideKey?: 
     notificationSignMessage({ timestamp, nonce: headerNonce, body }),
     overrideKey ?? platform.privateKey,
   );
-  return { body, headers: { 'wechatpay-timestamp': timestamp, 'wechatpay-nonce': headerNonce, 'wechatpay-signature': signature } };
+  return {
+    body,
+    headers: {
+      'wechatpay-timestamp': timestamp,
+      'wechatpay-nonce': headerNonce,
+      'wechatpay-signature': signature,
+    },
+  };
 }
 
 /** 原始报文路由：handler 直接拿 stream 和 raw reply。 */
@@ -135,7 +149,15 @@ async function invokeCallback(body: string, headers: Record<string, string>) {
     raw: null,
   };
   await rawCallbackRoute().handler(
-    { method: 'POST', url: '/callbacks/wechatpay', params: {}, query: new URLSearchParams(), headers, body: Readable.from([Buffer.from(body, 'utf8')]), raw: null },
+    {
+      method: 'POST',
+      url: '/callbacks/wechatpay',
+      params: {},
+      query: new URLSearchParams(),
+      headers,
+      body: Readable.from([Buffer.from(body, 'utf8')]),
+      raw: null,
+    },
     reply,
   );
   return reply;
@@ -201,7 +223,9 @@ describe('wechatpay plugin wiring', () => {
     const { provider } = await activate();
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify({ code_url: 'weixin://evil' }), { status: 200 })),
+      vi.fn(
+        async () => new Response(JSON.stringify({ code_url: 'weixin://evil' }), { status: 200 }),
+      ),
     );
     await expect(
       (provider['createPayment'] as (input: unknown) => Promise<unknown>)({
@@ -345,7 +369,6 @@ describe('wechatpay plugin wiring', () => {
   });
 });
 
-
 describe('wechatpay platform certificate rotation', () => {
   /**
    * bootstrap 用的是测试自己生成的那把公钥，**不是**随后下发的证书公钥 ——
@@ -393,7 +416,9 @@ describe('wechatpay platform certificate rotation', () => {
 
   it('schedules the rotation job every 12h on activation', async () => {
     const { schedules, jobHandlers } = await activate(certificateConfig());
-    expect(schedules).toEqual([{ name: 'platform-cert-refresh', schedule: { everyMs: 12 * 60 * 60_000 } }]);
+    expect(schedules).toEqual([
+      { name: 'platform-cert-refresh', schedule: { everyMs: 12 * 60 * 60_000 } },
+    ]);
     expect(jobHandlers.has('platform-cert-refresh')).toBe(true);
   });
 
@@ -436,9 +461,9 @@ describe('wechatpay platform certificate rotation', () => {
         });
       }),
     );
-    await expect(
-      (provider['refreshCertificates'] as () => Promise<unknown>)(),
-    ).rejects.toThrow(/签名无效/);
+    await expect((provider['refreshCertificates'] as () => Promise<unknown>)()).rejects.toThrow(
+      /签名无效/,
+    );
   });
 
   it('switches callback verification to the rotated certificate (before/after)', async () => {

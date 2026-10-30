@@ -382,7 +382,15 @@
       "feedback.replied": "回复已发送",
       "feedback.closed": "工单已关闭",
       "feedback.reminded": "已提醒处理",
-      "feedback.updated": "工单已更新"
+      "feedback.updated": "工单已更新",
+      "admin.previous": "上一页",
+      "admin.next": "下一页",
+      "admin.paginationSummary": "第 {page} 页 · 共 {total} 张 / {pages} 页",
+      "overview.unavailable": "工单数据暂时不可用。",
+      "overview.manageTitle": "管理工单",
+      "overview.manageDescription": "查看并回复用户提交的问题。",
+      "overview.activityDescription": "最近提交的工单。",
+      "overview.empty": "暂无工单"
     },
     "zh-TW": {
       "nav.group": "支援",
@@ -465,7 +473,15 @@
       "feedback.replied": "回覆已傳送",
       "feedback.closed": "工單已關閉",
       "feedback.reminded": "已提醒處理",
-      "feedback.updated": "工單已更新"
+      "feedback.updated": "工單已更新",
+      "admin.previous": "上一頁",
+      "admin.next": "下一頁",
+      "admin.paginationSummary": "第 {page} 頁 · 共 {total} 張 / {pages} 頁",
+      "overview.unavailable": "工單資料暫時不可用。",
+      "overview.manageTitle": "管理工單",
+      "overview.manageDescription": "檢視並回複用戶提交的問題。",
+      "overview.activityDescription": "最近提交的工單。",
+      "overview.empty": "暫無工單"
     },
     "zh-HK": {
       "nav.group": "支援",
@@ -548,7 +564,15 @@
       "feedback.replied": "回覆已傳送",
       "feedback.closed": "工單已關閉",
       "feedback.reminded": "已提醒處理",
-      "feedback.updated": "工單已更新"
+      "feedback.updated": "工單已更新",
+      "admin.previous": "上一頁",
+      "admin.next": "下一頁",
+      "admin.paginationSummary": "第 {page} 頁 · 共 {total} 張 / {pages} 頁",
+      "overview.unavailable": "工單資料暫時不可用。",
+      "overview.manageTitle": "管理工單",
+      "overview.manageDescription": "檢視並回複用戶提交的問題。",
+      "overview.activityDescription": "最近提交的工單。",
+      "overview.empty": "暫無工單"
     },
     "en-US": {
       "nav.group": "Support",
@@ -631,7 +655,15 @@
       "feedback.replied": "Reply sent",
       "feedback.closed": "Ticket closed",
       "feedback.reminded": "Reminder sent",
-      "feedback.updated": "Ticket updated"
+      "feedback.updated": "Ticket updated",
+      "admin.previous": "Previous",
+      "admin.next": "Next",
+      "admin.paginationSummary": "Page {page} · {total} tickets / {pages} pages",
+      "overview.unavailable": "Ticket data is temporarily unavailable.",
+      "overview.manageTitle": "Manage tickets",
+      "overview.manageDescription": "Review and reply to user requests.",
+      "overview.activityDescription": "Recently submitted tickets.",
+      "overview.empty": "No tickets yet"
     }
   }
 }

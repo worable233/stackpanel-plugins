@@ -13,8 +13,8 @@
  */
 
 import type { StateLease } from '@stackpanel/sdk';
-import type { Protocol } from './protocol.js';
-import { isProtocol } from './protocol.js';
+import type { Protocol } from '@stackpanel/llm-protocol';
+import { isProtocol } from '@stackpanel/llm-protocol';
 import { toStringArray } from './keys.js';
 import { listActiveAccounts, type AccountRow } from './repository.js';
 import { weightedOrder } from './scheduler.js';
@@ -97,6 +97,11 @@ export function orderCandidates(
 export interface PickAccountInput extends OrderInput {
   upstreamModel: string;
   scheduler: Scheduler;
+  /**
+   * 本次尝试中已经失败过（或其 key 全部在冷却）的账号 id。
+   * 由 relay 在重试/换号时累积，避免把同一个账号反复选中。
+   */
+  excludeAccountIds?: ReadonlySet<string>;
 }
 
 export interface PickedAccount {
@@ -123,7 +128,10 @@ export async function pickAccount(input: PickAccountInput): Promise<PickedAccoun
 
   // `enabled === false` 是运维手动摘除：不进候选（与 status 不同——status 表达
   // 账号本身的有效性，enabled 表达「此刻是否参与」）。
-  const manual = accounts.filter((account) => account.enabled !== false);
+  const excluded = input.excludeAccountIds ?? new Set<string>();
+  const manual = accounts.filter(
+    (account) => account.enabled !== false && !excluded.has(account.id),
+  );
   if (manual.length === 0) return null;
 
   const ordered = orderCandidates(manual, input, input.upstreamModel);

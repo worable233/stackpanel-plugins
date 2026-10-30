@@ -626,9 +626,9 @@ describe('ZJMF failure vs empty distinction (handoff #2)', () => {
       return json({ status: 200, data: { list: [{ id: 1, hid: 42 }] } });
     });
     // 财务协议不支持服务子资源（fail-closed，实测上游 500），且不触发「V10 未取证」守卫。
-    await expect(
-      clientFor(fetchMock, 'finance').supportsServiceResources('42'),
-    ).resolves.toBe(false);
+    await expect(clientFor(fetchMock, 'finance').supportsServiceResources('42')).resolves.toBe(
+      false,
+    );
     await expect(clientFor(fetchMock, 'finance').getServiceMetrics('42')).resolves.toEqual([]);
   });
 
@@ -748,9 +748,13 @@ describe('ZJMF service provisioning', () => {
       selections: { '3201217': 15038165 },
     });
 
-    expect(
-      calls.filter((path) => path !== '/host/list' && path !== '/host/header'),
-    ).toEqual(['/zjmf_api_login', '/cart/clear', '/cart/add_to_shop', '/cart/settle', '/apply_credit']);
+    expect(calls.filter((path) => path !== '/host/list' && path !== '/host/header')).toEqual([
+      '/zjmf_api_login',
+      '/cart/clear',
+      '/cart/add_to_shop',
+      '/cart/settle',
+      '/apply_credit',
+    ]);
     expect(result.providerServiceId).toBe('42');
     expect(result.runtime).toMatchObject({
       paid: true,
@@ -934,7 +938,13 @@ describe('ZJMF service provisioning', () => {
       expiresAt: '2026-11-29T05:40:12.000Z',
       openedAt: '2026-10-29T05:40:04.000Z',
       cycle: 'monthly',
-      specs: { cpu: '4核', memory: '8G', disk: '60GB NVME', bandwidth: '35Mbps', region: '香港EPYC' },
+      specs: {
+        cpu: '4核',
+        memory: '8G',
+        disk: '60GB NVME',
+        bandwidth: '35Mbps',
+        region: '香港EPYC',
+      },
     });
   });
   it('maps a placeholder host id to the real host created by payment', async () => {
@@ -1527,7 +1537,10 @@ describe('财务版监控（/provision/chart 取证）', () => {
           });
         }
         if (type === 'network') return json({ status: 400, msg: '类型错误' });
-        return json({ status: 200, data: { unit: 'x', label: ['v'], list: [[{ time: '2026-10-29 13:40:00', value: 1 }]] } });
+        return json({
+          status: 200,
+          data: { unit: 'x', label: ['v'], list: [[{ time: '2026-10-29 13:40:00', value: 1 }]] },
+        });
       }
       return json({ status: 200, data: {} });
     });
@@ -1674,7 +1687,9 @@ describe('财务版变配报价（upgrade_config_page 真实字段）', () => {
       },
       fetchMock,
     );
-    const quote = await client.calculateChangePrice('42', { selections: { '3395985': '15711338' } });
+    const quote = await client.calculateChangePrice('42', {
+      selections: { '3395985': '15711338' },
+    });
     expect(quote?.price).toBe(984);
     expect(quote?.breakdown?.map((row) => `${row.label}=${row.value}`)).toEqual([
       '小计=¥10.36',
@@ -1715,7 +1730,9 @@ describe('降配（负差价）是合法报价', () => {
       },
       fetchMock,
     );
-    const quote = await client.calculateChangePrice('42', { selections: { '3395984': '15711333' } });
+    const quote = await client.calculateChangePrice('42', {
+      selections: { '3395984': '15711333' },
+    });
     expect(quote?.price).toBe(0);
   });
 });
@@ -1752,7 +1769,13 @@ describe('救援模式状态（remoteInfo）', () => {
 
   it('V10 没有 remoteInfo 契约，返回 null 不猜', async () => {
     const client = new ZJMFClient(
-      { id: 'up', baseUrl: 'https://billing.example/', protocol: 'v10', username: 'u', password: 'p' },
+      {
+        id: 'up',
+        baseUrl: 'https://billing.example/',
+        protocol: 'v10',
+        username: 'u',
+        password: 'p',
+      },
       vi.fn<typeof fetch>(async () => json({ status: 200, data: {} })),
     );
     expect(await client.getRemoteInfo('42')).toBeNull();

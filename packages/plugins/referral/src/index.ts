@@ -44,7 +44,6 @@ const UNFREEZE_SWEEP_INTERVAL_MS = 3_600_000;
 const UNFREEZE_JOB = 'unfreeze-sweep';
 
 /** 单页最多返回的归因记录数。 */
-const ADMIN_PAGE_SIZE = 200;
 
 /**
  * 用户端建码/改码的输入。
@@ -197,13 +196,15 @@ const patchCode = async (req: HttpRequest): Promise<unknown> => {
 };
 
 /** 管理端：归因记录列表 + 推广人汇总。 */
-const listAdminRecords = async (): Promise<unknown> => {
+const listAdminRecords = async (req: HttpRequest): Promise<unknown> => {
   const extensions = context().extensions;
   const config = await loadConfig();
+  const page = Math.max(1, Number(req.query?.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query?.pageSize) || 20));
   const { items, total } = await extensions.list<ReferralRecord>(recordModel, {
     orderBy: { field: 'createdAt', desc: true },
-    page: 1,
-    pageSize: ADMIN_PAGE_SIZE,
+    page,
+    pageSize,
   });
   const paidByInviter = new Map<string, number>();
   for (const item of items) {
@@ -218,6 +219,8 @@ const listAdminRecords = async (): Promise<unknown> => {
   const emailById = new Map(users.map((user) => [user.id, user.email]));
   return {
     total,
+    page,
+    pageSize,
     records: items.map((item) => ({
       ...toRecordView(item),
       inviterEmail: emailById.get(item.spec.inviterId) ?? '',

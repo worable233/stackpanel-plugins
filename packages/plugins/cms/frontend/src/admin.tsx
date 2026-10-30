@@ -1,8 +1,5 @@
 'use client';
-import {
-  InlineError,
-  SectionTitle,
-} from '@stackpanel/ui';
+import { InlineError, SectionTitle } from '@stackpanel/ui';
 
 import { FeatureOverview } from '@stackpanel/ui';
 
@@ -517,6 +514,7 @@ function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
   const [publishAt, setPublishAt] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [revisions, setRevisions] = useState<CmsRevisionList | null>(null);
+  const [revisionPage, setRevisionPage] = useState(1);
 
   useEffect(() => {
     if (!id) {
@@ -656,13 +654,14 @@ function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
     }
   }
 
-  async function loadRevisions(): Promise<void> {
+  async function loadRevisions(page = 1): Promise<void> {
     if (!id) return;
     setTab('history');
+    setRevisionPage(page);
     try {
       setRevisions(
         await bff<CmsRevisionList>(
-          `/cms/admin/content/${kind}/${encodeURIComponent(id)}/revisions?page=1&pageSize=50`,
+          `/cms/admin/content/${kind}/${encodeURIComponent(id)}/revisions?page=${page}&pageSize=20`,
           tr,
         ),
       );
@@ -795,6 +794,7 @@ function EditorPage({ kind, id, uiLocale }: EditorPageProps): ReactElement {
           {tab === 'history' ? (
             <HistoryPanel
               revisions={revisions}
+              onPageChange={(page) => void loadRevisions(page)}
               onPublish={publishRevision}
               busy={saving}
               current={status === 'published'}
@@ -939,12 +939,14 @@ function TabButton({
 function HistoryPanel({
   revisions,
   onPublish,
+  onPageChange,
   busy,
   current,
   tr,
 }: {
   revisions: CmsRevisionList | null;
   onPublish: (revisionNumber: number) => void;
+  onPageChange: (page: number) => void;
   busy: boolean;
   current: boolean;
   tr: Translate;
@@ -960,37 +962,67 @@ function HistoryPanel({
   if (revisions.items.length === 0) {
     return <p className="py-8 text-sm text-muted-foreground">{tr('history.empty')}</p>;
   }
+  const pages = Math.max(1, Math.ceil(revisions.total / revisions.pageSize));
   return (
-    <ol className="space-y-2">
-      {revisions.items.map((revision) => (
-        <li
-          key={revision.id}
-          className="flex items-start justify-between gap-4 rounded-2xl border bg-card p-4"
-        >
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">r{revision.revisionNumber}</span>
-              <span className="truncate text-sm">{revision.title}</span>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {revision.note ? `${revision.note} · ` : ''}
-              {formatDateTime(revision.createdAt)}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => onPublish(revision.revisionNumber)}
-            className="gap-1.5"
+    <div className="space-y-3">
+      <ol className="space-y-2">
+        {revisions.items.map((revision) => (
+          <li
+            key={revision.id}
+            className="flex items-start justify-between gap-4 rounded-2xl border bg-card p-4"
           >
-            <RotateCcw className="size-3.5" />
-            {tr('history.publish')}
-          </Button>
-        </li>
-      ))}
-      {!current ? <p className="pt-2 text-xs text-muted-foreground">{tr('history.hint')}</p> : null}
-    </ol>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">r{revision.revisionNumber}</span>
+                <span className="truncate text-sm">{revision.title}</span>
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {revision.note ? `${revision.note} · ` : ''}
+                {formatDateTime(revision.createdAt)}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => onPublish(revision.revisionNumber)}
+              className="gap-1.5"
+            >
+              <RotateCcw className="size-3.5" />
+              {tr('history.publish')}
+            </Button>
+          </li>
+        ))}
+        {!current ? (
+          <p className="pt-2 text-xs text-muted-foreground">{tr('history.hint')}</p>
+        ) : null}
+      </ol>
+      {pages > 1 ? (
+        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span>
+            {tr('history.pageSummary', { page: revisions.page, pages, total: revisions.total })}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy || revisions.page <= 1}
+              onClick={() => onPageChange(revisions.page - 1)}
+            >
+              {tr('history.previous')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy || revisions.page >= pages}
+              onClick={() => onPageChange(revisions.page + 1)}
+            >
+              {tr('history.next')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1164,6 +1196,13 @@ function CmsOverview(props: import('@stackpanel/sdk').AdminPageComponentProps) {
       title={tr('overview.title')}
       description={tr('overview.description')}
       unavailable={!posts || !pages || !redirects}
+      labels={{
+        unavailable: tr('overview.unavailable'),
+        manageTitle: tr('overview.manageTitle'),
+        manageDescription: tr('overview.manageDescription'),
+        activityDescription: tr('overview.activityDescription'),
+        empty: tr('overview.empty'),
+      }}
       metrics={[
         { label: tr('overview.posts'), value: posts?.total ?? '—' },
         { label: tr('overview.pages'), value: pages?.total ?? '—' },

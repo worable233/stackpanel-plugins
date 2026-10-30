@@ -57,6 +57,8 @@ export const mineSchema = z.object({
 /** GET /store/admin/referrals：归因记录 + 推广人汇总（固定 page=1, pageSize=200）。 */
 export const adminListSchema = z.object({
   total: z.number(),
+  page: z.number().default(1),
+  pageSize: z.number().default(20),
   records: z.array(recordViewSchema.extend({ inviterEmail: z.string() })),
   inviters: z.array(
     z.object({

@@ -217,13 +217,9 @@ export class ZJMFProvider implements FulfillmentProvider {
         // 账单已定位但未付：自动续付，而不是让人去点「继续付款」。
         // 先只读确认账单仍未付——单张账单只扣一次，重复进入不会多付。
         const trace = await client.inspectInvoice(previous.spec.invoiceId);
-        if (trace === null)
-          throw new ZJMFProviderError(409, '无法确认原账单状态，稍后自动重试');
+        if (trace === null) throw new ZJMFProviderError(409, '无法确认原账单状态，稍后自动重试');
         if (trace.cancelled)
-          throw new ZJMFProviderError(
-            409,
-            `上游账单 ${previous.spec.invoiceId} 已取消，禁止付款`,
-          );
+          throw new ZJMFProviderError(409, `上游账单 ${previous.spec.invoiceId} 已取消，禁止付款`);
         if (!trace.paid) return this.provision({ ...ctx, resumePayment: true });
       }
       if (ctx.resumePayment) {
@@ -404,20 +400,20 @@ export class ZJMFProvider implements FulfillmentProvider {
     const created = await (async () => {
       try {
         return await client.createService(providerProductId, {
-      quantity: ctx.quantity,
-      reference,
-      checkpoint,
-      ...(downstreamUrl
-        ? {
-            downstream: {
-              url: downstreamUrl,
-              id: String(Number.parseInt(journalId.slice(0, 12), 16)),
-              token: (await this.ctx.secrets.get(downstreamSecret))!,
-            },
-          }
-        : {}),
-      ...(config?.cycle ? { cycle: config.cycle } : {}),
-      ...(config?.selections ? { selections: config.selections } : {}),
+          quantity: ctx.quantity,
+          reference,
+          checkpoint,
+          ...(downstreamUrl
+            ? {
+                downstream: {
+                  url: downstreamUrl,
+                  id: String(Number.parseInt(journalId.slice(0, 12), 16)),
+                  token: (await this.ctx.secrets.get(downstreamSecret))!,
+                },
+              }
+            : {}),
+          ...(config?.cycle ? { cycle: config.cycle } : {}),
+          ...(config?.selections ? { selections: config.selections } : {}),
         });
       } catch (error) {
         // 账单已定位但实例未建立：把账单号落进记录，下一次重试就能只读反查并续做，
@@ -448,7 +444,8 @@ export class ZJMFProvider implements FulfillmentProvider {
         throw error;
       }
     })();
-    await checkpoint(created);    let credentialsRef: string | null = null;
+    await checkpoint(created);
+    let credentialsRef: string | null = null;
     if (Object.keys(created.credentials).length > 0) {
       // 写入调用方（store）传入的密钥存储，确保后续 getDetail 能从同一命名空间读取。
       credentialsRef = `${SERVICE_CREDENTIALS_PREFIX}${randomUUID()}`;
@@ -475,8 +472,7 @@ export class ZJMFProvider implements FulfillmentProvider {
     type LockSpec = { reference: string; acquiredAtMs?: number };
     const lock = await this.ctx.extensions.get<LockSpec>(provisioningCartLockModel, upstreamId);
     if (!lock) return false;
-    const acquiredAtMs =
-      typeof lock.spec.acquiredAtMs === 'number' ? lock.spec.acquiredAtMs : 0;
+    const acquiredAtMs = typeof lock.spec.acquiredAtMs === 'number' ? lock.spec.acquiredAtMs : 0;
     if (acquiredAtMs > 0 && Date.now() - acquiredAtMs < CART_LOCK_TTL_MS) return false;
     await this.ctx.tx(async (tx) => {
       const current = await tx.extensions.get<LockSpec>(provisioningCartLockModel, upstreamId);
@@ -521,7 +517,8 @@ export class ZJMFProvider implements FulfillmentProvider {
     if (!invoiceId) {
       // 记录里没有账单号：按本次尝试的时间窗去上游找。找不到＝上游确实没留下任何东西，
       // 这种「确认没有」是唯一允许重新下单的前提。
-      const sinceMs = row.createdAt instanceof Date ? row.createdAt.getTime() : Date.now() - 900_000;
+      const sinceMs =
+        row.createdAt instanceof Date ? row.createdAt.getTime() : Date.now() - 900_000;
       const recent = await client.listRecentInvoices({ sinceMs, limit: 20 });
       if (recent === null) return 'unknown';
       const inWindow = recent.filter(
@@ -557,7 +554,8 @@ export class ZJMFProvider implements FulfillmentProvider {
     return 'repaired';
   }
 
-  async verifyCancelledProvision(ctx: ProvisionContext) {    const { client, upstreamId, sourceFingerprint } = await this.resolveForProduct(
+  async verifyCancelledProvision(ctx: ProvisionContext) {
+    const { client, upstreamId, sourceFingerprint } = await this.resolveForProduct(
       ctx.product.metadata,
     );
     const generation = ctx.recoveryGeneration ?? 1;
@@ -816,9 +814,7 @@ export class ZJMFProvider implements FulfillmentProvider {
     }
   }
 
-  async listChangeOptions(
-    ctx: ProviderServiceContext,
-  ): Promise<ServiceChangeOption[] | undefined> {
+  async listChangeOptions(ctx: ProviderServiceContext): Promise<ServiceChangeOption[] | undefined> {
     if (!ctx.service.providerServiceId) return undefined;
     const { client } = await this.resolveForService(ctx.service);
     return client.listChangeOptions(ctx.service.providerServiceId);
@@ -913,7 +909,8 @@ export class ZJMFProvider implements FulfillmentProvider {
       const runtime = (ctx.service.runtime ?? {}) as Record<string, unknown>;
       result.runtime = { ...runtime, consoleUrl: url };
     }
-    if (passwordRuntime) result.runtime = { ...(result.runtime ?? passwordRuntime), ...passwordRuntime };
+    if (passwordRuntime)
+      result.runtime = { ...(result.runtime ?? passwordRuntime), ...passwordRuntime };
     return result;
   }
 
@@ -965,11 +962,10 @@ export class ZJMFProvider implements FulfillmentProvider {
     const { client } = await this.resolveForService(ctx.service);
     // 只提交**变化项**：上游 `upgrade/upgrade_config_post` 对「未变化的配置项」
     // 会整单拒绝（实测传全量返回 400「参数异常,添加失败」，传 diff 才 200）。
-    const current = (((ctx.service.runtime ?? {}) as Record<string, unknown>)[
-      'config'
-    ] as CheckoutSelection | undefined)?.selections as
-      | Record<string, string | number>
-      | undefined;
+    const current = (
+      ((ctx.service.runtime ?? {}) as Record<string, unknown>)['config'] as
+        CheckoutSelection | undefined
+    )?.selections as Record<string, string | number> | undefined;
     const next = change.config?.selections ?? {};
     const diff: Record<string, string | number> = {};
     for (const [optionId, value] of Object.entries(next)) {
@@ -1311,13 +1307,18 @@ function defaultActions(
       confirm: true,
       // 只声明前端能直接渲染的参数：`port` 不在平台 action 的静态字段里，
       // 声明它只会变成「请自己写 JSON」的输入框。重装默认沿用上游 22 端口。
-      params: [osParam, { name: 'password', label: '新 ROOT 密码', type: 'password', maxLength: 64 }],
+      params: [
+        osParam,
+        { name: 'password', label: '新 ROOT 密码', type: 'password', maxLength: 64 },
+      ],
     },
     {
       id: 'reset_password',
       label: '重置密码',
       confirm: true,
-      params: [{ name: 'password', label: '新密码', type: 'password', required: true, maxLength: 64 }],
+      params: [
+        { name: 'password', label: '新密码', type: 'password', required: true, maxLength: 64 },
+      ],
     },
     { id: 'vnc', label: '打开控制台（VNC）' },
   );

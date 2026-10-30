@@ -253,6 +253,8 @@ describe('config validation', () => {
     expect(() => assertGatewayUrl('http://openapi.alipay.com/gateway.do')).toThrow(/https/);
     expect(() => assertGatewayUrl('https://127.0.0.1/gateway.do')).toThrow(/IP/);
     expect(() => assertGatewayUrl('https://localhost/gateway.do')).toThrow(/内网/);
-    expect(() => assertGatewayUrl('https://openapi-sandbox.dl.alipaydev.com/gateway.do')).not.toThrow();
+    expect(() =>
+      assertGatewayUrl('https://openapi-sandbox.dl.alipaydev.com/gateway.do'),
+    ).not.toThrow();
   });
 });

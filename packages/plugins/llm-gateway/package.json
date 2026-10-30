@@ -1,6 +1,6 @@
 {
   "name": "@stackpanel/plugin-llm-gateway",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -24,6 +24,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@stackpanel/llm-protocol": "workspace:*",
     "@stackpanel/net-guard": "workspace:*",
     "@stackpanel/sdk": "workspace:*",
     "zod": "^4.4.3"

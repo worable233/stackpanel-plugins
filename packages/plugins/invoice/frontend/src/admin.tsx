@@ -1,7 +1,7 @@
 'use client';
 
 import type { AdminPageComponentProps } from '@stackpanel/sdk';
-import { PageHeader, SectionTitle } from '@stackpanel/ui';
+import { PageHeader, SectionTitle, Select } from '@stackpanel/ui';
 import type { ReactElement, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -517,7 +517,7 @@ export function InvoiceEditorPage(props: AdminPageComponentProps): ReactElement 
             <div className="space-y-4 border-t pt-6">
               <SectionHeading title={tr('section.customer')} />
               <Field label={tr('field.order')}>
-                <select
+                <Select
                   name="orderId"
                   value={state.orderId}
                   onChange={(e) => applyOrder(e.target.value)}
@@ -529,7 +529,7 @@ export function InvoiceEditorPage(props: AdminPageComponentProps): ReactElement 
                       {order.id} · {money(order.total, order.currency, locale)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <div className="flex items-center gap-3 rounded-xl border border-input bg-card px-4 py-3">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-semibold text-foreground">
@@ -683,7 +683,7 @@ export function InvoiceEditorPage(props: AdminPageComponentProps): ReactElement 
               <SectionHeading title={tr('section.adjustments')} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label={tr('field.taxRate')}>
-                  <select
+                  <Select
                     value={state.taxCustom ? 'custom' : state.taxRate}
                     onChange={(e) => {
                       if (e.target.value === 'custom') {
@@ -700,7 +700,7 @@ export function InvoiceEditorPage(props: AdminPageComponentProps): ReactElement 
                       </option>
                     ))}
                     <option value="custom">{tr('tax.custom')}</option>
-                  </select>
+                  </Select>
                   {state.taxCustom ? (
                     <input
                       type="number"
@@ -716,7 +716,7 @@ export function InvoiceEditorPage(props: AdminPageComponentProps): ReactElement 
                 <Field label={tr('field.discount')}>
                   <div className="flex gap-2">
                     <div className="w-24 shrink-0">
-                      <select
+                      <Select
                         value={state.discountType}
                         onChange={(e) =>
                           patch({
@@ -727,7 +727,7 @@ export function InvoiceEditorPage(props: AdminPageComponentProps): ReactElement 
                       >
                         <option value="FIXED">{tr('discount.FIXED')}</option>
                         <option value="PERCENT">{tr('discount.PERCENT')}</option>
-                      </select>
+                      </Select>
                     </div>
                     <div className="relative min-w-0 flex-1">
                       <input
@@ -760,7 +760,7 @@ export function InvoiceEditorPage(props: AdminPageComponentProps): ReactElement 
 
           <div className={tab === 'payment' ? 'grid gap-5' : 'hidden'}>
             <Field label={tr('field.status')}>
-              <select
+              <Select
                 value={state.status}
                 onChange={(e) => patch({ status: e.target.value })}
                 className={inputCls}
@@ -769,7 +769,7 @@ export function InvoiceEditorPage(props: AdminPageComponentProps): ReactElement 
                 <option value="SENT">{tr('status.SENT')}</option>
                 <option value="PAID">{tr('status.PAID')}</option>
                 <option value="VOID">{tr('status.VOID')}</option>
-              </select>
+              </Select>
             </Field>
             <Field label={tr('field.currency')}>
               <input
@@ -1163,7 +1163,15 @@ function InvoicePreview({
 export function InvoiceListPage(props: AdminPageComponentProps): ReactElement {
   const tr = t(props.locale);
   const locale = props.locale;
-  const invoices = (props.data.invoices as { invoices?: Invoice[] } | undefined)?.invoices ?? [];
+  const result = props.data.invoices as
+    { invoices?: Invoice[]; total?: number; page?: number; pageSize?: number } | undefined;
+  const invoices = result?.invoices ?? [];
+  const total = result?.total ?? invoices.length;
+  const page = result?.page ?? 1;
+  const pageSize = result?.pageSize ?? 20;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const pageHref = (next: number) =>
+    next > 1 ? `/admin/plugin/invoice/invoices?page=${next}` : '/admin/plugin/invoice/invoices';
   const deleteAction = props.actions['invoice.delete'];
   return (
     <main className="w-full space-y-6">
@@ -1180,64 +1188,89 @@ export function InvoiceListPage(props: AdminPageComponentProps): ReactElement {
         }
       />
       {invoices.length > 0 ? (
-        <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/40 text-left text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2.5 font-medium">{tr('list.colNumber')}</th>
-                <th className="px-4 py-2.5 font-medium">{tr('list.colCustomer')}</th>
-                <th className="px-4 py-2.5 font-medium">{tr('list.colStatus')}</th>
-                <th className="px-4 py-2.5 text-right font-medium">{tr('list.colTotal')}</th>
-                <th className="px-4 py-2.5 text-right font-medium">{tr('list.colIssuedAt')}</th>
-                <th className="px-4 py-2.5 text-right font-medium">{tr('list.colActions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((invoice) => (
-                <tr key={invoice.id} className="border-b last:border-0 hover:bg-muted/30">
-                  <td className="px-4 py-2.5">
-                    <Link
-                      href={`/admin/plugin/invoice/invoices/${invoice.id}`}
-                      className="font-mono font-medium text-primary hover:underline"
-                    >
-                      {invoice.number}
-                    </Link>
-                    {invoice.referenceNumber ? (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {invoice.referenceNumber}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {invoice.customerName || '—'}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge meta={statusMeta(invoice.status, tr)} />
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
-                    {money(invoice.total, invoice.currency, locale)}
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">
-                    {formatDate(invoice.issuedAt, locale)}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    {deleteAction ? (
-                      <form action={deleteAction} className="inline">
-                        <input type="hidden" name="id" value={invoice.id} />
-                        <button
-                          type="submit"
-                          className="text-xs text-muted-foreground hover:text-destructive"
-                        >
-                          {tr('list.delete')}
-                        </button>
-                      </form>
-                    ) : null}
-                  </td>
+        <>
+          <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40 text-left text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2.5 font-medium">{tr('list.colNumber')}</th>
+                  <th className="px-4 py-2.5 font-medium">{tr('list.colCustomer')}</th>
+                  <th className="px-4 py-2.5 font-medium">{tr('list.colStatus')}</th>
+                  <th className="px-4 py-2.5 text-right font-medium">{tr('list.colTotal')}</th>
+                  <th className="px-4 py-2.5 text-right font-medium">{tr('list.colIssuedAt')}</th>
+                  <th className="px-4 py-2.5 text-right font-medium">{tr('list.colActions')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {invoices.map((invoice) => (
+                  <tr key={invoice.id} className="border-b last:border-0 hover:bg-muted/30">
+                    <td className="px-4 py-2.5">
+                      <Link
+                        href={`/admin/plugin/invoice/invoices/${invoice.id}`}
+                        className="font-mono font-medium text-primary hover:underline"
+                      >
+                        {invoice.number}
+                      </Link>
+                      {invoice.referenceNumber ? (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {invoice.referenceNumber}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {invoice.customerName || '—'}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Badge meta={statusMeta(invoice.status, tr)} />
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                      {money(invoice.total, invoice.currency, locale)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">
+                      {formatDate(invoice.issuedAt, locale)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {deleteAction ? (
+                        <form action={deleteAction} className="inline">
+                          <input type="hidden" name="id" value={invoice.id} />
+                          <button
+                            type="submit"
+                            className="text-xs text-muted-foreground hover:text-destructive"
+                          >
+                            {tr('list.delete')}
+                          </button>
+                        </form>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {pages > 1 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+              <span>{tr('list.pageSummary', { total, page, pages })}</span>
+              <div className="flex items-center gap-2">
+                {page > 1 ? (
+                  <Link
+                    href={pageHref(page - 1)}
+                    className="rounded-lg bg-muted px-3 py-1.5 text-foreground transition-colors hover:bg-muted/70"
+                  >
+                    {tr('list.previous')}
+                  </Link>
+                ) : null}
+                {page < pages ? (
+                  <Link
+                    href={pageHref(page + 1)}
+                    className="rounded-lg bg-muted px-3 py-1.5 text-foreground transition-colors hover:bg-muted/70"
+                  >
+                    {tr('list.next')}
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </>
       ) : (
         <div className="flex flex-col items-center rounded-2xl border border-dashed px-6 py-16 text-center">
           <span className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">

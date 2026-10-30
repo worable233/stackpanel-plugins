@@ -37,7 +37,9 @@
 import { randomUUID } from 'node:crypto';
 import type { PluginLogger, WalletHold, WalletService } from '@stackpanel/sdk';
 import type { ModelPrice, ServedPrice, TokenUsage } from './pricing.js';
-import { computeAmount, estimateTokens } from './pricing.js';
+import { computeAmount, computeCostAmount, estimateTokens } from './pricing.js';
+import { consumeEntitlement, getEntitlement, patchUsageLog } from './repository.js';
+import { remainingOf, splitSettlement } from './entitlements.js';
 import {
   createBillingEntry,
   createUsageLog,
@@ -111,6 +113,23 @@ export interface BillingContext {
   price: ServedPrice;
   /** 价格快照的序列化形态（写进台账）。 */
   priceSnapshot: Record<string, unknown>;
+  /** 本次实收应用的权限组折扣（%，0 = 未折扣）。 */
+  discountPercent: number;
+  /** 实际调用的上游 key（账号多 Key 时用于对账）。 */
+  upstreamKeyId: string;
+  /**
+   * 本次抵扣的套餐权益（B1）；`null` = 走钱包。
+   *
+   * 有权益时预留阶段**不冻钱包**（套餐用户不该因为钱包为 0 被 402），
+   * 结算时先扣权益、差额再扣钱包。
+   */
+  /** 实际转发给上游的模型名（B4 映射结果）；空 = 与对外模型同名。 */
+  upstreamModel?: string | undefined;
+  /** 本次请求被改写的痕迹（C4）：写进用量流水，便于事后回溯。 */
+  rewrites?: string | undefined;
+  entitlementId: string | null;
+  /** 结算时实际由权益抵扣的金额（minor）；settle 里回填。 */
+  entitlementAmount: number;
   /** 预留产生的 hold；金额为 0 时为 null。 */
   hold: WalletHold | null;
   /** 台账行 id（reserve 成功后填充）。 */
@@ -132,10 +151,21 @@ export interface ReserveInput {
   note?: string | undefined;
   /** 预留 hold 的 TTL（毫秒）；省略时由内核默认（15 分钟）决定。 */
   ttlMs?: number | undefined;
+  /** 权限组折扣（% off）；参与结算，不参与预留（预留按未折扣上限更安全）。 */
+  discountPercent?: number | undefined;
+  /** 实际调用的上游 key id（选号后回填）。 */
+  upstreamKeyId?: string | undefined;
+  /** 本次可用套餐权益（B1）。 */
+  entitlementId?: string | null | undefined;
+  /**
+   * 预估金额中由套餐覆盖的部分（minor）。钱包只冻结 `amount - coveredAmount`；
+   * 不传时按「有权益即全额覆盖」处理（全部走套餐、不冻钱包）。
+   */
+  coveredAmount?: number | undefined;
 }
 
 /** 把 ServedPrice 序列化成可持久化的快照（不含方法，纯数据）。 */
-export function priceSnapshotOf(price: ServedPrice): Record<string, unknown> {
+export function priceSnapshotOf(price: ServedPrice, discountPercent = 0): Record<string, unknown> {
   return {
     publicModel: price.publicModel,
     upstreamModel: price.upstreamModel,
@@ -143,7 +173,29 @@ export function priceSnapshotOf(price: ServedPrice): Record<string, unknown> {
     outputPrice: price.outputPrice,
     cacheReadPrice: price.cacheReadPrice ?? price.inputPrice,
     cacheWritePrice: price.cacheWritePrice ?? price.inputPrice,
+    /* 成本与阶梯也进快照：补偿/对账要能在事后复算毛利，而不是读现值。 */
+    ...(price.reasoningPrice !== undefined ? { reasoningPrice: price.reasoningPrice } : {}),
+    ...(price.imagePrice !== undefined ? { imagePrice: price.imagePrice } : {}),
+    ...(price.audioPrice !== undefined ? { audioPrice: price.audioPrice } : {}),
+    ...(price.costInputPrice !== undefined ? { costInputPrice: price.costInputPrice } : {}),
+    ...(price.costOutputPrice !== undefined ? { costOutputPrice: price.costOutputPrice } : {}),
+    ...(price.costCacheReadPrice !== undefined
+      ? { costCacheReadPrice: price.costCacheReadPrice }
+      : {}),
+    ...(price.costCacheWritePrice !== undefined
+      ? { costCacheWritePrice: price.costCacheWritePrice }
+      : {}),
+    ...(price.costReasoningPrice !== undefined
+      ? { costReasoningPrice: price.costReasoningPrice }
+      : {}),
+    ...(price.costImagePrice !== undefined ? { costImagePrice: price.costImagePrice } : {}),
+    ...(price.costAudioPrice !== undefined ? { costAudioPrice: price.costAudioPrice } : {}),
+    ...(price.tiers !== undefined ? { tiers: price.tiers } : {}),
+    ...(price.maxOutputTokens !== undefined ? { maxOutputTokens: price.maxOutputTokens } : {}),
+    ...(price.groupDiscount !== undefined ? { groupDiscount: price.groupDiscount } : {}),
     multiplier: price.multiplier,
+    /** 本次实收应用的权限组折扣，重算账单时复用它而不是读当时的组配置。 */
+    discountPercent,
     /** 快照时间：运维对账时可判断「当时用的是哪一版价」。 */
     capturedAt: new Date().toISOString(),
   };
@@ -162,16 +214,26 @@ export function priceSnapshotOf(price: ServedPrice): Record<string, unknown> {
  */
 export async function reserve(input: ReserveInput): Promise<BillingContext> {
   const referenceId = randomUUID();
-  const snapshot = priceSnapshotOf(input.price);
+  const discountPercent = input.discountPercent ?? 0;
+  const snapshot = priceSnapshotOf(input.price, discountPercent);
+
+  // 套餐优先（B1）：被套餐覆盖的部分不冻钱包。冻结的意义是防止并发穿透余额，
+  // 而套餐额度的防穿透由结算时的条件更新（`usedAmount <= quota - amount`）负责。
+  const entitlementId = input.entitlementId ?? null;
+  const covered = Math.min(
+    Math.max(0, Math.trunc(input.coveredAmount ?? (entitlementId ? input.amount : 0))),
+    input.amount,
+  );
+  const holdAmount = Math.max(0, input.amount - covered);
 
   let hold: WalletHold | null = null;
-  if (input.amount > 0) {
+  if (holdAmount > 0) {
     // 余额不足由钱包抛 WalletError(409)。这里**不再靠 message.includes 判**：
     // 结构化判定交给调用方（见 isInsufficientBalance），本函数只负责把 wallet
     // 的错误原样抛出，让路由层统一转成 OpenAI 兼容错误体。
     hold = await input.wallet.hold(
       input.userId,
-      input.amount,
+      holdAmount,
       input.currency,
       {
         type: 'llm_gateway_usage',
@@ -200,6 +262,8 @@ export async function reserve(input: ReserveInput): Promise<BillingContext> {
       settledAmount: 0,
       currency: input.currency,
       priceSnapshot: snapshot,
+      entitlementId,
+      entitlementAmount: 0,
       attempt: 0,
       nextAttemptAt: 0,
       lastError: null,
@@ -220,6 +284,10 @@ export async function reserve(input: ReserveInput): Promise<BillingContext> {
     currency: input.currency,
     price: input.price,
     priceSnapshot: snapshot,
+    discountPercent,
+    upstreamKeyId: input.upstreamKeyId ?? '',
+    entitlementId,
+    entitlementAmount: 0,
     hold,
     entryId: entry.id,
   };
@@ -247,6 +315,8 @@ export interface SettleInput {
   error?: string | null;
   /** 首 token 之前的输出文本，用于 usage 缺失时估算（可省略）。 */
   outputText?: string | undefined;
+  /** 客户端中断后又继续了计费（A8）；账单据此复核。 */
+  aborted?: boolean | undefined;
 }
 
 export interface SettleResult {
@@ -271,7 +341,25 @@ export interface SettleResult {
  */
 export async function settle(input: SettleInput): Promise<SettleResult> {
   const { context } = input;
-  const amount = computeAmount(context.price, input.usage);
+  const amount = computeAmount(context.price, input.usage, {
+    discountPercent: context.discountPercent,
+  });
+
+  /**
+   * 套餐抵扣（B1）：先读出「这一笔能抵多少」，写进流水，再原子扣减。
+   *
+   * 顺序：读权益（无副作用）→ 建流水（拿到幂等键）→ 扣权益 → 扣钱包。
+   * 若扣减因并发被拒（额度刚好被别人用掉），把套餐部分归零、整笔改走钱包，
+   * 并回写流水——流水不是权威，台账（entry）才是；台账在 closeEntry 里写终值。
+   */
+  let entitlementAmount = 0;
+  let walletAmount = amount;
+  if (amount > 0 && context.entitlementId) {
+    const entitlement = await getEntitlement(context.entitlementId).catch(() => null);
+    const split = splitSettlement(amount, entitlement ? remainingOf(entitlement) : 0);
+    entitlementAmount = split.entitlement;
+    walletAmount = split.wallet;
+  }
 
   const log = await createUsageLog({
     apiKeyId: context.apiKeyId,
@@ -284,11 +372,21 @@ export async function settle(input: SettleInput): Promise<SettleResult> {
     completionTokens: input.usage.completionTokens,
     cacheReadTokens: input.usage.cacheReadTokens ?? 0,
     cacheWriteTokens: input.usage.cacheWriteTokens ?? 0,
+    upstreamModel:
+      context.upstreamModel && context.upstreamModel !== context.model ? context.upstreamModel : '',
     reasoningTokens: input.usage.reasoningTokens ?? 0,
     imageCount: input.usage.imageCount ?? 0,
     audioSeconds: input.usage.audioSeconds ?? 0,
     totalTokens: input.usage.totalTokens ?? input.usage.promptTokens + input.usage.completionTokens,
     amount,
+    /** 成本与售价分开记账（A3）：毛利 = amount - costAmount。 */
+    costAmount: computeCostAmount(context.price, input.usage),
+    discountPercent: context.discountPercent,
+    upstreamKeyId: context.upstreamKeyId,
+    rewrites: context.rewrites ?? '',
+    aborted: input.aborted ?? false,
+    entitlementId: context.entitlementId ?? '',
+    entitlementAmount,
     currency: context.currency,
     status: input.status,
     estimated: input.estimated,
@@ -299,6 +397,22 @@ export async function settle(input: SettleInput): Promise<SettleResult> {
     clientIp: input.clientIp ?? null,
     error: input.error ?? null,
   });
+
+  // 套餐抵扣执行（在流水落库之后，失败只影响分摊，不影响总额）。
+  if (entitlementAmount > 0 && context.entitlementId) {
+    const consumed = await consumeEntitlement(context.entitlementId, entitlementAmount).catch(
+      () => false,
+    );
+    if (!consumed) {
+      entitlementAmount = 0;
+      walletAmount = amount;
+      await patchUsageLog(log.id, { entitlementAmount: 0 });
+      input.logger.warn(
+        `llm-gateway: entitlement ${context.entitlementId} exhausted during settle, charging wallet`,
+      );
+    }
+  }
+  context.entitlementAmount = entitlementAmount;
 
   // 用量为 0（请求失败且未消耗）时全额释放预留，并关账。
   if (amount <= 0) {
@@ -317,22 +431,39 @@ export async function settle(input: SettleInput): Promise<SettleResult> {
           );
         });
     }
-    await closeEntry(context, { status: 'RELEASED', settledAmount: 0, amount });
+    await closeEntry(context, {
+      status: 'RELEASED',
+      settledAmount: 0,
+      amount,
+      entitlementAmount: 0,
+    });
     return { amount: 0, log, settled: true };
+  }
+
+  // 钱包只承担「总额 − 套餐抵扣」的部分。
+  if (walletAmount <= 0) {
+    await closeEntry(context, {
+      status: 'SETTLED',
+      settledAmount: 0,
+      amount,
+      entitlementAmount,
+    });
+    return { amount, log, settled: true };
   }
 
   try {
     if (context.hold) {
       // 按真实用量结算并退还差额。引用用 usage-log id：即使本函数重入，
       // 内核按 (referenceType, referenceId) 判定，不会二次结算。
-      await input.wallet.settleHold(context.hold.id, amount, {
+      await input.wallet.settleHold(context.hold.id, walletAmount, {
         type: 'llm_gateway_usage',
         referenceType: 'gateway_usage_log',
         referenceId: log.id,
       });
     } else {
-      // 没有预留（罕见的 0 估算路径，或 hold 建失败后的人工放行）才直接扣。
-      await input.wallet.debit(context.userId, amount, context.currency, {
+      // 没有预留（套餐覆盖后仍有差额、罕见的 0 估算路径，或 hold 建失败后的
+      // 人工放行）才直接扣。
+      await input.wallet.debit(context.userId, walletAmount, context.currency, {
         type: 'llm_gateway_usage',
         referenceType: 'gateway_usage_log',
         referenceId: log.id,
@@ -347,8 +478,9 @@ export async function settle(input: SettleInput): Promise<SettleResult> {
     // 就是超额扣费。金额本身不会因此重复扣：钱包结算按 holdId 幂等。
     await closeEntry(context, {
       status: 'COMPENSATING',
-      settledAmount: amount,
+      settledAmount: walletAmount,
       amount,
+      entitlementAmount,
       lastError: message.slice(0, 300),
       attempt: 1,
       nextAttemptAt: Date.now() + compensationDelay(1),
@@ -356,7 +488,12 @@ export async function settle(input: SettleInput): Promise<SettleResult> {
     return { amount, log, settled: false };
   }
 
-  await closeEntry(context, { status: 'SETTLED', settledAmount: amount, amount });
+  await closeEntry(context, {
+    status: 'SETTLED',
+    settledAmount: walletAmount,
+    amount,
+    entitlementAmount,
+  });
   return { amount, log, settled: true };
 }
 
@@ -366,6 +503,7 @@ async function closeEntry(
     status: string;
     settledAmount: number;
     amount: number;
+    entitlementAmount?: number;
     lastError?: string;
     attempt?: number;
     nextAttemptAt?: number;
@@ -382,6 +520,9 @@ async function closeEntry(
   await updateBillingEntry(id, {
     status: patch.status,
     settledAmount: patch.settledAmount,
+    ...(patch.entitlementAmount !== undefined
+      ? { entitlementAmount: patch.entitlementAmount }
+      : {}),
     ...(patch.lastError !== undefined ? { lastError: patch.lastError } : {}),
     ...(patch.attempt !== undefined ? { attempt: patch.attempt } : {}),
     ...(patch.nextAttemptAt !== undefined ? { nextAttemptAt: patch.nextAttemptAt } : {}),
@@ -530,6 +671,8 @@ export async function reserveFree(input: {
     settledAmount: 0,
     currency: input.currency,
     priceSnapshot: snapshot,
+    entitlementId: null,
+    entitlementAmount: 0,
     attempt: 0,
     nextAttemptAt: 0,
     lastError: null,
@@ -543,6 +686,10 @@ export async function reserveFree(input: {
     currency: input.currency,
     price: input.price,
     priceSnapshot: snapshot,
+    discountPercent: 0,
+    upstreamKeyId: '',
+    entitlementId: null,
+    entitlementAmount: 0,
     hold: null,
     entryId: entry.id,
   };

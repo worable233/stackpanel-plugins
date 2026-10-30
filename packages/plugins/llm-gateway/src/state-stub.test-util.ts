@@ -22,6 +22,10 @@ export class InMemoryState implements StateService {
   private readonly leases = new Map<string, { key: string; expiresAt: number }>();
   /** 让某个 key 的 `incr` 抛错，用来验证「失败开放」。 */
   public failIncrFor: string | null = null;
+  /** 让所有 `get` 抛错（验证限额/冷却读失败时的 fail-open）。 */
+  public failGet = false;
+  /** 让所有 `set` 抛错。 */
+  public failSet = false;
 
   private now(): number {
     return Date.now();
@@ -38,6 +42,7 @@ export class InMemoryState implements StateService {
   }
 
   async get(key: string): Promise<string | null> {
+    if (this.failGet) throw new Error('state get failed');
     return this.live(key)?.value ?? null;
   }
 
@@ -48,6 +53,7 @@ export class InMemoryState implements StateService {
   }
 
   async set(key: string, value: string, ttlMs?: number): Promise<void> {
+    if (this.failSet) throw new Error('state set failed');
     this.store.set(key, {
       value,
       expiresAt: ttlMs && ttlMs > 0 ? this.now() + ttlMs : 0,

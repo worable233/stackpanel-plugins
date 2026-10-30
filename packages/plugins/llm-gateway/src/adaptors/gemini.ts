@@ -12,7 +12,7 @@
  */
 
 import { createAdaptor } from './base.js';
-import type { IRUsage } from '../protocol.js';
+import type { IRUsage } from '@stackpanel/llm-protocol';
 import type {
   AdaptorAccount,
   AdaptorErrorInput,

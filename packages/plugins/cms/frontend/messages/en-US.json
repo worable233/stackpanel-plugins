@@ -99,5 +99,13 @@
   "overview.postsLink": "Write and publish posts.",
   "overview.pagesLink": "Maintain standalone site pages.",
   "overview.redirectsLink": "Manage access paths after content moves.",
-  "overview.recent": "Recent posts"
+  "overview.recent": "Recent posts",
+  "history.previous": "Previous",
+  "history.next": "Next",
+  "history.pageSummary": "Page {page} of {pages} · {total} revisions",
+  "overview.unavailable": "Content data is temporarily unavailable.",
+  "overview.manageTitle": "Manage content",
+  "overview.manageDescription": "Open content management to maintain posts and pages.",
+  "overview.activityDescription": "Recently updated content.",
+  "overview.empty": "No content yet"
 }

@@ -6,6 +6,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { InMemoryState } from './state-stub.test-util.js';
+import {
+  bucketIndexOf,
+  LATENCY_BOUNDS_MS,
+  percentileOfBuckets,
+  readLatencyStats,
+} from './observability.js';
 import { Metrics, readAllMetrics, type RequestObservation } from './observability.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
@@ -107,5 +113,53 @@ describe('readAllMetrics', () => {
     expect(all['request.total']?.current).toBe(2);
     expect(all['request.error']?.current).toBe(1);
     expect(all['upstream.5xx']?.current).toBe(0);
+  });
+});
+
+describe('延迟分布（D5）', () => {
+  it('bucketIndexOf 按档位上界落桶，超大值进溢出桶', () => {
+    expect(bucketIndexOf(1)).toBe(0);
+    expect(bucketIndexOf(50)).toBe(0);
+    expect(bucketIndexOf(51)).toBe(1);
+    expect(bucketIndexOf(1000)).toBe(6);
+    expect(bucketIndexOf(120_000)).toBe(LATENCY_BOUNDS_MS.length);
+  });
+
+  it('percentileOfBuckets 返回命中档位上界，空样本返回 null', () => {
+    // 100 个样本全落在 <=200ms 桶（index 2）。
+    const counts = new Array(LATENCY_BOUNDS_MS.length + 1).fill(0);
+    counts[2] = 100;
+    expect(percentileOfBuckets(counts, 50)).toBe(200);
+    expect(percentileOfBuckets(counts, 95)).toBe(200);
+    expect(percentileOfBuckets(new Array(LATENCY_BOUNDS_MS.length + 1).fill(0), 95)).toBeNull();
+  });
+
+  it('percentileOfBuckets 跨桶累计后取正确档位', () => {
+    const counts = new Array(LATENCY_BOUNDS_MS.length + 1).fill(0);
+    counts[3] = 90; // <=300ms
+    counts[8] = 10; // <=3000ms
+    expect(percentileOfBuckets(counts, 50)).toBe(300);
+    // 95% 落在第二个桶 → 3000ms
+    expect(percentileOfBuckets(counts, 95)).toBe(3000);
+  });
+
+  it('observe 写入直方图，readLatencyStats 能读回样本数', async () => {
+    const state = new InMemoryState();
+    const metrics = new Metrics(state, silentLogger);
+    await metrics.observe(observation({ latencyMs: 120, firstTokenMs: 80 }));
+    await metrics.observe(observation({ latencyMs: 400, firstTokenMs: null }));
+
+    const total = await readLatencyStats(state, 'latency');
+    expect(total.count).toBe(2);
+    expect(total.p50).not.toBeNull();
+    const first = await readLatencyStats(state, 'first_token');
+    expect(first.count).toBe(1);
+  });
+
+  it('readLatencyStats 在 state 读失败时降级为空样本', async () => {
+    const state = new InMemoryState();
+    state.failGet = true;
+    const stats = await readLatencyStats(state, 'latency');
+    expect(stats).toEqual({ p50: null, p95: null, count: 0 });
   });
 });

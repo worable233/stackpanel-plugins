@@ -223,6 +223,13 @@ function EpayOverview(props: AdminPageComponentProps) {
       title={tr('overview.title')}
       description={tr('overview.description')}
       unavailable={!status}
+      labels={{
+        unavailable: tr('overview.unavailable'),
+        manageTitle: tr('overview.manageTitle'),
+        manageDescription: tr('overview.manageDescription'),
+        activityDescription: tr('overview.activityDescription'),
+        empty: tr('overview.empty'),
+      }}
       metrics={[
         {
           label: tr('overview.gatewayState'),

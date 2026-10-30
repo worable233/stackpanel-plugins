@@ -18,7 +18,7 @@ import {
 import { formatMinorCurrency, minorUnitsToPlainString, toMinorUnits } from '@stackpanel/sdk';
 import type { ReactElement } from 'react';
 import { BarChart3, Settings, Users } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AdminConfigData, AdminListData } from './schemas';
 import { t } from './i18n.js';
 
@@ -320,11 +320,36 @@ function AdjustmentForm({
 
 function ReferralAdminPage(props: AdminPageComponentProps): ReactElement {
   const tr = t(props.locale);
-  const list = props.data.referral as AdminListData | undefined;
+  const initialList = props.data.referral as AdminListData | undefined;
+  const [list, setList] = useState<AdminListData | undefined>(initialList);
+  const [page, setPage] = useState(initialList?.page ?? 1);
   const configData = props.data.referralConfig as AdminConfigData | undefined;
   const currency = configData?.config.currency ?? list?.currency ?? 'CNY';
   const records = list?.records ?? [];
   const inviters = list?.inviters ?? [];
+  const pageSize = list?.pageSize ?? 20;
+  const total = list?.total ?? 0;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+
+  useEffect(() => {
+    if (initialList && page === (initialList.page ?? 1)) return;
+    let live = true;
+    fetch(`/api/plugins/store/admin/referrals?page=${page}&pageSize=20`, {
+      credentials: 'same-origin',
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+    })
+      .then((response) =>
+        response.ok ? response.json() : Promise.reject(new Error(String(response.status))),
+      )
+      .then((next: AdminListData) => {
+        if (live) setList(next);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [page, initialList]);
 
   return (
     <main className="flex w-full flex-col gap-8">
@@ -440,6 +465,29 @@ function ReferralAdminPage(props: AdminPageComponentProps): ReactElement {
         ) : (
           <p className="text-sm text-muted-foreground">{tr('admin.records.empty')}</p>
         )}
+        {pages > 1 ? (
+          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+            <span>{tr('admin.pageSummary', { page: list?.page ?? page, pages, total })}</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={(list?.page ?? page) <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                {tr('admin.previous')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={(list?.page ?? page) >= pages}
+                onClick={() => setPage((value) => Math.min(pages, value + 1))}
+              >
+                {tr('admin.next')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {list ? (

@@ -1,7 +1,7 @@
 'use client';
 
 import type { AdminPageComponentProps } from '@stackpanel/sdk';
-import { PageHeader } from '@stackpanel/ui';
+import { PageHeader, Select } from '@stackpanel/ui';
 import type { ReactElement } from 'react';
 import { Megaphone } from 'lucide-react';
 import { t } from './i18n.js';
@@ -53,14 +53,14 @@ function NoticeAdminPage(props: AdminPageComponentProps): ReactElement {
           />
           <label className="grid gap-1 text-sm">
             <span>{tr('admin.field.status')}</span>
-            <select
+            <Select
               name="published"
               defaultValue="true"
               className="h-9 rounded-lg border bg-background px-3"
             >
               <option value="true">{tr('admin.state.published')}</option>
               <option value="false">{tr('admin.state.draft')}</option>
-            </select>
+            </Select>
           </label>
           <button
             type="submit"

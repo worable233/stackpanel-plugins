@@ -85,5 +85,8 @@
   "list.delete": "刪除",
   "list.empty": "還沒有發票",
   "list.emptyHint": "點選「新建發票」開始開具第一張。",
-  "feedback.deleted": "發票已刪除"
+  "feedback.deleted": "發票已刪除",
+  "list.previous": "上一頁",
+  "list.next": "下一頁",
+  "list.pageSummary": "共 {total} 張 · 第 {page} / {pages} 頁"
 }

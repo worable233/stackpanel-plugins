@@ -99,7 +99,10 @@ class AlipayService implements PaymentProvider {
 
   async closePayment(request: { merchantOrderNo: string }): Promise<boolean> {
     const config = this.requireConfig();
-    const body = await this.post(config.gatewayUrl, buildCloseParams(config, request.merchantOrderNo));
+    const body = await this.post(
+      config.gatewayUrl,
+      buildCloseParams(config, request.merchantOrderNo),
+    );
     // 关单失败不做「本地已关」的假象：返回 false 让内核保留支付记录，等过期扫描处理。
     return body.includes('"code":"10000"') || body.includes('"code":"40004"');
   }
@@ -109,7 +112,11 @@ class AlipayService implements PaymentProvider {
       configured: this.config !== null,
       secretsEnabled: this.ctx.secrets.isAvailable(),
       ...(this.config
-        ? { appId: this.config.appId, gatewayUrl: this.config.gatewayUrl, methods: this.getMethods() }
+        ? {
+            appId: this.config.appId,
+            gatewayUrl: this.config.gatewayUrl,
+            methods: this.getMethods(),
+          }
         : {}),
     };
   }
@@ -218,7 +225,8 @@ function handle(handler: (req: HttpRequest, reply: HttpReply) => Promise<unknown
     try {
       return await handler(req, reply);
     } catch (error) {
-      if (error instanceof AlipayError) throw new PluginError(error.code, error.status, error.message);
+      if (error instanceof AlipayError)
+        throw new PluginError(error.code, error.status, error.message);
       throw error;
     }
   };

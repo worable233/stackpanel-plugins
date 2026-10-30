@@ -1,5 +1,10 @@
 # llm-gateway vs new-api（QuantumNous）逐功能对比与后续规划
 
+> 姊妹文档：[`llm-gateway-vs-sub2api.md`](./llm-gateway-vs-sub2api.md)。
+> 本文只对标 new-api；对 sub2api 的结论不可套用到本文，反之亦然。
+
+> **实现进度（v0.4.0：A、B、C1/C2/C5 已落地）**：A1 多 Key（key 级冷却/切换）、A2 测活+余额（OpenRouter/DeepSeek/Moonshot/硅基流动 + 6h 巡检）、A3 成本价与毛利、A4 阶梯价 + 权限组折扣、A5 用量日志页 + CSV 导出、A7 关键词/状态码自动摘号、A8 预留上限 + 中断计费标记，均已在 `packages/plugins/llm-gateway` 实现并配单测；A6（补偿自动调度）**本来就有**（`onActivate` 里注册了 `compensation` job，30s 一次），本文早期版本误判为缺失，已更正。C 阶段已完成 **C1 异步任务框架**（数据驱动描述 + 执行器 + 结算/释放）、**C2 产物签名 URL**（HMAC 短时链接 + 凭据代理 + SSRF 校验）、**C5 八个 provider 预设**（火山方舟/百炼/智谱/Kimi/MiniMax/讯飞/Cloudflare/302.AI），随 v0.4.0 发布。**C4 参数/头改写 + 状态码映射**（`src/rewrite.ts`，账号级白名单式改写，默认关闭，痕迹落用量流水）与 **C3 自定义上游路由**（`provider: 'custom'` + `options.route` 模板，无执行代码、写入即校验、SSRF 兜底）也已落地；两者的配置入口目前是管理端 API（编辑器 UI 下一批补）。**C7 Responses 增强**已按「协议直通」落地——新增 `openai-responses` provider，请求体原样转发，`web_search_preview` / `previous_response_id` / `include` / `store` / `sequence_number` / 上游压缩能力因此全部可用（此前经 chat 方言转换会被丢掉）；不做逐特性实现，避免复制上游协议细节。C6（Realtime/WS）**需内核** `PluginRoute` 增加 upgrade 通道：内核侧设计已写成 `docs/realtime-ws-rfc.md`（含三条路径对比、推荐方案、计费与安全要点、测试计划），待内核评审后即可实施。D 阶段已开工：**D4 转换诊断**（`/admin/diagnostics/convert|adaptors`）、**D5 延迟分位数**（16 档直方图 + `overview.latency` p50/p95）、**D2 敏感词过滤 + 管理端审计**（预留前拦截、命中进内核 `audit_logs`、账号/价目/配置变更留痕）已落地；**D1 Playground 已落地**（服务端选号 `/admin/playground` + 管理端「试用台」页）；**D3 7 语言已接线**：内核 `LOCALES` 扩到 zh-CN/zh-TW/zh-HK/en-US/ja-JP/ko-KR/fr-FR，插件 7 份 catalog 同步声明（内核 nav/common/locale 58 键、插件 nav/common/playground 52 键已译，其余以英文兜底，续译中）；另有两条增量已落地：**OpenAI Videos 兼容面**（`/v1/videos` 创建/查询/列表/取内容/取消，投影自任务框架）与 **Gemini OpenAI 兼容入口**（`/v1beta/openai/*` 剥前缀归一化）。
+
 > 对象：本仓 `packages/plugins/llm-gateway`（v0.1.0）对比 <https://github.com/QuantumNous/new-api>（含 `new-api-plugins`、`relaykit`）。
 > 目的：回答三个问题——我们缺什么、哪些不该抄、下一步怎么排期。
 > 结论先行，证据在后。所有对方结论均标注来源文件，便于复核。
@@ -54,7 +59,7 @@
 | Anthropic Messages | ✅ | ✅ | 平 |
 | `messages/count_tokens` | ❌（路由被注释） | ✅ | **我们领先** |
 | Gemini generateContent / stream | ✅（+ `/v1beta/models/*path` 原生透传） | ✅ | 平 |
-| Gemini openai 兼容入口 `/v1beta/openai/*` | ✅ | ❌ | 小缺口（客户端兼容性） |
+| Gemini openai 兼容入口 `/v1beta/openai/*` | ✅ | ✅（`matchIngress` 剥前缀归一化） | 平 |
 | Embeddings / Rerank / Moderations | ✅ | ✅ | 平 |
 | Images generations / edits | ✅（含任务插件承接） | ✅ | 平（他们多了视频/图片任务生态） |
 | Images variations | ❌ `RelayNotImplemented` | ❌ 未注册（404） | 平 |
@@ -76,16 +81,16 @@
 | --- | --- | --- | --- |
 | 内置 provider 数 | 37（ali/baidu/tencent/xunfei/zhipu/zhipu_4v/moonshot/minimax/jimeng/volcengine/cohere/jina/perplexity/dify/cloudflare/replicate/palm/xai/coze/mistral/ollama/vertex/aws/codex/sub2api/newapi/…） | 13（openai/azure/anthropic/gemini/vertex/bedrock/deepseek/mistral/cohere/ollama/openrouter/siliconflow/openai-compatible） | **主要差距（渠道广度）** |
 | 自定义上游路由（URL/method/header/auth + 指定协议转换器） | ✅ `advancedcustom` adaptor（`relay/channel/advancedcustom/adaptor.go`） | ❌ 只有预设 provider，新厂商要改代码 | **缺（运营刚需）** |
-| 账号多 Key（同账号多把 key、轮询/故障切换、单 key 状态） | ✅ `IsMultiKey`/`MultiKeyMode`/`MultiKeyStatusList`（`model/channel.go`） | ❌ 一个账号一个 secret | **缺（P0，直接影响可用性）** |
-| 账号测活（test channel / test model） | ✅ `controller/channel-test.go`、`channel_test_request_test.go` | ❌ 只有转发时失败 | **缺** |
-| 上游余额查询 | ✅ 12 家适配（CloseAI/OpenAI-SB/AIProxy/API2GPT/SiliconFlow/DeepSeek/AIGC2D/OpenRouter/Moonshot/Sub2API/NewAPI/AdvancedCustom，`controller/channel-billing.go`） | ❌ | **缺（成本/风控必需）** |
+| 账号多 Key（同账号多把 key、轮询/故障切换、单 key 状态） | ✅ `IsMultiKey`/`MultiKeyMode`/`MultiKeyStatusList`（`model/channel.go`） | ✅ v0.2.0：`account.keys[]` + 权重 + key 级冷却 + 优先换 key | 平（我们多了 key 级熔断指标） |
+| 账号测活（test channel / test model） | ✅ `controller/channel-test.go`、`channel_test_request_test.go` | ✅ v0.2.0：`POST /admin/accounts/:id/test`（拉模型清单，不花推理费） | 平 |
+| 上游余额查询 | ✅ 12 家适配（`controller/channel-billing.go`） | 🟡 v0.2.0：OpenRouter / DeepSeek / Moonshot / 硅基流动 + 6h 巡检；其它明确「不支持」 | 差 8 家，可增量补 |
 | 上游模型清单同步 | ✅ `controller/model_sync.go`、`missing_models.go` | 🟡 `admin/upstream-models` + `upstream-model-catalog`（手动拉取，不落库） | 薄 |
 | 模型映射（对外名 → 上游名） | ✅ `ModelMapping`（支持正则/多级） | ✅ `upstreamModel`（一对一） | 我们缺「一对多/正则/按分组映射」 |
 | 状态码映射 | ✅ `StatusCodeMapping` | ❌ | 缺 |
 | 参数改写 / 请求头改写 | ✅ `ParamOverride` / `HeaderOverride` | ❌ | 缺 |
 | 渠道额外设置（Azure apiVersion、Vertex project 等） | ✅ `Settings` JSON | ✅ `options` JSON | 平 |
 | 渠道标签/备注/分组/权重/优先级 | ✅（tag/remark/group/weight/priority） | 🟡（affinity/weight/priority，无 tag/备注） | 薄 |
-| 自动禁用/自动启用（按码、按关键词、按失败率阈值） | ✅ `request_policy` + `AutomaticDisableKeywords` + `ChannelDisableThreshold` | 🟡 熔断+冷却（429/408 冷却，5xx 只重试） | 我们缺「按关键词/按状态码自动摘号」 |
+| 自动禁用/自动启用（按码、按关键词、按失败率阈值） | ✅ `request_policy` + `AutomaticDisableKeywords` + `ChannelDisableThreshold` | ✅ v0.2.0：`autoDisableKeywords/StatusCodes/CooldownMs` + 熔断/冷却 | 平（我们无「按失败率阈值」） |
 | 渠道亲和（affinity，含模板） | ✅ `channel_affinity_setting` + `ChannelAffinity` | ✅ `x-gateway-affinity`（只调序不筛除） | 平，我们少模板 |
 | 渠道约束过滤（按路径/task/WS 选择候选） | ✅ `model/channel_constraint.go` | ❌ | 低优先 |
 | OAuth/订阅账号接入（Codex、Claude Max 等） | ✅ `service/codex_oauth.go`、`codex_credential_refresh.go` | ❌（无凭据刷新框架） | **不优先**（ToS/合规风险，见 §4） |
@@ -122,9 +127,9 @@
 | 结算失败补偿 | 🟡 见 `service/tiered_settle.go`（未确认等价补偿队列） | ✅ 状态机 `RESERVED/SETTLED/RELEASED/COMPENSATING/COMPENSATED/FAILED` + 重试 + 上限 + 欠费 | **我们领先** |
 | 价格版本快照 | ❌（按当前配置算） | ✅ `priceSnapshot` 写入台账，历史可复算 | **我们领先（资金正确性）** |
 | 计费维度 | 输入/输出/缓存读/缓存写(5m/1h/12h)/图片/音频/音频输出，`ratio` 体系 | 输入/输出/缓存读/缓存写/推理/图片/音频 | 平；他们缓存分档更细 |
-| 定价方式 | `ratio`（倍率）**或** `tiered_expr`（内置/自定义 **JS 表达式**，可按 token 区间、分辨率、时长计价） | 固定单价（每百万 token / 每张 / 每秒）+ 模型倍率 | **主要差距（定价表达力）** |
-| 阶梯计价（tiered） | ✅ `setting/billing_setting/tiered_billing.go` + `billingexpr` | ❌ | 缺 |
-| 用户分组倍率 / 组间特殊倍率 | ✅ `group_ratio`、`GetGroupGroupRatio` | ❌（内核有权限组 + 折扣，但网关未使用） | **缺（可低成本接内核权限组）** |
+| 定价方式 | `ratio`（倍率）**或** `tiered_expr`（内置/自定义 **JS 表达式**，可按 token 区间、分辨率、时长计价） | v0.2.0：固定单价 + 模型倍率 + **阶梯价（按输入 token）** | 仍差「任意表达式」（C/D） |
+| 阶梯计价（tiered） | ✅ `setting/billing_setting/tiered_billing.go` + `billingexpr` | ✅ v0.2.0：`tiers[]`（按输入 token 选阶，未填字段继承） | 平（表达力弱于 JS 表达式） |
+| 用户分组倍率 / 组间特殊倍率 | ✅ `group_ratio`、`GetGroupGroupRatio` | ✅ v0.2.0：接内核 `PermissionGroup.discount`（取最大），写进账单快照 | 平 |
 | 免费模型 / 未定价模型 | ✅ 未定价默认报错，可放开 `AcceptUnsetRatioModel` | ✅ 兜底价 `*`，不报错 | 策略不同：我们更宽松（需可配） |
 | 套餐/订阅 | ✅ 完整：`SubscriptionPlan`（时长/配额/重置周期/升级降级组/钱包兜底/限购）+ 订单 + 4 家支付 | ❌ | **主要差距** |
 | 充值/兑换码/签到/推广 | ✅ topup（epay/stripe/creem/waffo）+ redemption + checkin + aff | 🟡 内核：钱包 + epay 插件 + referral 插件；网关无兑换码/签到 | 【内核已有】不重造 |
@@ -156,7 +161,7 @@
 | JS 任务插件契约 v1 | ✅ 单文件同步 ESM：`buildSubmitRequest/parseSubmitResponse/parseTaskResult`，宿主管连接/重试/计费，插件只做数据变换；沙箱禁 `fetch`/`eval`/`require` | ❌ | **主要差距** |
 | 官方任务插件 | ✅ 11+：sora/veo(google)/kling/jimeng/vidu/hailuo/doubao/alibaba/suno/xai/vertex/incho | ❌ | **主要差距** |
 | 任务产物（artifact）与签名 URL | ✅ 长时签名能力 URL + Range 代理 + 防 SSRF | ❌ | 缺 |
-| 视频/音乐 OpenAI 兼容任务面 | ✅ `/v1/tasks/*` + `openai_video` 协议投影 | ❌（`gatewayTask` 未接公网路由） | 缺 |
+| 视频/音乐 OpenAI 兼容任务面 | ✅ `/v1/tasks/*` + `openai_video` 协议投影 | 🟡 `/v1/videos` 五条已接（创建/查询/列表/取内容/取消）；音乐未接 | 小缺口 |
 | 插件计费表达式（按分辨率/时长/单位） | ✅ `plugin_billing_expr` + usage schema | ❌ | 缺 |
 | 任务插件市场（独立仓 + index.json + sha256 + CI 校验） | ✅ `QuantumNous/new-api-plugins` | 🟡 内核有插件市场，但没有「任务插件」这类轻量扩展点 | 架构可复用，契约缺 |
 
@@ -165,9 +170,9 @@
 | 能力 | new-api | 我们 | 结论 |
 | --- | --- | --- | --- |
 | 请求指标 | ✅ perf metrics（渠道/模型/延迟分位） | ✅ 16 个分钟桶指标（`admin/metrics`） | 平，我们缺直方图/分位 |
-| 日志 | ✅ 用量日志（分页/筛选/导出/ClickHouse 可选）+ 审计日志 | 🟡 usage-log 表；管理端无查询页 | **缺页面** |
+| 日志 | ✅ 用量日志（分页/筛选/导出/ClickHouse 可选）+ 审计日志 | ✅ v0.2.0：用量页（天数/模型/状态筛选 + 分页）+ CSV 导出 | 仍无审计日志 |
 | 排行/统计 | ✅ `rankings`、`usedata` | 🟡 概览 top10 模型 | 薄 |
-| 成本与毛利 | ✅ 渠道余额 + 消耗 | ❌ 只有售价与营收 | 缺（P0 商业必需） |
+| 成本与毛利 | ✅ 渠道余额 + 消耗 | ✅ v0.2.0：`cost*` 价 + 流水 `costAmount` + 概览毛利/覆盖率 | 平 |
 | 告警/通知 | ✅ 邮件/Telegram/Discord/Webhook + 渠道自动测活 | 🟡 注册通知类型；无阈值告警 | 薄 |
 | 健康检查 / 部署自检 | ✅ `perf_metrics`/`uptime_kuma`/`deployment` | 🟡 内核运行手册 | 不属插件 |
 | 系统定时任务 | ✅ `system_task`（额度重置、渠道自动更新等） | 🟡 补偿队列需手动/外部触发 | **缺调度**（可用内核 cron/event） |
@@ -177,10 +182,10 @@
 
 | 能力 | new-api | 我们 | 结论 |
 | --- | --- | --- | --- |
-| 管理后台模块 | 21 个：Dashboard/渠道/模型/定价/用量日志/审计/用户/兑换码/订阅/钱包/任务插件/系统设置（站点/内容/认证/计费/模型/运维/请求策略/安全）/系统信息 | 3 个：概览、上游账号、定价 | **主要差距** |
+| 管理后台模块 | 16 业务模块 + 7 类系统设置 | 4 个：概览、上游账号（含多 Key/测活/余额）、定价（含成本/阶梯）、用量日志 | 仍差 12 个（订阅/兑换码/审计/请求策略…） |
 | 用户侧 | 密钥/额度/订阅/充值/邀请/签到/用量/个人资料/安全 | 概览、模型定价、API 密钥 + 账户 widget | 中 |
 | 模型广场 / 价格页 / 详情 / 排行榜 | ✅ `/pricing`、`/pricing/:modelId`、`/rankings` | 🟡 账户内价格列表（不公开、无详情/排行） | 缺（增长向） |
-| Playground（站内试用） | ✅ `/playground`、`/pg/chat/completions` | ❌ | 缺（P2） |
+| Playground（站内试用） | ✅ `/playground`、`/pg/chat/completions` | ✅ `/admin/playground`（不扣钱包/不写流水，见 wiki） | 平 |
 | 渠道编辑体验 | ✅ 多 Key、测活、查余额、映射、改写、状态码、约束 | 🟡 名称/URL/provider/模型/优先级/权重/并发/状态 | 薄 |
 | 用量图表 | ✅ 多维 | ✅ 按小时/日 + 按模型 | 平 |
 | 国际化 | 7 语言（en/zh-CN/zh-TW/fr/ja/ru/vi） | 4（zh-CN/zh-TW/zh-HK/en-US） | 差 3 种 |
@@ -212,7 +217,7 @@
 | G4 | **定价表达力：阶梯/按量单位** | 视频按时长、图片按分辨率、长上下文阶梯价，固定单价表达不了 | 固定单价 + 全局倍率 |
 | G5 | **用户分组定价（接内核权限组折扣）** | 会员/企业客户折扣是基本商业能力；内核已有权限组 + 折扣，我们没用 | 只有 per-model `multiplier` |
 | G6 | **管理端用量日志页 + 导出** | 出事无法自查（谁、哪个 key、哪个账号、多少 token、为什么 502） | 只有概览 Top10 + `/usage` API（无页面/无筛选/无导出） |
-| G7 | **结算补偿的自动调度** | 现在要人工点 `/admin/compensations/run`，漏跑=坏账 | 有队列与幂等，无内建定时 |
+| ~~G7~~ | ~~结算补偿的自动调度~~ | **误判：已存在**（`onActivate` 注册 `compensation` job，每 30s 跑一次；`/admin/compensations/run` 只是手动入口） | 已核实，不再是缺口 |
 
 ### P1 —— 竞争力/体验明显落后
 
@@ -227,7 +232,7 @@
 | G14 | 用量预警与限额通知（软/硬限） | 对齐用户额度 + 通知 |
 | G15 | 模型映射升级（一对多/正则/按分组） | 现在一对一 `upstreamModel` |
 | G16 | 公开模型广场 / 价格详情 / 排行榜 | 增长与转化向 |
-| G17 | 计费正确性加固：客户端中断仍按上游实际用量结算 | 见 §3.1 |
+| G17 | ~~计费正确性加固~~（已修） | 见 §3.1 |
 | G18 | Realtime / Responses WebSocket | 需内核 upgrade 通道（跨仓） |
 
 ### P2 —— 生态与打磨
@@ -244,9 +249,9 @@
 
 ### 3.1 代码层观察（读完源码后值得单独立项的加固点）
 
-1. **客户端中断的计费盲区**：`gateway.ts` 流式分支 `reply.onClientClose(() => reader.cancel())` 会提前结束读取，随后 `resolveUsage()` 用已收到的文本估算 —— 上游实际已生成的 token 可能更多，**倾向少收**。建议：中断时按「最后已知 usage + 已完成部分」并标记 `estimated/aborted`，或在上游 usage 事件到达即持久化。
+1. ~~**客户端中断的计费盲区**~~（v0.2.0 已修：中断仍按已发生 usage 结算并标 `aborted`）原始问题：：`gateway.ts` 流式分支 `reply.onClientClose(() => reader.cancel())` 会提前结束读取，随后 `resolveUsage()` 用已收到的文本估算 —— 上游实际已生成的 token 可能更多，**倾向少收**。建议：中断时按「最后已知 usage + 已完成部分」并标记 `estimated/aborted`，或在上游 usage 事件到达即持久化。
 2. **估算器偏粗**：`estimateFrom()` 对流式用 `stripSse()` 后的原文估算，SSE 结构残留会抬高 completion 估算；prompt 用整段请求体（含 JSON 键名）。
-3. **预留口径**：`DEFAULT_RESERVE_MAX_TOKENS = 4096`，客户端不给 `max_tokens` 时对长输出模型会低估 → 结算可能超过冻结额，退化为「先跑后欠」。建议按模型 `maxOutputTokens` 元数据定预留上限。
+3. ~~**预留口径**~~（v0.2.0 已修：`model-price.maxOutputTokens` 优先）原始问题：`DEFAULT_RESERVE_MAX_TOKENS = 4096`，客户端不给 `max_tokens` 时对长输出模型会低估 → 结算可能超过冻结额，退化为「先跑后欠」。建议按模型 `maxOutputTokens` 元数据定预留上限。
 4. **误配置暴露**：`provider` 非法值 502（好），但 `models` 为空 = 不限（便于运维，也容易放大误配）——建议账号编辑页给出显式「不限」勾选。
 5. **无请求级幂等/去重**（合理，非幂等接口），但**重试预算**是全局 `retryAttempts`，缺少「按错误类别的重试预算」与「跨账号预算」。
 6. **无 `trust` 免冻结**：new-api 对高信任用户跳过预扣以省一次 Redis/DB 往返（`trust_quota_usd`）。我们可加「余额 > 阈值时跳过 hold」开关，降低高频小请求成本。
@@ -272,7 +277,7 @@
 - **能在内核解决的不要写进插件**；**能用数据驱动的不要写进代码**（借对手的 `advancedcustom` / `billing_expr` 思路）。
 - 每阶段都必须有：数据迁移说明、错误码、指标、测试、文档（Wiki + API 矩阵）。本仓的「文档与注册表由测试同步」纪律继续沿用。
 
-### 阶段 A —— v0.2.0「可运营」（建议 3 周）
+### 阶段 A —— v0.2.0「可运营」✅ 已完成
 
 主题：让一个人能 7×24 值守这个网关。
 
@@ -283,11 +288,11 @@
 | A3 成本与毛利 | G3 | `model-price.costInput/costOutput/costImage/costAudio`（可空=未知）；usage-log 增加 `costAmount`；概览增加「营收/成本/毛利」 | 历史账单可按价快照复算毛利 |
 | A4 定价表达力 | G4、G5 | ①阶梯价（`tiers: [{from, to, inputPrice, outputPrice}]`）②按量单位（张/秒/百万像素）③`discountSource: permissionGroups` 读内核权限组折扣 | 单测覆盖边界；试算 API 返回明细 |
 | A5 用量日志页 | G6 | 管理端「用量」页：时间/key/账号/模型/状态码/错误码筛选、分页、CSV 导出 | 10 万行导出 < 10s（流式） |
-| A6 补偿调度 | G7 | 内建定时（内核 cron/event，间隔可配）+ `compensations.pending` 指标告警 | 进程重启后自动续跑；幂等重放不二次扣 |
+| ~~A6 补偿调度~~ | ~~G7~~ | 已存在，无需实现（本轮只补了 `compensations` 的可见性） | — |
 | A7 自动摘号 | G10 | 按状态码区间 + 关键词（如余额不足/封禁）→ 账号冷却或禁用；自动恢复需人工或半开 | 命中关键词立即摘号并在概览可见 |
 | A8 计费加固 | G17 | 中断结算按上游 usage 优先、缺则保守估算；预留上限按模型元数据 | 中断场景单测：账单不低于上游已知 usage |
 
-### 阶段 B —— v0.3.0「能卖」（建议 4 周）
+### 阶段 B —— v0.3.0「能卖」✅ 已完成（公开价格页仅 API，匿名 UI 需内核支持插件公开页面）
 
 | 任务 | 覆盖 | 说明 |
 | --- | --- | --- |
@@ -302,13 +307,13 @@
 
 | 任务 | 覆盖 | 依赖/风险 |
 | --- | --- | --- |
-| C1 异步任务框架 | G13 | 先做 **执行器**（本地任务表 + 轮询 + 结算/退款），再抽 **任务描述契约**（数据驱动，不做 JS 沙箱；Sandbox 交给内核插件沙箱）。首批：OpenAI 图像任务、可灵、即梦、Veo |
-| C2 产物与签名 URL | G13 | 复用内核存储插件（`storage`）签发短时 URL；禁止把上游 token 拼进 URL |
-| C3 自定义上游路由 | G8 | `provider: 'custom'` + `route {urlTemplate, method, headers, authType, converter}`；配 SSRF 校验（`@stackpanel/net-guard`） |
-| C4 参数/头改写 + 状态码映射 | G9 | JSONPath/白名单式改写；**默认关闭**，改动进审计日志 |
-| C5 更多 provider | 渠道广度 | 优先 OpenAI 兼容预设（Volcengine/DashScope/Zhipu/Moonshot/MiniMax/Xunfei/Cloudflare/302.AI）；有真实差异的再写 adaptor |
-| C6 Realtime/WS | G18 | **需内核** `PluginRoute` 增加 upgrade 通道；先立内核 RFC，再做客户端 |
-| C7 Responses 增强 | G25 | compaction、web search 工具编码、`sequence_number` |
+| C1 异步任务框架 ✅ | G13 | 先做 **执行器**（本地任务表 + 轮询 + 结算/退款），再抽 **任务描述契约**（数据驱动，不做 JS 沙箱；Sandbox 交给内核插件沙箱）。首批：OpenAI 图像任务、可灵、即梦、Veo |
+| C2 产物与签名 URL ✅ | G13 | 复用内核存储插件（`storage`）签发短时 URL；禁止把上游 token 拼进 URL |
+| C3 自定义上游路由 ✅ | G8 | `provider: 'custom'` + `route {urlTemplate, method, headers, authType, converter}`；配 SSRF 校验（`@stackpanel/net-guard`） |
+| C4 参数/头改写 + 状态码映射 ✅ | G9 | JSONPath/白名单式改写；**默认关闭**，改动进审计日志 |
+| C5 更多 provider ✅ | 渠道广度 | 优先 OpenAI 兼容预设（Volcengine/DashScope/Zhipu/Moonshot/MiniMax/Xunfei/Cloudflare/302.AI）；有真实差异的再写 adaptor |
+| C6 Realtime/WS（内核 RFC 已写） | G18 | **需内核** `PluginRoute` 增加 upgrade 通道；先立内核 RFC，再做客户端 |
+| C7 Responses 增强 ✅（改用协议直通） | G25 | compaction、web search 工具编码、`sequence_number` |
 
 ### 阶段 D —— 持续
 

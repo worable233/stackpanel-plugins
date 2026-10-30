@@ -13,6 +13,7 @@
  * Usage (from the plugin package dir):
  *   node ../../../scripts/install-into-kernel.mjs [--kernel /path/to/StackPanel]
  */
+import { createHash } from 'node:crypto';
 import {
   cpSync,
   existsSync,
@@ -141,6 +142,39 @@ for (const dataDir of dataDirs) {
     cpSync(join(frontend, 'dist'), join(frontendTarget, 'dist'), { recursive: true });
   } catch {
     /* optional */
+  }
+  try {
+    cpSync(join(frontend, 'package.json'), join(frontendTarget, 'package.json'));
+  } catch {
+    /* optional */
+  }
+  // Newer kernels require a revision hash on the frontend manifest and only
+  // accept `finder` data requirements. Older plugin packages still emit flat
+  // `fetch` requirements; drop those here so the host can admit the package.
+  const frontendManifest = join(frontendTarget, 'manifest.json');
+  if (existsSync(frontendManifest)) {
+    const parsed = JSON.parse(readFileSync(frontendManifest, 'utf8'));
+    const entryPath = join(frontendTarget, 'dist', 'index.js');
+    if (existsSync(entryPath)) {
+      parsed.revision = createHash('sha256')
+        .update(readFileSync(entryPath))
+        .digest('hex')
+        .slice(0, 12);
+    }
+    for (const key of ['pages', 'adminRoutes', 'accountRoutes']) {
+      for (const route of parsed[key] ?? []) {
+        if (!Array.isArray(route.data)) continue;
+        route.data = route.data.filter((item) => item && typeof item.finder === 'string');
+        if (!route.data.length) delete route.data;
+      }
+    }
+    writeFileSync(frontendManifest, `${JSON.stringify(parsed, null, 2)}\n`);
+    if (parsed.revision) {
+      const revisionDir = join(frontendTarget, 'revisions', parsed.revision);
+      mkdirSync(revisionDir, { recursive: true });
+      cpSync(join(frontendTarget, 'dist'), join(revisionDir, 'dist'), { recursive: true });
+      writeFileSync(join(revisionDir, 'manifest.json'), `${JSON.stringify(parsed, null, 2)}\n`);
+    }
   }
   writeFileSync(join(target, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`[install-into-kernel] installed ${id}@${manifest.version} -> ${target}`);

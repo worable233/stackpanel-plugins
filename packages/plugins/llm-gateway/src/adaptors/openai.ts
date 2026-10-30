@@ -6,7 +6,7 @@
  */
 
 import { createAdaptor, genericExtractUsage } from './base.js';
-import type { IRUsage } from '../protocol.js';
+import type { IRUsage } from '@stackpanel/llm-protocol';
 import type { AdaptorErrorInput, ProviderAdaptor } from './types.js';
 import { GatewayError } from '../errors.js';
 import { parseUpstreamError } from './types.js';
@@ -94,6 +94,37 @@ export const openaiAdaptor: ProviderAdaptor = createAdaptor({
     'reasoning_effort',
     'parallel_tool_calls',
   ],
+});
+
+/**
+ * OpenAI Responses 原生通道（C7）。
+ *
+ * 为什么需要单独一个 adaptor：`openai` 号是 `openai-chat` 方言，同一家上游的
+ * Responses 请求会被**转换**成 chat completions——于是 `web_search_preview`
+ * 这类服务端工具、`previous_response_id`、`include`、`store` 全部丢失（IR 里
+ * 没有这些概念，chat 协议也表达不了）。挂这个 provider 的账号与客户端**协议相同**，
+ * 走原样直通：这些字段原封不动到上游，`sequence_number` 也由上游生成。
+ *
+ * `streamUsage` 必须为 false：Responses 不认 chat 的 `stream_options`，
+ * 注入一次就是 400。
+ */
+export const openaiResponsesAdaptor: ProviderAdaptor = createAdaptor({
+  id: 'openai-responses',
+  label: 'OpenAI Responses（原生）',
+  protocol: 'openai-responses',
+  capabilities: {
+    operations: [],
+    streaming: true,
+    websocket: false,
+    customSigning: false,
+    toolCalls: true,
+    images: true,
+    promptCache: true,
+    streamUsage: false,
+  },
+  extractUsage: openaiExtractUsage,
+  classifyError: openaiClassify,
+  preservedFields: [],
 });
 
 /**

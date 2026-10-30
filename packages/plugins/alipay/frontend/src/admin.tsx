@@ -102,7 +102,10 @@ function AlipayAdminPage(props: AdminPageComponentProps): ReactElement {
         </section>
       ) : null}
 
-      <form onSubmit={handleSubmit} className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
+      <form
+        onSubmit={handleSubmit}
+        className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2"
+      >
         <Field label={tr('field.appId')} name="appId" value={appId} onChange={setAppId} required />
         <Field
           label={tr('field.gatewayUrl')}
@@ -187,10 +190,7 @@ function Field(props: {
   );
 }
 
-async function readErrorMessage(
-  response: Response,
-  tr: ReturnType<typeof t>,
-): Promise<string> {
+async function readErrorMessage(response: Response, tr: ReturnType<typeof t>): Promise<string> {
   if (response.status === 401) return tr('error.unauthenticated');
   if (response.status === 403) return tr('error.forbidden');
   try {

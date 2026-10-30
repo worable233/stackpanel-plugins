@@ -93,5 +93,8 @@
   "feedback.codeCreated": "Invite code created",
   "feedback.configSaved": "Settings saved",
   "feedback.adjusted": "Balance adjusted",
-  "state.clawedBack": "Clawed back (refund)"
+  "state.clawedBack": "Clawed back (refund)",
+  "admin.previous": "Previous",
+  "admin.next": "Next",
+  "admin.pageSummary": "Page {page} of {pages} · {total} records"
 }

@@ -85,5 +85,8 @@
   "list.delete": "Delete",
   "list.empty": "No invoices yet",
   "list.emptyHint": "Click “New invoice” to create the first one.",
-  "feedback.deleted": "Invoice deleted"
+  "feedback.deleted": "Invoice deleted",
+  "list.previous": "Previous",
+  "list.next": "Next",
+  "list.pageSummary": "{total} invoices · Page {page} of {pages}"
 }
