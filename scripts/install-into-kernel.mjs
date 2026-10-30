@@ -151,9 +151,17 @@ for (const dataDir of dataDirs) {
   } catch {
     /* optional */
   }
-  // Newer kernels require a revision hash on the frontend manifest and only
-  // accept `finder` data requirements. Older plugin packages still emit flat
-  // `fetch` requirements; drop those here so the host can admit the package.
+  // The kernel requires a content-addressed `revision` on the frontend manifest
+  // and admits two mutually exclusive data requirements (ADR-0027):
+  //   { finder }  package code in the web process → needs execution admission
+  //   { fetch }   host-issued kernel GET          → needs no admission
+  //
+  // This script used to *delete* every requirement it did not understand, which
+  // looked like a successful install and left each settings page rendering with
+  // no data at all — a blank SMTP form that the operator would then re-submit.
+  // A manifest that reaches this point in the wrong shape is a package defect,
+  // so it fails loudly instead. `scripts/check-frontend-manifests.mjs` catches
+  // the same thing before packaging.
   const frontendManifest = join(frontendTarget, 'manifest.json');
   if (existsSync(frontendManifest)) {
     const parsed = JSON.parse(readFileSync(frontendManifest, 'utf8'));
@@ -164,11 +172,39 @@ for (const dataDir of dataDirs) {
         .digest('hex')
         .slice(0, 12);
     }
+    const declaredFinders = new Set(parsed.finders ?? []);
     for (const key of ['pages', 'adminRoutes', 'accountRoutes']) {
       for (const route of parsed[key] ?? []) {
-        if (!Array.isArray(route.data)) continue;
-        route.data = route.data.filter((item) => item && typeof item.finder === 'string');
-        if (!route.data.length) delete route.data;
+        for (const requirement of route.data ?? []) {
+          const hasFetch = typeof requirement?.fetch?.path === 'string';
+          if (hasFetch) {
+            const path = requirement.fetch.path;
+            if (
+              !path.startsWith('/') ||
+              path.startsWith('//') ||
+              path.startsWith('/api/') ||
+              path.includes('\\') ||
+              path.split('/').some((seg) => seg === '..' || seg === '.')
+            ) {
+              throw new Error(
+                `${id}: ${route.path} declares fetch.path "${path}", which is not a ` +
+                  'kernel-relative path (no absolute URLs, no "..", no "/api/" prefix).',
+              );
+            }
+          }
+          if (!hasFetch && (!requirement || typeof requirement.finder !== 'string')) {
+            throw new Error(
+              `${id}: ${route.path} declares a data requirement with neither "finder" nor ` +
+                `"fetch" (${JSON.stringify(requirement)}). The kernel rejects the package at install.`,
+            );
+          }
+          if (!hasFetch && !declaredFinders.has(requirement.finder)) {
+            throw new Error(
+              `${id}: ${route.path} requires finder "${requirement.finder}", which is not ` +
+                'listed in frontend/manifest.json "finders".',
+            );
+          }
+        }
       }
     }
     writeFileSync(frontendManifest, `${JSON.stringify(parsed, null, 2)}\n`);
@@ -183,14 +219,12 @@ for (const dataDir of dataDirs) {
   console.log(`[install-into-kernel] installed ${id}@${manifest.version} -> ${target}`);
 }
 
-// Tell the operator about the one thing that will look broken otherwise. A
-// non-builtin plugin's `finders` only execute in the web process when the
-// kernel admits it, so an unlisted plugin renders its account pages with empty
-// data. Admin pages are client-rendered and fetch their own data, so they work
-// either way — which makes the account-page symptom easy to misread as a bug.
-//
-// A package that declares every page requirement as `fetch` has no finders and
-// therefore needs no admission at all; this notice stays silent for those.
+// Tell the operator about the one thing that will look broken otherwise. Page
+// data is served by finders, and a non-builtin package's finders only run in the
+// web process once the kernel admits it to server execution. An unadmitted
+// package therefore renders its pages and settings panels *without* the data
+// they asked for — no error, just empty forms — which is easy to misread as a
+// plugin bug.
 if (!builtin) {
   const frontendManifest = join(pluginDir, 'frontend', 'manifest.json');
   const finders = existsSync(frontendManifest)
@@ -198,10 +232,11 @@ if (!builtin) {
     : [];
   if (Array.isArray(finders) && finders.length > 0) {
     console.log(
-      `[install-into-kernel] ${id} declares ${finders.length} finder(s). Account pages need them ` +
-        `to be admitted to the web process; add "${id}" to STACKPANEL_FRONTEND_SERVER_EXEC ` +
-        `(see .env.example) or those pages will render with empty data. Converting them to ` +
-        `declarative "fetch" requirements removes the dependency entirely.`,
+      `[install-into-kernel] ${id} declares ${finders.length} finder(s). Their pages and ` +
+        `settings panels render with EMPTY data until the kernel admits the package for ` +
+        `server-side execution: add "${id}" to the allow list in Admin -> Settings -> ` +
+        `Runtime configuration (setting frontend.serverExec, applies immediately). The ` +
+        `STACKPANEL_FRONTEND_SERVER_EXEC env var only works as a bootstrap fallback.`,
     );
   }
 }

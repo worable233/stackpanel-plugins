@@ -23,6 +23,12 @@
 | POST | `/smtp/admin/config` | admin + `smtp.admin` | 保存 SMTP 配置。 |
 | POST | `/smtp/admin/test` | admin + `smtp.admin` | 向 `to` 指定地址发送测试邮件。 |
 
+## 设置页数据
+
+设置页的初始值由声明式数据提供，manifest 里写作 `data: [{ "fetch": { "path": "/smtp/admin/config" }, "as": "status" }]`。`fetch` 由**宿主**在渲染前发一个内核 GET（带当前管理员的会话），所以**不需要任何执行准入**，也不需要导出 finder——装上就有数据。
+
+空表单里的 `host` / `from` 是必填项，不会把配置存成空值，但运维会误以为没配过；所以数据必须能拿到。若把这条声明改成 `finder`（例如以后需要在服务端读插件 secrets 做聚合），就要在后台「设置 → 运行期配置 → 插件服务端执行准入」里授权 `smtp`，否则页面会缺数据（管理员会看到提示，不再是静默空表单）。
+
 ## 集成规则
 
 不要在业务插件里重新实现邮件队列或把 SMTP 凭据暴露给前端。业务插件应先创建站内通知；内核根据用户偏好选择已配置的 `notification.channel`。`smtp` 没有 Capability，配置写操作也不应直接开放到 MCP。
