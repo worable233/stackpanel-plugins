@@ -6,7 +6,7 @@
   "page.keyFingerprint": "本地簽名金鑰指紋：{fingerprint}（僅用於確認金鑰換過沒有，不可反推）",
   "page.statusOn": "執行中",
   "page.statusOff": "已停用",
-  "field.runtime": "執行參數",
+  "field.runtime": "執行引數",
   "field.maxNumber": "工作量（最大雜湊次數）",
   "field.maxNumberHint": "越大越難、越慢。10 萬次在手機上通常不到 1 秒；低於 5 萬對指令碼幾乎無意義。",
   "field.expiresMinutes": "挑戰有效期（分鐘）",

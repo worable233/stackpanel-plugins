@@ -3,7 +3,7 @@
   "page.title": "人機驗證",
   "page.description": "在登入、註冊、改密碼、改郵箱等敏感操作前增加人機驗證。金鑰僅儲存在平臺加密儲存中，前端只會拿到 Site Key。",
   "page.noSecrets": "平臺加密金鑰未配置，無法儲存驗證服務金鑰。",
-  "field.connection": "服務設定",
+  "field.connection": "服務配置",
   "field.preset": "驗證服務",
   "field.siteKey": "Site Key（公開）",
   "field.secret": "Secret Key",
