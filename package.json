@@ -25,7 +25,7 @@
     "manifests:verify": "node scripts/verify-frontend-manifests.mjs"
   },
   "devDependencies": {
-    "esbuild": "^0.27.7",
+    "esbuild": "^0.28.2",
     "opencc-js": "^1.4.2",
     "prettier": "^3.9.10",
     "tsup": "^8.5.1",
