@@ -128,11 +128,12 @@ export class AltchaService implements CaptchaProvider {
   constructor(private readonly ctx: PluginContext) {}
 
   /**
-   * `isAvailable()` is typed synchronous, but an **isolated** plugin reaches the
-   * service over the host RPC bridge, where every call returns a Promise — a
-   * bare `!ctx.secrets.isAvailable()` would then read a truthy Promise and take
-   * the "available" branch even when no key is configured. Awaiting the value
-   * works in both modes; `Promise.resolve` keeps the type honest.
+   * `isAvailable()` is typed synchronous. Kernels from `377131c` on honour that
+   * over the isolation bridge (the sync methods travel as values in the
+   * lifecycle frame), so the call returns a real boolean. Older kernels returned
+   * a Promise here — always truthy, which silently defeated the guard — so stay
+   * tolerant of both: `await` a value and a Promise alike, and `Promise.resolve`
+   * keeps the type honest.
    */
   private async secretsAvailable(): Promise<boolean> {
     return await Promise.resolve(this.ctx.secrets.isAvailable());
