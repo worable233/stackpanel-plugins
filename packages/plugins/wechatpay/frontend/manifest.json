@@ -30,8 +30,9 @@
   "accountWidgets": [],
   "files": [
     "frontend/dist/admin.js",
-    "frontend/dist/chunk-26PV6BQP.js",
-    "frontend/dist/index.js"
+    "frontend/dist/admin.js.map",
+    "frontend/dist/index.js",
+    "frontend/dist/index.js.map"
   ],
   "locales": [
     "zh-CN",

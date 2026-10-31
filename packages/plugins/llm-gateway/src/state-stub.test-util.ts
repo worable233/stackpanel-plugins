@@ -82,6 +82,17 @@ export class InMemoryState implements StateService {
     return next;
   }
 
+  /**
+   * 剩余寿命（毫秒），语义与内核一致：`0` = 不存在/已过期，`null` = 存在但无 TTL。
+   * `login` 插件据此算出 429 的 `Retry-After`，缺这个方法时类型层面就编译不过。
+   */
+  async ttl(key: string): Promise<number | null> {
+    const entry = this.live(key);
+    if (!entry) return 0;
+    if (entry.expiresAt === 0) return null;
+    return Math.max(0, entry.expiresAt - this.now());
+  }
+
   async acquire(key: string, ttlMs: number): Promise<string | null> {
     if (this.live(key)) return null;
     const token = `lock-${Math.random().toString(36).slice(2)}`;

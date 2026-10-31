@@ -199,14 +199,15 @@
   "files": [
     "frontend/dist/admin.js",
     "frontend/dist/admin.js.map",
-    "frontend/dist/admin.runtime.js",
-    "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
-    "frontend/dist/index.js.map",
-    "frontend/dist/route-progress.js",
-    "frontend/dist/route-progress.js.map"
+    "frontend/dist/index.js.map"
   ],
-  "locales": ["zh-CN", "zh-TW", "zh-HK", "en-US"],
+  "locales": [
+    "zh-CN",
+    "zh-TW",
+    "zh-HK",
+    "en-US"
+  ],
   "messages": {
     "zh-CN": {
       "trigger.register": "注册即发",
