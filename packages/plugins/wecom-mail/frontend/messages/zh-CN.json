@@ -55,10 +55,11 @@
   "remedy.wecom.invalid_corp_id": "企业 ID 不对。请重新复制「我的企业 → 企业信息」里的企业 ID。",
   "remedy.wecom.invalid_secret": "应用 Secret 不对或已被重置。请回后台重新生成并复制新的 Secret。",
   "remedy.wecom.ip_not_allowed": "该自建应用开启了可信 IP：请把这个服务器的出口 IP 加进「应用管理 → 你的应用 → 企业可信 IP」，或在应用设置里关闭可信 IP 限制。",
-  "remedy.wecom.mail_forbidden": "这个应用没有企业邮箱（邮件）权限。请在企业微信后台为该应用开启邮件权限后重试。",
+  "remedy.wecom.mail_forbidden": "这个应用没有企业邮箱（邮件）接口权限。到企业微信后台「应用管理 → 你的自建应用 → 企业邮箱（或\"邮件\"）」开通后再试；如果返回 48002，就是这个接口权限没开。",
   "remedy.wecom.rate_limited": "触发了企业微信的调用频率限制，请稍等一分钟再试。",
   "remedy.wecom.token_invalid": "企业微信拒绝了本次访问令牌（可能刚被重置）。已自动刷新一次仍然失败，请确认 Secret 是否刚刚重新生成。",
   "remedy.wecom.network_error": "连不上企业微信接口。请检查服务器出网、DNS 或代理设置。",
   "remedy.wecom.bad_response": "企业微信返回了非预期内容（可能是反向代理的报错页）。请检查 baseUrl 或网络出口。",
-  "remedy.wecom.send_failed": "企业微信拒绝了这次发信请求。请确认发件邮箱已在企业微信侧开通，并查看服务日志中的原始错误码。"
+  "remedy.wecom.send_failed": "企业微信拒绝了这次发信请求。请确认发件邮箱已在企业微信侧开通，并查看服务日志中的原始错误码。",
+  "connect.corpIdLink": "找不到企业 ID？打开企业微信后台「我的企业」（企业信息在最底部）"
 }

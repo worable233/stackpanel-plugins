@@ -8,6 +8,9 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { t } from './i18n.js';
 
+/** 「我的企业 → 企业信息」：企业 ID 就在这一页最底部，后台导航里很难找。 */
+const WECOM_PROFILE_URL = 'https://work.weixin.qq.com/wework_admin/frame#/profile';
+
 const statusSchema = z.object({
   configured: z.boolean(),
   secretsEnabled: z.boolean().optional(),
@@ -276,6 +279,14 @@ function WecomMailSettings(props: AdminPageComponentProps): ReactElement {
         <div>
           <h2 className="text-sm font-semibold">{tr('connect.title')}</h2>
           <p className="mt-1 text-xs text-muted-foreground">{tr('connect.pasteHint')}</p>
+          <a
+            className="mt-1 inline-block text-xs underline underline-offset-2 hover:text-foreground"
+            href={WECOM_PROFILE_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {tr('connect.corpIdLink')}
+          </a>
         </div>
         <textarea
           className="min-h-24 w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
@@ -291,8 +302,8 @@ function WecomMailSettings(props: AdminPageComponentProps): ReactElement {
               checked={sendTest}
               onChange={(e) => setSendTest(e.target.checked)}
             />
-            {status?.adminEmail
-              ? tr('connect.testToggle').replace('{{email}}', status.adminEmail)
+            {testTo || status?.adminEmail
+              ? tr('connect.testToggle').replace('{{email}}', testTo || status?.adminEmail || '')
               : tr('connect.testToggleNoEmail')}
           </label>
           <button

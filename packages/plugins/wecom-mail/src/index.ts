@@ -263,11 +263,15 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
         test = { sent: true, to: testTo };
       } catch (error) {
         // 凭据已经验证过了：测试信失败只报告，不回滚配置。
-        test = {
-          sent: false,
-          to: testTo,
-          code: error instanceof WecomError ? error.code : 'wecom.send_failed',
-        };
+        const code = error instanceof WecomError ? error.code : 'wecom.send_failed';
+        // 稳定码给界面，原始 errcode 进日志：`48002` 这类码要去企业微信的
+        // devtool 里查才知道是"应用没开通这个接口"，只有日志留得住它。
+        this.ctx.logger.warn(
+          `wecom-mail: test send failed code=${code} errcode=${
+            error instanceof WecomError ? String(error.errcode ?? '') : ''
+          }`,
+        );
+        test = { sent: false, to: testTo, code };
       }
     }
 

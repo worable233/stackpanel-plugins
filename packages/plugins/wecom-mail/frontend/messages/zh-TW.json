@@ -55,10 +55,11 @@
   "remedy.wecom.invalid_corp_id": "企業 ID 不對。請重新複製「我的企業 → 企業資訊」裡的企業 ID。",
   "remedy.wecom.invalid_secret": "應用 Secret 不對或已被重置。請回後臺重新生成並複製新的 Secret。",
   "remedy.wecom.ip_not_allowed": "該自建應用開啟了可信 IP：請把這個伺服器的出口 IP 加進「應用管理 → 你的應用 → 企業可信 IP」，或在應用設定裡關閉可信 IP 限制。",
-  "remedy.wecom.mail_forbidden": "這個應用沒有企業郵箱（郵件）許可權。請在企業微信後臺為該應用開啟郵件許可權後重試。",
+  "remedy.wecom.mail_forbidden": "這個應用沒有企業郵箱（郵件）介面許可權。到企業微信後臺「應用管理 → 你的自建應用 → 企業郵箱（或\"郵件\"）」開通後再試；如果返回 48002，就是這個介面許可權沒開。",
   "remedy.wecom.rate_limited": "觸發了企業微信的呼叫頻率限制，請稍等一分鐘再試。",
   "remedy.wecom.token_invalid": "企業微信拒絕了本次訪問令牌（可能剛被重置）。已自動重新整理一次仍然失敗，請確認 Secret 是否剛剛重新生成。",
   "remedy.wecom.network_error": "連不上企業微信介面。請檢查伺服器出網、DNS 或代理設定。",
   "remedy.wecom.bad_response": "企業微信返回了非預期內容（可能是反向代理的報錯頁）。請檢查 baseUrl 或網路出口。",
-  "remedy.wecom.send_failed": "企業微信拒絕了這次發信請求。請確認發件郵箱已在企業微信側開通，並檢視服務日誌中的原始錯誤碼。"
+  "remedy.wecom.send_failed": "企業微信拒絕了這次發信請求。請確認發件郵箱已在企業微信側開通，並檢視服務日誌中的原始錯誤碼。",
+  "connect.corpIdLink": "找不到企業 ID？開啟企業微信後臺「我的企業」（企業資訊在最底部）"
 }
