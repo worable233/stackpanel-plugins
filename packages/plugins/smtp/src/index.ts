@@ -171,11 +171,12 @@ class SmtpService implements NotificationChannel, IdentityChallengeSender {
   }
 
   /** 只回显非敏感字段，绝不回显密码。 */
-  status(): unknown {
+  async status(): Promise<unknown> {
     const config = this.resolved?.secret;
     return {
       configured: Boolean(config),
-      secretsEnabled: this.ctx.secrets.isAvailable(),
+      // 隔离执行下 ctx 调用被代理成一次往返，返回 Promise：不 await 会序列化成 `{}`。
+      secretsEnabled: await this.ctx.secrets.isAvailable(),
       ...(config
         ? {
             host: config.host,
@@ -197,7 +198,8 @@ class SmtpService implements NotificationChannel, IdentityChallengeSender {
   }
 
   async configure(input: unknown): Promise<unknown> {
-    if (!this.ctx.secrets.isAvailable()) {
+    // `await` 是必须的：Promise 恒为真，漏掉它等于把"密钥存储不可用"当成可用。
+    if (!(await this.ctx.secrets.isAvailable())) {
       throw new SmtpPluginError(503, '加密密钥存储未配置，无法保存 SMTP 凭据', 'smtp.no_secrets');
     }
     const parsed = resolveConfig((input ?? {}) as SmtpConfigInput);
@@ -353,6 +355,38 @@ export const smtpPlugin = definePlugin({
     provides: [EXTENSION_POINTS.notificationChannel, EXTENSION_POINTS.identityChallengeSender],
     permissions: ['smtp.admin'],
     roleTemplates: [{ role: 'ADMIN', permissions: ['smtp.admin'] }],
+    // Open-platform surface: every entry mirrors one internal route below and
+    // dispatches to the *same* handler, so the alias never widens auth.
+    capabilities: [
+      {
+        id: 'smtp.admin.config.read',
+        method: 'GET',
+        route: '/smtp/admin/config',
+        path: '/api/v1/smtp/admin/config',
+        summary: 'Read the SMTP configuration',
+        scope: 'smtp.admin',
+      },
+      {
+        id: 'smtp.admin.config.write',
+        method: 'POST',
+        route: '/smtp/admin/config',
+        path: '/api/v1/smtp/admin/config',
+        summary: 'Update the SMTP configuration',
+        scope: 'smtp.admin',
+        mutating: true,
+        destructive: false,
+      },
+      {
+        id: 'smtp.admin.test',
+        method: 'POST',
+        route: '/smtp/admin/test',
+        path: '/api/v1/smtp/admin/test',
+        summary: 'Send a test email through the configured SMTP relay',
+        scope: 'smtp.admin',
+        mutating: true,
+        destructive: true,
+      },
+    ],
   },
   routes: [
     {
@@ -400,9 +434,8 @@ export const smtpPlugin = definePlugin({
       EXTENSION_POINTS.identityChallengeSender,
       instance,
     );
-    ctx.logger.info(
-      `smtp: activated (${instance.status() && (instance.status() as { configured: boolean }).configured ? 'configured' : 'not configured'})`,
-    );
+    const status = (await instance.status()) as { configured: boolean };
+    ctx.logger.info(`smtp: activated (${status.configured ? 'configured' : 'not configured'})`);
   },
   onDeactivate: (ctx) => {
     service?.dispose();
