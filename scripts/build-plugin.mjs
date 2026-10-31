@@ -10,9 +10,14 @@
  * (e.g. `./errors` without a `.js` suffix), which Node ESM cannot resolve. We
  * therefore bundle every plugin's source into a single `dist/index.js` so the
  * output is always runnable regardless of how individual sources write their
- * relative imports. Bare package imports (`@stackpanel/*`, `@prisma/*`, …) are
- * left external and resolved at runtime from the workspace root `node_modules`,
- * matching how the kernel already loads plugin packages.
+ * relative imports.
+ *
+ * 外部依赖只有两类：**宿主提供的**（`@stackpanel/*` 的契约/工具包、`zod`、
+ * `@prisma/*`）与 Node 内置模块。其余第三方包一律打进产物——远程安装的包落在
+ * `data/plugins/<id>/`，那里**没有 node_modules**，Node 只会沿目录向上找内核仓的
+ * `node_modules`；内核没声明过的包（例如 `wowid` 用的 `jose`）就找不到，表现为
+ * isolated worker 启动即退、宿主只报 `exited before ready`。这类缺陷在本地
+ * 「内核根目录恰好装了同款依赖」时完全看不出来，只有装到干净实例上才炸。
  *
  * Usage (run from a plugin package dir):
  *   node ../../scripts/build-plugin.mjs
@@ -55,6 +60,18 @@ function internalWorkspaceDeps() {
   return found;
 }
 
+/**
+ * 宿主（内核）提供的模块：必须 external，否则插件会带上自己那份实例，
+ * 扩展点注册、schema 校验、zod 身份全部对不上。
+ */
+const HOST_PROVIDED = ['@stackpanel/sdk', '@stackpanel/spec', '@stackpanel/ui', '@stackpanel/net-guard', 'zod'];
+
+function isHostProvided(specifier) {
+  if (specifier.startsWith('node:')) return true;
+  if (HOST_PROVIDED.some((name) => specifier === name || specifier.startsWith(`${name}/`))) return true;
+  return specifier.startsWith('@prisma/');
+}
+
 const internals = internalWorkspaceDeps();
 const alias = Object.fromEntries(
   [...internals].map(([name, dir]) => [name, resolve(dir, 'src', 'index.ts')]),
@@ -83,15 +100,16 @@ await build({
   target: 'node22',
   sourcemap: true,
   alias,
-  // 等价于原来的 `packages: 'external'`，但给工作区内部包开了个口子：只有它们
-  // 会被解析进产物，其余裸包（`@stackpanel/sdk`、`zod`…）照旧留给运行时。
+  // 只有宿主提供的包留作 external（必须与内核共享同一个实例），其余第三方依赖
+  // 全部内联。见文件头注释：远程安装的包运行时没有自己的 node_modules。
   plugins: [
     {
-      name: 'externalize-bare-imports',
+      name: 'externalize-host-provided-imports',
       setup(context) {
-        context.onResolve({ filter: /^[^./]/ }, (args) =>
-          internals.has(args.path) ? null : { path: args.path, external: true },
-        );
+        context.onResolve({ filter: /^[^./]/ }, (args) => {
+          if (internals.has(args.path)) return null;
+          return isHostProvided(args.path) ? { path: args.path, external: true } : null;
+        });
       },
     },
   ],
@@ -105,6 +123,17 @@ for (const name of internals.keys()) {
     console.error(`[build-plugin] ${name} 没有被内联进产物（仍是外部导入）`);
     process.exit(1);
   }
+}
+
+// 4) 产物里若还残留「宿主也不会提供」的裸导入，这个包在干净实例上必定装不起来。
+//    宁可构建失败，也别等用户点安装时才看到 `exited before ready`。
+const residue = [...bundled.matchAll(/(?:from |import\()['"]([^'".][^'"]*)['"]/g)]
+  .map((match) => match[1])
+  .filter((specifier) => !isHostProvided(specifier));
+const leftover = [...new Set(residue)].filter((specifier) => /^[a-z@]/i.test(specifier));
+if (leftover.length > 0) {
+  console.error(`[build-plugin] 产物里仍有未内联的第三方依赖：${leftover.join(', ')}`);
+  process.exit(1);
 }
 
 console.log(`[build-plugin] bundled ${srcEntry} -> ${resolve(distDir, 'index.js')}`);
