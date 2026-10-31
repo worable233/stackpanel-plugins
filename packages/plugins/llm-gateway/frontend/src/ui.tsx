@@ -43,12 +43,36 @@ export const keysSchema = z.object({
 export const usageLogSchema = z.object({
   id: z.string(),
   model: z.string(),
+  apiKeyId: z.string().default(''),
+  apiKeyName: z.string().default(''),
+  apiKeyPrefix: z.string().default(''),
+  upstreamModel: z.string().default(''),
+  protocol: z.string().default(''),
+  endpoint: z.string().default(''),
+  clientIp: z.string().nullable().default(null),
   promptTokens: z.number(),
   completionTokens: z.number(),
+  cacheReadTokens: z.number().default(0),
+  cacheWriteTokens: z.number().default(0),
+  reasoningTokens: z.number().default(0),
+  imageCount: z.number().default(0),
+  audioSeconds: z.number().default(0),
   totalTokens: z.number(),
   amount: z.number(),
+  costAmount: z.number().default(0),
+  discountPercent: z.number().default(0),
+  entitlementAmount: z.number().default(0),
+  currency: z.string().default('CNY'),
   status: z.string(),
+  estimated: z.boolean().default(false),
+  aborted: z.boolean().default(false),
+  httpStatus: z.number().nullable().default(null),
   latencyMs: z.number().nullable(),
+  stream: z.boolean().default(false),
+  firstTokenMs: z.number().nullable().default(null),
+  priceRef: z.string().nullable().default(null),
+  upstreamKeyId: z.string().default(''),
+  error: z.string().nullable().default(null),
   createdAt: z.string(),
 });
 
@@ -64,6 +88,14 @@ export const usagePointSchema = z.object({
   label: z.string(),
   amount: z.number(),
   tokens: z.number(),
+  /** 输入 token（含缓存读/写）。 */
+  inputTokens: z.number(),
+  /** 输出 token。 */
+  outputTokens: z.number(),
+  /** 输入中命中缓存读的部分。 */
+  cacheReadTokens: z.number(),
+  /** 输入中写入缓存的部分。 */
+  cacheWriteTokens: z.number(),
 });
 
 export const rangeUsageSchema = z.object({
@@ -463,16 +495,18 @@ export function Section({
 /** A single metric tile. Top-level surface, never nested inside a card. */
 export function Stat({ label, value }: { label: string; value: string }): ReactElement {
   return (
-    <div className="rounded-2xl border bg-card p-5 shadow-sm">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">{value}</div>
+    <div className="rounded-2xl bg-muted/35 p-5">
+      <div className="text-sm text-muted-foreground">{label}</div>
+      <div className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
+        {value}
+      </div>
     </div>
   );
 }
 
 export function Empty({ text, icon }: { text: string; icon?: ReactNode }): ReactElement {
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-dashed px-6 py-12 text-center">
+    <div className="flex flex-col items-center rounded-2xl bg-muted/25 px-6 py-12 text-center">
       <span className="flex size-11 items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-5">
         {icon ?? <Boxes />}
       </span>

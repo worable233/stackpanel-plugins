@@ -23,6 +23,17 @@ export default definePlugin({
       { role: 'USER', permissions: ['api-market.use'] },
       { role: 'ADMIN', permissions: ['api-market.admin'] },
     ],
+    // Open-platform surface: every entry mirrors one internal route below and
+    // dispatches to the *same* handler, so the alias never widens auth.
+    capabilities: [
+      {
+        id: 'apiMarket.health.read',
+        method: 'GET',
+        route: '/api-market/health',
+        path: '/api/v1/api-market/health',
+        summary: 'API market health probe',
+      },
+    ],
   },
   routes: [
     {

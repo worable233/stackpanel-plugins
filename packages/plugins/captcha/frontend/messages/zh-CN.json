@@ -3,6 +3,7 @@
   "page.title": "人机验证",
   "page.description": "在登录、注册、改密码、改邮箱等敏感操作前增加人机验证。密钥仅保存在平台加密存储中，前端只会拿到 Site Key。",
   "page.noSecrets": "平台加密密钥未配置，无法保存验证服务密钥。",
+  "field.connection": "服务配置",
   "field.preset": "验证服务",
   "field.siteKey": "Site Key（公开）",
   "field.secret": "Secret Key",

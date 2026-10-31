@@ -206,6 +206,28 @@ export const epayPlugin = definePlugin({
     provides: [EXTENSION_POINTS.paymentProvider],
     permissions: ['epay.admin'],
     roleTemplates: [{ role: 'ADMIN', permissions: ['epay.admin'] }],
+    // Open-platform surface: every entry mirrors one internal route below and
+    // dispatches to the *same* handler, so the alias never widens auth.
+    capabilities: [
+      {
+        id: 'epay.admin.config.read',
+        method: 'GET',
+        route: '/epay/admin/config',
+        path: '/api/v1/epay/admin/config',
+        summary: 'Read the Epay configuration',
+        scope: 'epay.admin',
+      },
+      {
+        id: 'epay.admin.config.write',
+        method: 'POST',
+        route: '/epay/admin/config',
+        path: '/api/v1/epay/admin/config',
+        summary: 'Update the Epay configuration and credentials',
+        scope: 'epay.admin',
+        mutating: true,
+        destructive: true,
+      },
+    ],
   },
   routes: [
     {

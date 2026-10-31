@@ -324,6 +324,8 @@ export interface SettleInput {
   status: 'SUCCESS' | 'ERROR' | 'CANCELLED' | 'TIMEOUT';
   httpStatus?: number | null;
   latencyMs?: number | null;
+  /** 实际响应是否为 SSE 流式转发。 */
+  stream?: boolean;
   firstTokenMs?: number | null;
   clientIp?: string | null;
   error?: string | null;
@@ -407,6 +409,7 @@ export async function settle(input: SettleInput): Promise<SettleResult> {
     priceRef: context.referenceId,
     httpStatus: input.httpStatus ?? null,
     latencyMs: input.latencyMs ?? null,
+    stream: input.stream ?? false,
     firstTokenMs: input.firstTokenMs ?? null,
     clientIp: input.clientIp ?? null,
     error: input.error ?? null,

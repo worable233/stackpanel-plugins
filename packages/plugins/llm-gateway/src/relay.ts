@@ -1080,6 +1080,7 @@ async function handleRelay(
         status: relayed.clientAborted ? 'CANCELLED' : 'SUCCESS',
         httpStatus: httpStatus,
         latencyMs: Date.now() - startedAt,
+        stream: true,
         firstTokenMs: relayed.firstTokenMs,
         clientIp: req.ip,
         outputText: relayed.outputText,
@@ -1151,6 +1152,7 @@ async function handleRelay(
         status: 'SUCCESS',
         httpStatus: httpStatus,
         latencyMs: Date.now() - startedAt,
+        stream: false,
         clientIp: req.ip,
       });
       billingDone = true;
@@ -1172,6 +1174,7 @@ async function handleRelay(
       status: 'SUCCESS',
       httpStatus: httpStatus,
       latencyMs: Date.now() - startedAt,
+      stream: false,
       clientIp: req.ip,
     });
     billingDone = true;
@@ -1691,6 +1694,8 @@ interface SettleFields {
   status: 'SUCCESS' | 'ERROR' | 'CANCELLED' | 'TIMEOUT';
   httpStatus: number;
   latencyMs: number;
+  /** 实际响应是否为 SSE 流式转发。 */
+  stream?: boolean;
   firstTokenMs?: number | null;
   clientIp?: string | undefined;
   error?: string | undefined;
@@ -1735,6 +1740,7 @@ async function settleUsage(
     status: input.status,
     httpStatus: input.httpStatus,
     latencyMs: input.latencyMs,
+    stream: input.stream ?? false,
     firstTokenMs: input.firstTokenMs ?? null,
     clientIp: input.clientIp ?? null,
     error: input.error ?? null,

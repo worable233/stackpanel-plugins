@@ -3,6 +3,7 @@
   "page.title": "Human verification",
   "page.description": "Challenge visitors before sensitive operations: sign-in, sign-up, password change and email change. The secret key stays in the platform's encrypted store; the browser only ever receives the site key.",
   "page.noSecrets": "The platform encryption key is not configured, so the provider secret cannot be saved.",
+  "field.connection": "Provider settings",
   "field.preset": "Provider",
   "field.siteKey": "Site key (public)",
   "field.secret": "Secret key",

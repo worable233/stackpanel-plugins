@@ -39,6 +39,7 @@ import {
   Input,
   Label,
   PageHeader,
+  UsageTrendChart,
 } from '@stackpanel/ui';
 import {
   Empty,
@@ -61,11 +62,195 @@ import {
   rangeLabel,
   shortTime,
   unitPrice,
+  usageLogSchema,
   usageSchema,
 } from './ui';
 import type { UsageRange } from './ui';
-import { UsageChart } from './usage-chart';
 import { messages, t } from './i18n.js';
+
+/* ------------------------------ 用量日志展示 ------------------------------ */
+
+const ENDPOINT_LABELS: Record<string, string> = {
+  'chat.completions': 'Chat Completions',
+  'responses.create': 'Responses',
+  'embeddings.create': 'Embeddings',
+  'images.generations': 'Images',
+  'audio.speech': 'Speech',
+  'audio.transcriptions': 'Transcriptions',
+};
+
+const PROTOCOL_LABELS: Record<string, string> = {
+  'openai-chat': 'OpenAI Chat',
+  'openai-responses': 'OpenAI Responses',
+  anthropic: 'Anthropic',
+  gemini: 'Gemini',
+};
+
+function endpointLabel(value: string): string {
+  return ENDPOINT_LABELS[value] ?? value ?? '—';
+}
+
+function protocolLabel(value: string): string {
+  return PROTOCOL_LABELS[value] ?? value ?? '—';
+}
+
+function formatDuration(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms)) return '—';
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms)}ms`;
+}
+
+function formatTps(tokens: number, latencyMs: number | null): string {
+  if (!latencyMs || latencyMs <= 0) return '—';
+  return `${(tokens / (latencyMs / 1000)).toFixed(1)} tok/s`;
+}
+
+function formatHitRate(cacheReadTokens: number, promptTokens: number): string {
+  if (!promptTokens) return '0.0%';
+  return `${((cacheReadTokens / promptTokens) * 100).toFixed(1)}%`;
+}
+
+function LogMetric({ label, value }: { label: string; value: string }): ReactElement {
+  return (
+    <div>
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 font-mono text-xs font-medium tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
+function UsageLogCard({
+  log,
+  locale,
+  tr,
+}: {
+  log: z.infer<typeof usageLogSchema>;
+  locale: string;
+  tr: ReturnType<typeof t>;
+}): ReactElement {
+  const ok = log.status === 'SUCCESS';
+  const keyName =
+    log.apiKeyName || log.apiKeyPrefix || (log.apiKeyId ? log.apiKeyId.slice(0, 8) : '—');
+  const cacheHit = formatHitRate(log.cacheReadTokens, log.promptTokens);
+  const firstToken =
+    log.firstTokenMs !== null
+      ? formatDuration(log.firstTokenMs)
+      : log.stream
+        ? '—'
+        : tr('overview.logNonStream');
+  const tags: string[] = [];
+  if (log.upstreamModel && log.upstreamModel !== log.model) {
+    tags.push(`${tr('overview.logUpstream')} ${log.upstreamModel}`);
+  }
+  if (log.reasoningTokens > 0) {
+    tags.push(`${tr('overview.logReasoning')} ${formatTokens(log.reasoningTokens)}`);
+  }
+  if (log.cacheWriteTokens > 0) {
+    tags.push(`${tr('overview.logCacheWrite')} ${formatTokens(log.cacheWriteTokens)}`);
+  }
+  if (log.imageCount > 0) {
+    tags.push(`${tr('overview.logImage')} ${log.imageCount}`);
+  }
+  if (log.audioSeconds > 0) {
+    tags.push(`${tr('overview.logAudio')} ${log.audioSeconds}s`);
+  }
+  if (log.discountPercent > 0) {
+    tags.push(`${tr('overview.logDiscount')} ${log.discountPercent}%`);
+  }
+  if (log.entitlementAmount > 0) {
+    tags.push(`${tr('overview.logEntitlement')} ${money(log.entitlementAmount)}`);
+  }
+  if (log.estimated) tags.push(tr('overview.logEstimated'));
+  if (log.aborted) tags.push(tr('overview.logAborted'));
+
+  return (
+    <li className="rounded-2xl bg-muted/25 p-3.5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-sm font-semibold">
+              {modelDisplayName(log.model, tr)}
+            </span>
+            <span
+              className={
+                ok
+                  ? 'inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600'
+                  : 'inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive'
+              }
+            >
+              <span
+                className={
+                  ok
+                    ? 'size-1.5 rounded-full bg-emerald-500'
+                    : 'size-1.5 rounded-full bg-destructive'
+                }
+              />
+              {ok ? tr('common.success') : tr('common.failed')}
+            </span>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {shortTime(log.createdAt, locale)}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="inline-flex max-w-full items-center gap-1 rounded-lg bg-background px-2 py-1">
+              <span className="text-muted-foreground/70">{tr('overview.logKey')}</span>
+              <span className="truncate font-medium text-foreground">{keyName}</span>
+            </span>
+            <span className="rounded-lg bg-background px-2 py-1">
+              {endpointLabel(log.endpoint)}
+            </span>
+            <span className="rounded-lg bg-background px-2 py-1">
+              {protocolLabel(log.protocol)}
+            </span>
+            <span className="rounded-lg bg-background px-2 py-1 font-mono">
+              {log.clientIp || '—'}
+            </span>
+            <span className="rounded-lg bg-background px-2 py-1">
+              {log.entitlementAmount > 0
+                ? tr('overview.logModePlan')
+                : tr('overview.logModeMetered')}
+            </span>
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="font-mono text-lg font-semibold tabular-nums">{money(log.amount)}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {tr('overview.logCost')} {money(log.costAmount)}
+          </p>
+        </div>
+      </div>
+
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-background px-3 py-2.5 sm:grid-cols-4 lg:grid-cols-8">
+        <LogMetric label={tr('overview.logInput')} value={formatTokens(log.promptTokens)} />
+        <LogMetric label={tr('overview.logOutput')} value={formatTokens(log.completionTokens)} />
+        <LogMetric label={tr('overview.logCacheHit')} value={cacheHit} />
+        <LogMetric label={tr('overview.logTotal')} value={formatTokens(log.totalTokens)} />
+        <LogMetric label={tr('overview.logLatency')} value={formatDuration(log.latencyMs)} />
+        <LogMetric label={tr('overview.logFirstToken')} value={firstToken} />
+        <LogMetric
+          label={tr('overview.logTps')}
+          value={formatTps(log.completionTokens, log.latencyMs)}
+        />
+        <LogMetric label={tr('overview.logHttp')} value={log.httpStatus?.toString() ?? '—'} />
+      </dl>
+
+      {tags.length ? (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          {tags.map((tag) => (
+            <span key={tag} className="rounded-lg bg-background px-2 py-1">
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {log.error ? (
+        <p className="mt-2 rounded-lg bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+          {log.error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
 
 /**
  * 模型服务（llm-gateway）前端包（服务端 bundle）。
@@ -113,9 +298,6 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
     range === 'today'
       ? tr('overview.chartTitleToday')
       : tr('overview.chartTitleRange', { range: rangeLabelText });
-  const chartDesc =
-    range === 'today' ? tr('overview.chartDescToday') : tr('overview.chartDescRange');
-
   return (
     <main className="space-y-8">
       <PageHeader
@@ -159,15 +341,14 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
           <Section
             icon={<Activity />}
             title={chartTitle}
-            description={chartDesc}
             action={
-              <div className="inline-flex rounded-lg border p-0.5 text-sm">
+              <div className="inline-flex rounded-xl bg-muted/60 p-1 text-sm">
                 <Link
                   href={href({ metric: 'cost' })}
                   className={
                     metric === 'cost'
-                      ? 'rounded-md bg-primary/10 px-3 py-1 font-medium text-primary'
-                      : 'rounded-md px-3 py-1 text-muted-foreground hover:bg-muted'
+                      ? 'rounded-lg bg-background px-3 py-1.5 font-medium text-foreground'
+                      : 'rounded-lg px-3 py-1.5 text-muted-foreground hover:text-foreground'
                   }
                 >
                   {tr('overview.metricCostShort')}
@@ -176,8 +357,8 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
                   href={href({ metric: 'tokens' })}
                   className={
                     metric === 'tokens'
-                      ? 'rounded-md bg-primary/10 px-3 py-1 font-medium text-primary'
-                      : 'rounded-md px-3 py-1 text-muted-foreground hover:bg-muted'
+                      ? 'rounded-lg bg-background px-3 py-1.5 font-medium text-foreground'
+                      : 'rounded-lg px-3 py-1.5 text-muted-foreground hover:text-foreground'
                   }
                 >
                   Token
@@ -185,13 +366,32 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
               </div>
             }
           >
-            <div className="rounded-xl border bg-card px-3 py-3 sm:px-5 sm:py-4">
-              <UsageChart
+            <div className="rounded-2xl bg-muted/25 p-4 sm:p-5">
+              <UsageTrendChart
                 data={series.map((point) => ({
                   label: point.label,
                   value: metric === 'tokens' ? point.tokens : point.amount,
+                  details: [
+                    {
+                      label: tr('overview.tooltipInput'),
+                      value: formatTokens(point.inputTokens),
+                    },
+                    {
+                      label: tr('overview.tooltipOutput'),
+                      value: formatTokens(point.outputTokens),
+                    },
+                    {
+                      label: tr('overview.tooltipCacheHit'),
+                      value: `${
+                        point.inputTokens > 0
+                          ? ((point.cacheReadTokens / point.inputTokens) * 100).toFixed(1)
+                          : '0.0'
+                      }%`,
+                    },
+                  ],
                 }))}
-                formatValue={metric === 'tokens' ? formatTokens : money}
+                format={metric === 'tokens' ? 'compact' : 'currency'}
+                currencySymbol="¥"
                 ariaLabel={tr('overview.chartAria')}
               />
             </div>
@@ -200,15 +400,14 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
           <Section
             icon={<PieChart />}
             title={tr('overview.byModelTitle')}
-            description={tr('overview.byModelDescription', { range: rangeLabelText })}
             action={
-              <span className="rounded-full border bg-muted/40 px-2.5 py-0.5 text-xs text-muted-foreground tabular-nums">
+              <span className="rounded-full bg-muted/60 px-2.5 py-0.5 text-xs text-muted-foreground tabular-nums">
                 {tr('overview.modelCount', { count: modelCount })}
               </span>
             }
           >
             {byModel.length ? (
-              <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
+              <ul className="divide-y overflow-hidden rounded-2xl bg-muted/25">
                 {byModel.map((row) => (
                   <li
                     key={row.model}
@@ -237,49 +436,32 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
             )}
           </Section>
 
-          <Section
-            icon={<History />}
-            title={tr('overview.recentTitle')}
-            description={tr('overview.recentDescription')}
-          >
+          <Section icon={<History />} title={tr('overview.recentTitle')}>
             {usage.logs.length ? (
-              <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
-                {usage.logs.map((log) => (
-                  <li
-                    key={log.id}
-                    className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{modelDisplayName(log.model, tr)}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {shortTime(log.createdAt, props.locale ?? 'zh-CN')}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-4">
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        {formatTokens(log.totalTokens)} token
-                      </span>
-                      {log.latencyMs !== null ? (
-                        <span className="hidden text-xs text-muted-foreground tabular-nums sm:inline">
-                          {log.latencyMs}ms
-                        </span>
-                      ) : null}
-                      <span
-                        className={
-                          log.status === 'SUCCESS'
-                            ? 'text-xs text-emerald-600'
-                            : 'text-xs text-destructive'
-                        }
-                      >
-                        {log.status === 'SUCCESS' ? tr('common.success') : tr('common.failed')}
-                      </span>
-                      <span className="font-mono font-semibold tabular-nums">
-                        {money(log.amount)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <div className="flex flex-col gap-2">
+                <ul className="flex flex-col gap-2">
+                  {usage.logs.slice(0, 8).map((log) => (
+                    <UsageLogCard key={log.id} log={log} locale={props.locale ?? 'zh-CN'} tr={tr} />
+                  ))}
+                </ul>
+                {usage.logs.length > 8 ? (
+                  <details className="group">
+                    <summary className="cursor-pointer list-none rounded-xl bg-muted/25 px-4 py-3 text-center text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+                      {tr('overview.logMore', { count: usage.logs.length - 8 })}
+                    </summary>
+                    <ul className="mt-2 flex flex-col gap-2">
+                      {usage.logs.slice(8).map((log) => (
+                        <UsageLogCard
+                          key={log.id}
+                          log={log}
+                          locale={props.locale ?? 'zh-CN'}
+                          tr={tr}
+                        />
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
+              </div>
             ) : (
               <Empty text={tr('overview.recentEmpty')} icon={<History />} />
             )}
@@ -305,12 +487,12 @@ function RangePicker({
   const current = RANGE_OPTIONS.find((option) => option.value === range) ?? RANGE_OPTIONS[0];
   return (
     <details className="group relative">
-      <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden">
+      <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-xl bg-muted/60 px-3 text-sm font-medium transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden">
         <CalendarDays className="size-4 text-muted-foreground" />
         {tr(current.labelKey)}
         <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
       </summary>
-      <div className="absolute right-0 z-20 mt-2 w-40 rounded-xl border bg-popover p-1 shadow-md">
+      <div className="absolute right-0 z-20 mt-2 w-40 rounded-xl bg-popover p-1 shadow-lg">
         {RANGE_OPTIONS.map((option) => {
           const activeOption = option.value === range;
           return (
@@ -861,9 +1043,9 @@ export function GatewayAccountWidget(props: AccountWidgetProps): ReactElement {
   return (
     <Link
       href="/account/gateway"
-      className="group block rounded-2xl border bg-card p-5 text-card-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+      className="group block h-full rounded-[14px] bg-muted/55 p-5 text-card-foreground transition-colors hover:bg-muted"
     >
-      <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+      <span className="flex size-10 items-center justify-center rounded-xl bg-background text-foreground">
         <Brain className="size-5" />
       </span>
       <p className="mt-4 text-sm font-semibold">{tr('widget.title')}</p>

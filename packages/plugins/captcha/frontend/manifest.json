@@ -35,18 +35,14 @@
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ],
-  "locales": [
-    "zh-CN",
-    "zh-TW",
-    "zh-HK",
-    "en-US"
-  ],
+  "locales": ["zh-CN", "zh-TW", "zh-HK", "en-US"],
   "messages": {
     "zh-CN": {
       "admin.systemSettings": "人机验证",
       "page.title": "人机验证",
       "page.description": "在登录、注册、改密码、改邮箱等敏感操作前增加人机验证。密钥仅保存在平台加密存储中，前端只会拿到 Site Key。",
       "page.noSecrets": "平台加密密钥未配置，无法保存验证服务密钥。",
+      "field.connection": "服务配置",
       "field.preset": "验证服务",
       "field.siteKey": "Site Key（公开）",
       "field.secret": "Secret Key",
@@ -86,6 +82,7 @@
       "page.title": "人機驗證",
       "page.description": "在登入、註冊、改密碼、改郵箱等敏感操作前增加人機驗證。金鑰僅儲存在平臺加密儲存中，前端只會拿到 Site Key。",
       "page.noSecrets": "平臺加密金鑰未配置，無法儲存驗證服務金鑰。",
+      "field.connection": "服務設定",
       "field.preset": "驗證服務",
       "field.siteKey": "Site Key（公開）",
       "field.secret": "Secret Key",
@@ -125,6 +122,7 @@
       "page.title": "人機驗證",
       "page.description": "在登錄、註冊、改密碼、改郵箱等敏感操作前增加人機驗證。金鑰僅儲存在平臺加密儲存中，前端只會拿到 Site Key。",
       "page.noSecrets": "平臺加密金鑰未配置，無法儲存驗證服務金鑰。",
+      "field.connection": "服務設定",
       "field.preset": "驗證服務",
       "field.siteKey": "Site Key（公開）",
       "field.secret": "Secret Key",
@@ -164,6 +162,7 @@
       "page.title": "Human verification",
       "page.description": "Challenge visitors before sensitive operations: sign-in, sign-up, password change and email change. The secret key stays in the platform's encrypted store; the browser only ever receives the site key.",
       "page.noSecrets": "The platform encryption key is not configured, so the provider secret cannot be saved.",
+      "field.connection": "Provider settings",
       "field.preset": "Provider",
       "field.siteKey": "Site key (public)",
       "field.secret": "Secret key",

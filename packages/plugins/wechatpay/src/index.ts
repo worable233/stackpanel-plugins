@@ -430,6 +430,38 @@ export const wechatpayPlugin = definePlugin({
     provides: [EXTENSION_POINTS.paymentProvider],
     permissions: ['wechatpay.admin'],
     roleTemplates: [{ role: 'ADMIN', permissions: ['wechatpay.admin'] }],
+    // Open-platform surface: every entry mirrors one internal route below and
+    // dispatches to the *same* handler, so the alias never widens auth.
+    capabilities: [
+      {
+        id: 'wechatpay.admin.config.read',
+        method: 'GET',
+        route: '/wechatpay/admin/config',
+        path: '/api/v1/wechatpay/admin/config',
+        summary: 'Read the WeChat Pay configuration',
+        scope: 'wechatpay.admin',
+      },
+      {
+        id: 'wechatpay.admin.config.write',
+        method: 'POST',
+        route: '/wechatpay/admin/config',
+        path: '/api/v1/wechatpay/admin/config',
+        summary: 'Update the WeChat Pay configuration and credentials',
+        scope: 'wechatpay.admin',
+        mutating: true,
+        destructive: true,
+      },
+      {
+        id: 'wechatpay.admin.certificates.refresh',
+        method: 'POST',
+        route: '/wechatpay/admin/refresh-certificates',
+        path: '/api/v1/wechatpay/admin/refresh-certificates',
+        summary: 'Re-download the WeChat Pay platform certificates',
+        scope: 'wechatpay.admin',
+        mutating: true,
+        destructive: false,
+      },
+    ],
   },
   routes: [
     {

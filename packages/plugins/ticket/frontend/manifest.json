@@ -1,5 +1,6 @@
 {
   "version": "0.1.0",
+  "revision": "b9bb504cc2fb",
   "entry": "frontend/dist/index.js",
   "pages": [],
   "layouts": [],
@@ -63,6 +64,7 @@
       "method": "POST",
       "path": "/tickets",
       "permission": "ticket.create",
+      "silent": true,
       "redirect": {
         "responsePath": "redirectUrl"
       },
@@ -94,14 +96,16 @@
           "type": "string",
           "maxLength": 191
         }
-      ],
-      "silent": true
+      ]
     },
     {
       "id": "ticket.reply",
       "method": "POST",
       "path": "/tickets/:id/messages",
       "permission": "ticket.create",
+      "successFeedback": {
+        "messageKey": "feedback.replied"
+      },
       "input": [
         {
           "name": "id",
@@ -119,16 +123,16 @@
           "name": "internal",
           "type": "boolean"
         }
-      ],
-      "successFeedback": {
-        "messageKey": "feedback.replied"
-      }
+      ]
     },
     {
       "id": "ticket.close",
       "method": "POST",
       "path": "/tickets/:id/close",
       "permission": "ticket.create",
+      "successFeedback": {
+        "messageKey": "feedback.closed"
+      },
       "input": [
         {
           "name": "id",
@@ -141,16 +145,16 @@
           "type": "string",
           "maxLength": 10000
         }
-      ],
-      "successFeedback": {
-        "messageKey": "feedback.closed"
-      }
+      ]
     },
     {
       "id": "ticket.remind",
       "method": "POST",
       "path": "/tickets/:id/remind",
       "permission": "ticket.create",
+      "successFeedback": {
+        "messageKey": "feedback.reminded"
+      },
       "input": [
         {
           "name": "id",
@@ -158,16 +162,16 @@
           "required": true,
           "maxLength": 191
         }
-      ],
-      "successFeedback": {
-        "messageKey": "feedback.reminded"
-      }
+      ]
     },
     {
       "id": "ticket.update",
       "method": "PATCH",
       "path": "/ticket/admin/tickets/:id",
       "permission": "ticket.admin",
+      "successFeedback": {
+        "messageKey": "feedback.updated"
+      },
       "input": [
         {
           "name": "id",
@@ -200,10 +204,7 @@
           "type": "string",
           "maxLength": 191
         }
-      ],
-      "successFeedback": {
-        "messageKey": "feedback.updated"
-      }
+      ]
     }
   ],
   "accountRoutes": [
@@ -294,12 +295,7 @@
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ],
-  "locales": [
-    "zh-CN",
-    "zh-TW",
-    "zh-HK",
-    "en-US"
-  ],
+  "locales": ["zh-CN", "zh-TW", "zh-HK", "en-US"],
   "messages": {
     "zh-CN": {
       "nav.group": "支持",

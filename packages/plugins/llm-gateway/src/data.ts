@@ -269,6 +269,8 @@ export const gatewayUsageLogModel = defineModel({
     priceRef: z.string().nullable().optional(),
     httpStatus: z.number().int().nullable().optional(),
     latencyMs: z.number().int().nullable().optional(),
+    /** 本次响应是否按 SSE 流式转发（决定首 token 指标是否有意义）。 */
+    stream: z.boolean().default(false),
     /** 首 token 延迟（毫秒）；非流式为 null。 */
     firstTokenMs: z.number().int().nullable().optional(),
     clientIp: z.string().nullable().optional(),
@@ -779,6 +781,8 @@ export interface GatewayUsageLogData {
   priceRef?: string | null;
   httpStatus?: number | null;
   latencyMs?: number | null;
+  /** 实际响应是否为 SSE 流式转发。 */
+  stream?: boolean;
   firstTokenMs?: number | null;
   clientIp?: string | null;
   error?: string | null;

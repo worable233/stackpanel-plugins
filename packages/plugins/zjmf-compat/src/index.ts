@@ -73,6 +73,48 @@ export const zjmfCompatPlugin = definePlugin({
     consumes: [{ pluginId: 'store', extensionPoint: 'commerce.operations', optional: false }],
     permissions: ['zjmf-compat.admin'],
     roleTemplates: [{ role: 'ADMIN', permissions: ['zjmf-compat.admin'] }],
+    // Open-platform surface: every entry mirrors one internal route below and
+    // dispatches to the *same* handler, so the alias never widens auth.
+    capabilities: [
+      {
+        id: 'zjmfCompat.admin.connections.list',
+        method: 'GET',
+        route: '/zjmf-compat/admin/connections',
+        path: '/api/v1/zjmf-compat/admin/connections',
+        summary: 'List legacy connection bindings',
+        scope: 'zjmf-compat.admin',
+      },
+      {
+        id: 'zjmfCompat.admin.connections.create',
+        method: 'POST',
+        route: '/zjmf-compat/admin/connections',
+        path: '/api/v1/zjmf-compat/admin/connections',
+        summary: 'Create a legacy connection binding',
+        scope: 'zjmf-compat.admin',
+        mutating: true,
+        destructive: false,
+      },
+      {
+        id: 'zjmfCompat.admin.connections.update',
+        method: 'PATCH',
+        route: '/zjmf-compat/admin/connections/:id',
+        path: '/api/v1/zjmf-compat/admin/connections/:id',
+        summary: 'Update a legacy connection binding; params: {id}',
+        scope: 'zjmf-compat.admin',
+        mutating: true,
+        destructive: false,
+      },
+      {
+        id: 'zjmfCompat.admin.connections.delete',
+        method: 'DELETE',
+        route: '/zjmf-compat/admin/connections/:id',
+        path: '/api/v1/zjmf-compat/admin/connections/:id',
+        summary: 'Delete a legacy connection binding; params: {id}',
+        scope: 'zjmf-compat.admin',
+        mutating: true,
+        destructive: true,
+      },
+    ],
   },
 
   customModels: [zjmfConnectionModel],

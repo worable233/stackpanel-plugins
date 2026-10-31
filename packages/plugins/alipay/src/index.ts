@@ -243,6 +243,28 @@ export const alipayPlugin = definePlugin({
     provides: [EXTENSION_POINTS.paymentProvider],
     permissions: ['alipay.admin'],
     roleTemplates: [{ role: 'ADMIN', permissions: ['alipay.admin'] }],
+    // Open-platform surface: every entry mirrors one internal route below and
+    // dispatches to the *same* handler, so the alias never widens auth.
+    capabilities: [
+      {
+        id: 'alipay.admin.config.read',
+        method: 'GET',
+        route: '/alipay/admin/config',
+        path: '/api/v1/alipay/admin/config',
+        summary: 'Read the Alipay configuration',
+        scope: 'alipay.admin',
+      },
+      {
+        id: 'alipay.admin.config.write',
+        method: 'POST',
+        route: '/alipay/admin/config',
+        path: '/api/v1/alipay/admin/config',
+        summary: 'Update the Alipay configuration and credentials',
+        scope: 'alipay.admin',
+        mutating: true,
+        destructive: true,
+      },
+    ],
   },
   routes: [
     {

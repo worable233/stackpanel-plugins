@@ -2,7 +2,26 @@
 
 import { useState, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
-import { PageHeader } from '@stackpanel/ui';
+import {
+  AlertTriangle,
+  Gauge,
+  Play,
+  ShieldCheck,
+  ShieldOff,
+  SlidersHorizontal,
+  TestTube2,
+} from 'lucide-react';
+import {
+  Button,
+  Checkbox,
+  InlineError,
+  InlineNotice,
+  Input,
+  Label,
+  SectionTitle,
+  Select,
+  StatusBadge,
+} from '@stackpanel/ui';
 import type { AdminPageComponentProps } from '@stackpanel/sdk';
 import { messages, t } from './i18n.js';
 
@@ -60,15 +79,17 @@ function AltchaSettings(props: AdminPageComponentProps): ReactElement {
   const [language, setLanguage] = useState(status?.language ?? '');
   const [theme, setTheme] = useState(status?.theme ?? 'auto');
   const [singleUse, setSingleUse] = useState(status?.singleUse ?? true);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState<'save' | 'test' | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [testFailed, setTestFailed] = useState(false);
 
   async function submit(event: React.FormEvent): Promise<void> {
     event.preventDefault();
-    setBusy(true);
-    setMessage(null);
-    setFailed(false);
+    setBusy('save');
+    setSaveMessage(null);
+    setSaveFailed(false);
     try {
       const res = await fetch('/api/plugins/altcha/admin/config', {
         method: 'POST',
@@ -83,67 +104,104 @@ function AltchaSettings(props: AdminPageComponentProps): ReactElement {
         }),
       });
       if (!res.ok) throw new Error(tr('error.saveFailed'));
-      setMessage(tr('notice.saved'));
+      setSaveMessage(tr('notice.saved'));
       // `router.refresh()` re-fetches the RSC data (including `status`) without
       // remounting the page, so the notice stays visible.
       router.refresh();
     } catch (error) {
-      setFailed(true);
-      setMessage(failure(error, tr('error.saveFailed')));
+      setSaveFailed(true);
+      setSaveMessage(failure(error, tr('error.saveFailed')));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function selfTest(): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    setFailed(false);
+    setBusy('test');
+    setTestMessage(null);
+    setTestFailed(false);
     try {
       const res = await fetch('/api/plugins/altcha/admin/test', { method: 'POST' });
       const body = (await res.json().catch(() => null)) as { ok?: boolean } | null;
       if (!res.ok) throw new Error(tr('error.testFailed'));
-      setFailed(!body?.ok);
-      setMessage(body?.ok ? tr('test.passed') : tr('test.rejected'));
+      setTestFailed(!body?.ok);
+      setTestMessage(body?.ok ? tr('test.passed') : tr('test.rejected'));
     } catch (error) {
-      setFailed(true);
-      setMessage(failure(error, tr('error.testFailed')));
+      setTestFailed(true);
+      setTestMessage(failure(error, tr('error.testFailed')));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   return (
-    <main className="w-full space-y-6">
-      <PageHeader title={tr('page.title')} />
-      <p className="text-sm text-muted-foreground">{tr('page.description')}</p>
+    <section className="flex w-full flex-col gap-6">
+      <div className="flex flex-col gap-1 pb-2">
+        <SectionTitle icon={<ShieldCheck />}>{tr('page.title')}</SectionTitle>
+        <p className="text-sm leading-6 text-muted-foreground">{tr('page.description')}</p>
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-2xl bg-muted/35 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            className={
+              status?.configured
+                ? 'flex size-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success'
+                : 'flex size-10 shrink-0 items-center justify-center rounded-xl bg-background text-muted-foreground'
+            }
+          >
+            {status?.configured ? (
+              <ShieldCheck className="size-4" aria-hidden="true" />
+            ) : (
+              <ShieldOff className="size-4" aria-hidden="true" />
+            )}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone={status?.configured ? 'ok' : 'neutral'}>
+                {status?.configured ? tr('page.statusOn') : tr('page.statusOff')}
+              </StatusBadge>
+            </div>
+            {status?.keyFingerprint ? (
+              <p className="mt-2 text-xs leading-5 break-all text-muted-foreground">
+                {tr('page.keyFingerprint').replace('{fingerprint}', status.keyFingerprint)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
 
       {status?.secretsEnabled === false ? (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {tr('page.noSecrets')}
-        </p>
+        <div className="flex gap-3 rounded-2xl bg-destructive/8 p-4">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+          <InlineError>{tr('page.noSecrets')}</InlineError>
+        </div>
       ) : null}
 
-      <p className="text-xs text-muted-foreground">
-        {status?.configured ? tr('page.statusOn') : tr('page.statusOff')}
-        {status?.keyFingerprint
-          ? ` · ${tr('page.keyFingerprint').replace('{fingerprint}', status.keyFingerprint)}`
-          : ''}
-      </p>
+      <form onSubmit={submit} className="flex flex-col gap-5">
+        <section className="flex flex-col gap-4 rounded-2xl bg-muted/25 p-4 sm:p-5">
+          <div className="flex flex-col gap-1">
+            <SectionTitle as="h3" icon={<ShieldCheck />}>
+              {tr('policy.title')}
+            </SectionTitle>
+            <p className="text-xs leading-5 text-muted-foreground">{tr('policy.hint')}</p>
+          </div>
 
-      <form onSubmit={submit} className="space-y-6">
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold">{tr('policy.title')}</h2>
-          <p className="text-xs text-muted-foreground">{tr('policy.hint')}</p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             {ACTIONS.map((action) => (
-              <label key={action} className="flex items-center justify-between gap-3 text-sm">
-                <span>{tr(`policy.action.${action}`)}</span>
-                <select
-                  className="h-9 rounded-md border bg-background px-2"
+              <div
+                key={action}
+                className={`flex items-center justify-between gap-3 rounded-xl bg-background px-3.5 py-2.5 ${
+                  action === ACTIONS[ACTIONS.length - 1] ? 'sm:col-span-2' : ''
+                }`}
+              >
+                <span className="min-w-0 text-sm">{tr(`policy.action.${action}`)}</span>
+                <Select
+                  aria-label={tr(`policy.action.${action}`)}
+                  className="h-8 w-28 shrink-0"
                   value={actions[action] ?? 'required'}
-                  onChange={(e) =>
-                    setActions((prev) => ({ ...prev, [action]: e.target.value }))
+                  onChange={(event) =>
+                    setActions((prev) => ({ ...prev, [action]: event.target.value }))
                   }
                 >
                   {MODES.map((mode) => (
@@ -151,108 +209,142 @@ function AltchaSettings(props: AdminPageComponentProps): ReactElement {
                       {tr(`policy.mode.${mode}`)}
                     </option>
                   ))}
-                </select>
-              </label>
+                </Select>
+              </div>
             ))}
           </div>
         </section>
 
-        <section className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium">{tr('field.maxNumber')}</span>
-            <input
-              type="number"
-              min={1_000}
-              max={5_000_000}
-              step={1_000}
-              className="h-9 rounded-md border bg-background px-3"
-              value={maxNumber}
-              onChange={(e) => setMaxNumber(e.target.value)}
-            />
-            <span className="text-xs text-muted-foreground">{tr('field.maxNumberHint')}</span>
-          </label>
+        <section className="flex flex-col gap-4 rounded-2xl bg-muted/25 p-4 sm:p-5">
+          <div className="flex flex-col gap-1">
+            <SectionTitle as="h3" icon={<SlidersHorizontal />}>
+              {tr('field.runtime')}
+            </SectionTitle>
+          </div>
 
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium">{tr('field.expiresMinutes')}</span>
-            <input
-              type="number"
-              min={0}
-              max={120}
-              step={1}
-              className="h-9 rounded-md border bg-background px-3"
-              value={expiresMinutes}
-              onChange={(e) => setExpiresMinutes(e.target.value)}
-            />
-            <span className="text-xs text-muted-foreground">{tr('field.expiresMinutesHint')}</span>
-          </label>
-
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium">{tr('field.language')}</span>
-            <input
-              type="text"
-              placeholder="zh-cn"
-              className="h-9 rounded-md border bg-background px-3"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-            />
-            <span className="text-xs text-muted-foreground">{tr('field.languageHint')}</span>
-          </label>
-
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium">{tr('field.theme')}</span>
-            <select
-              className="h-9 rounded-md border bg-background px-3"
-              value={theme}
-              onChange={(e) => setTheme(e.target.value as 'auto' | 'light' | 'dark')}
-            >
-              <option value="auto">{tr('field.themeAuto')}</option>
-              <option value="light">{tr('field.themeLight')}</option>
-              <option value="dark">{tr('field.themeDark')}</option>
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1.5 text-sm sm:col-span-2">
-            <span className="flex items-center gap-2 font-medium">
-              <input
-                type="checkbox"
-                checked={singleUse}
-                onChange={(e) => setSingleUse(e.target.checked)}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="altcha-max-number">{tr('field.maxNumber')}</Label>
+              <Input
+                id="altcha-max-number"
+                type="number"
+                min={1_000}
+                max={5_000_000}
+                step={1_000}
+                className="h-10 bg-background"
+                value={maxNumber}
+                onChange={(event) => setMaxNumber(event.target.value)}
               />
-              {tr('field.singleUse')}
-            </span>
-            <span className="text-xs text-muted-foreground">{tr('field.singleUseHint')}</span>
-          </label>
+              <p className="text-xs leading-5 text-muted-foreground">{tr('field.maxNumberHint')}</p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="altcha-expires">{tr('field.expiresMinutes')}</Label>
+              <Input
+                id="altcha-expires"
+                type="number"
+                min={0}
+                max={120}
+                step={1}
+                className="h-10 bg-background"
+                value={expiresMinutes}
+                onChange={(event) => setExpiresMinutes(event.target.value)}
+              />
+              <p className="text-xs leading-5 text-muted-foreground">
+                {tr('field.expiresMinutesHint')}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="altcha-language">{tr('field.language')}</Label>
+              <Input
+                id="altcha-language"
+                type="text"
+                placeholder="zh-cn"
+                className="h-10 bg-background"
+                value={language}
+                onChange={(event) => setLanguage(event.target.value)}
+              />
+              <p className="text-xs leading-5 text-muted-foreground">{tr('field.languageHint')}</p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="altcha-theme">{tr('field.theme')}</Label>
+              <Select
+                id="altcha-theme"
+                className="h-10 bg-background"
+                value={theme}
+                onChange={(event) => setTheme(event.target.value as 'auto' | 'light' | 'dark')}
+              >
+                <option value="auto">{tr('field.themeAuto')}</option>
+                <option value="light">{tr('field.themeLight')}</option>
+                <option value="dark">{tr('field.themeDark')}</option>
+              </Select>
+            </div>
+
+            <div className="flex items-start gap-3 rounded-xl bg-background p-3.5 sm:col-span-2">
+              <Checkbox
+                id="altcha-single-use"
+                checked={singleUse}
+                onCheckedChange={(checked) => setSingleUse(checked === true)}
+                className="mt-0.5"
+              />
+              <div className="flex min-w-0 flex-col gap-1">
+                <Label htmlFor="altcha-single-use">{tr('field.singleUse')}</Label>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {tr('field.singleUseHint')}
+                </p>
+              </div>
+            </div>
+          </div>
         </section>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="submit"
-            className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
-            disabled={busy}
-          >
-            {busy ? tr('action.saving') : tr('action.save')}
-          </button>
-          {message ? (
-            <span className={`text-sm ${failed ? 'text-destructive' : 'text-muted-foreground'}`}>
-              {message}
-            </span>
+          <Button type="submit" className="h-10 px-5" disabled={busy !== null}>
+            {busy === 'save' ? tr('action.saving') : tr('action.save')}
+          </Button>
+          {saveMessage ? (
+            saveFailed ? (
+              <InlineError>{saveMessage}</InlineError>
+            ) : (
+              <InlineNotice className="text-success">{saveMessage}</InlineNotice>
+            )
           ) : null}
         </div>
       </form>
 
-      <section className="space-y-3 border-t pt-4">
-        <h2 className="text-sm font-semibold">{tr('test.title')}</h2>
-        <p className="text-xs text-muted-foreground">{tr('test.hint')}</p>
-        <button
-          type="button"
-          className="h-9 rounded-md border px-4 text-sm disabled:opacity-60"
-          disabled={busy}
-          onClick={() => void selfTest()}
-        >
-          {tr('test.submit')}
-        </button>
+      <section className="flex flex-col gap-4 rounded-2xl bg-muted/25 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-1">
+            <SectionTitle as="h3" icon={<TestTube2 />}>
+              {tr('test.title')}
+            </SectionTitle>
+            <p className="text-xs leading-5 text-muted-foreground">{tr('test.hint')}</p>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-10 shrink-0 px-4"
+            disabled={busy !== null}
+            onClick={() => void selfTest()}
+          >
+            {busy === 'test' ? (
+              <Gauge className="size-4 animate-pulse" aria-hidden="true" />
+            ) : (
+              <Play className="size-4" aria-hidden="true" />
+            )}
+            {tr('test.submit')}
+          </Button>
+        </div>
+        {testMessage ? (
+          testFailed ? (
+            <InlineError>{testMessage}</InlineError>
+          ) : (
+            <InlineNotice className="text-success">{testMessage}</InlineNotice>
+          )
+        ) : null}
       </section>
-    </main>
+    </section>
   );
 }
 
