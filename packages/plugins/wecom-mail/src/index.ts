@@ -147,11 +147,14 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
    *
    * `configured: null` 表示那个渠道没有暴露探测能力（我们不下结论）。
    */
-  otherChannels(): Array<{ id: string; configured: boolean | null }> {
+  async otherChannels(): Promise<Array<{ id: string; configured: boolean | null }>> {
     const read = this.ctx.getExtensionsWithOwner?.bind(this.ctx);
     if (typeof read !== 'function') return [];
     try {
-      return read<NotificationChannel>(EXTENSION_POINTS.notificationChannel)
+      // 内核把每个 ctx 调用代理过一次往返，**返回的是 Promise**：同步读会拿到
+      // 一个 `{}`（`await` 对非 Promise 值无害，所以这里对两种执行形态都成立）。
+      const channels = await read<NotificationChannel>(EXTENSION_POINTS.notificationChannel);
+      return channels
         .filter(({ pluginId }) => pluginId !== this.id)
         .map(({ pluginId, implementation }) => {
           const probe = (implementation as { isConfigured?: () => boolean }).isConfigured;
@@ -168,12 +171,13 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
   }
 
   /** 只回显非敏感字段：Secret 永不出现在响应里。 */
-  status(): unknown {
+  async status(): Promise<unknown> {
     const config = this.resolved?.config;
     const token = this.resolved?.client.tokenState() ?? null;
     return {
       configured: Boolean(config),
-      secretsEnabled: this.ctx.secrets.isAvailable(),
+      // 同上：`isAvailable()` 在隔离执行下返回 Promise，不 await 会序列化成 `{}`。
+      secretsEnabled: await this.ctx.secrets.isAvailable(),
       ...(config
         ? {
             corpId: config.corpId,
@@ -187,7 +191,7 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
             tokenExpiresInSeconds: token?.expiresInSeconds ?? 0,
           }
         : {}),
-      otherChannels: this.otherChannels(),
+      otherChannels: await this.otherChannels(),
     };
   }
 
@@ -456,6 +460,12 @@ export const wecomMailPlugin = definePlugin({
     description:
       '通过企业微信「应用发送邮件」接口投递站内通知与注册验证码，无需自建 SMTP 与发信域名。',
     provides: [EXTENSION_POINTS.notificationChannel, EXTENSION_POINTS.identityChallengeSender],
+    // 内核按 (扩展点, 拥有者插件 id) 逐条授权，没有通配符：要读同点上的其它渠道
+    // 就必须点名。这里点的是当前唯一的同类内置渠道 `smtp`——它同时配置好时同一封
+    // 通知会投两遍，设置页要能把这件事说出来。将来新增发信渠道需在此加一行。
+    consumes: [
+      { pluginId: 'smtp', extensionPoint: EXTENSION_POINTS.notificationChannel, optional: true },
+    ],
     permissions: ['wecom-mail.admin'],
     roleTemplates: [{ role: 'ADMIN', permissions: ['wecom-mail.admin'] }],
     // 开放平台面：每条镜像一个内部路由，分发到同一个 handler，不会放宽鉴权。
@@ -511,7 +521,9 @@ export const wecomMailPlugin = definePlugin({
       // 顺带回传当前管理员的邮箱：一键接入默认把测试信发给他自己，
       // 这样"接通"和"收到信"是同一次点击里完成的。
       handler: handle(async (req) => ({
-        ...((service?.status() as Record<string, unknown>) ?? { configured: false }),
+        ...(service
+          ? ((await service.status()) as Record<string, unknown>)
+          : { configured: false }),
         adminEmail: req.user?.email ?? null,
       })),
     },

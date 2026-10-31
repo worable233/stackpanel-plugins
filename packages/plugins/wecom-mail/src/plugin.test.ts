@@ -71,7 +71,7 @@ function activate(): Captured {
       return () => undefined;
     },
     effect: () => () => undefined,
-    getExtensionsWithOwner: (point: string) =>
+    getExtensionsWithOwner: async (point: string) =>
       point === 'notification.channel'
         ? [
             ...captured.otherChannels,
