@@ -11,6 +11,7 @@ import type {
 import { z } from 'zod';
 import { WecomError, WecomMailClient, type WecomMailConfig } from './wecom-client.js';
 import { renderCodeEmail, renderNoticeEmail } from './template.js';
+import { originFromHeaders, parseCredentials } from './credential-parser.js';
 
 /**
  * 企业微信邮箱发件渠道（企业微信「应用发送邮件」API）。
@@ -137,6 +138,35 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
     this.resolved = null;
   }
 
+  /**
+   * 同点上的其它通知渠道（不含自己）。
+   *
+   * 内核把通知 fan-out 给**每个** `wants()` 通过的渠道，所以 `smtp` 与
+   * `wecom-mail` 同时配置好时，用户会收到两封同一内容的邮件。这一个字段就是
+   * 让设置页能把这件事说出来，而不是等用户投诉"重复发送"。
+   *
+   * `configured: null` 表示那个渠道没有暴露探测能力（我们不下结论）。
+   */
+  otherChannels(): Array<{ id: string; configured: boolean | null }> {
+    const read = this.ctx.getExtensionsWithOwner?.bind(this.ctx);
+    if (typeof read !== 'function') return [];
+    try {
+      return read<NotificationChannel>(EXTENSION_POINTS.notificationChannel)
+        .filter(({ pluginId }) => pluginId !== this.id)
+        .map(({ pluginId, implementation }) => {
+          const probe = (implementation as { isConfigured?: () => boolean }).isConfigured;
+          return {
+            id: pluginId,
+            configured:
+              typeof probe === 'function' ? Boolean(probe.call(implementation)) : (null as null),
+          };
+        });
+    } catch (error) {
+      this.ctx.logger.warn(`wecom-mail: could not enumerate channels: ${String(error)}`);
+      return [];
+    }
+  }
+
   /** 只回显非敏感字段：Secret 永不出现在响应里。 */
   status(): unknown {
     const config = this.resolved?.config;
@@ -157,6 +187,7 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
             tokenExpiresInSeconds: token?.expiresInSeconds ?? 0,
           }
         : {}),
+      otherChannels: this.otherChannels(),
     };
   }
 
@@ -166,19 +197,82 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
   }
 
   async configure(input: unknown): Promise<unknown> {
-    if (!this.ctx.secrets.isAvailable()) {
-      throw new WecomMailPluginError(
-        503,
-        '加密密钥存储未配置，无法保存企业微信凭据',
-        'wecom-mail.no_secrets',
-      );
-    }
     const config = resolveConfig((input ?? {}) as ConfigInput, this.resolved?.config ?? null);
-    await this.ctx.secrets.set(CONFIG_KEY, JSON.stringify(config));
-    // 凭据变了，缓存的 token 立即失效：不换 token 会拿着旧企业的凭据发信。
-    this.resolved?.client.invalidateToken();
-    this.resolved = { config, client: this.clientFor(config) };
+    await this.persist(config);
     return this.status();
+  }
+
+  /**
+   * **一次粘贴就接通**：解析凭据 → 真实换取 token（这一步同时验证了 corpid、
+   * Secret、可信 IP 和邮箱权限里的前三项）→ 保存 → 给当前管理员发一封测试信。
+   *
+   * 做不到的只有一件：Secret 必须由管理员在后台点「查看 Secret」并扫码拿一次——
+   * 企业微信没有"读取应用 Secret"的接口，任何声称零输入的方案要么是服务商代开发
+   * 应用（`suite_id` + 永久授权码），要么就是把厂商凭据塞进了客户端。
+   *
+   * 失败**不静默**：换 token 失败会带着稳定错误码冒到界面（例如
+   * `wecom.ip_not_allowed`），界面按码给出"去后台做哪一件事"。测试信失败则单独
+   * 报告——凭据已经可用，不该因为邮件没到而被判成"配置失败"。
+   */
+  async connect(
+    input: unknown,
+    context: { origin: string | null; adminEmail: string | null },
+  ): Promise<unknown> {
+    const parsed = connectSchema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new WecomMailPluginError(400, '接入参数无效', 'wecom-mail.invalid_config');
+    }
+    const body = parsed.data;
+    const found = parseCredentials(body.text);
+    const corpId = body.corpId?.trim() || found.corpId;
+    const corpSecret = body.corpSecret?.trim() || found.corpSecret;
+    if (!corpId || !corpSecret) {
+      // 用解析器的缺口码作答：界面据此只说"还差哪一样"，不用猜。
+      const gap = !corpId ? 'wecom-mail.missing_corp_id' : 'wecom-mail.missing_secret';
+      throw new WecomMailPluginError(400, '粘贴内容里没有找到完整的凭据', gap);
+    }
+
+    const previous = this.resolved?.config ?? null;
+    const config = resolveConfig(
+      {
+        // 粘贴只带来凭据；其余设置沿用已保存的，避免"一键接入"顺手抹掉排除规则。
+        ...(previous ?? {}),
+        corpId,
+        corpSecret,
+        ...(body.baseUrl ? { baseUrl: body.baseUrl } : {}),
+        ...((body.publicBaseUrl ?? context.origin)
+          ? { publicBaseUrl: body.publicBaseUrl ?? context.origin ?? undefined }
+          : {}),
+      } as ConfigInput,
+      previous,
+    );
+
+    const client = this.clientFor(config);
+    // 真校验：换得到 token 才算接通（顺带把 token 预热进缓存）。
+    await client.accessToken();
+    await this.persist(config, client);
+
+    const testTo = body.to ?? context.adminEmail;
+    let test: { sent: boolean; to: string | null; code?: string } = {
+      sent: false,
+      to: testTo ?? null,
+    };
+    if (body.testSend !== false && testTo) {
+      try {
+        await this.sendTest(client, config, testTo);
+        test = { sent: true, to: testTo };
+      } catch (error) {
+        // 凭据已经验证过了：测试信失败只报告，不回滚配置。
+        test = {
+          sent: false,
+          to: testTo,
+          code: error instanceof WecomError ? error.code : 'wecom.send_failed',
+        };
+      }
+    }
+
+    this.ctx.logger.info(`wecom-mail: connected to ${corpId} (testSent=${String(test.sent)})`);
+    return { connected: true, corpId, publicBaseUrl: config.publicBaseUrl ?? null, test };
   }
 
   /** 发一封测试邮件：验证 corpid/secret/IP 白名单/邮箱权限四件事是否都通。 */
@@ -188,6 +282,11 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
     if (!parsed.success) {
       throw new WecomMailPluginError(400, '测试收件地址无效', 'wecom-mail.invalid_email');
     }
+    await this.sendTest(client, config, parsed.data);
+    return { sent: true, to: parsed.data };
+  }
+
+  private async sendTest(client: WecomMailClient, config: StoredConfig, to: string): Promise<void> {
     const content = renderNoticeEmail({
       title: '企业微信邮箱测试',
       body: '如果你看到这封邮件，说明企业微信邮箱渠道已配置成功。',
@@ -195,13 +294,27 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
       ...(config.publicBaseUrl ? { link: absoluteUrl(config.publicBaseUrl, '/admin') } : {}),
     });
     await client.send({
-      to: [parsed.data],
+      to: [to],
       subject: content.subject,
       content: content.html,
       contentType: 'html',
     });
-    this.ctx.logger.info(`wecom-mail: test email accepted for ${mask(parsed.data)}`);
-    return { sent: true, to: parsed.data };
+    this.ctx.logger.info(`wecom-mail: test email accepted for ${mask(to)}`);
+  }
+
+  /** 落盘 + 换上带（可能已预热的）token 的客户端。 */
+  private async persist(config: StoredConfig, client?: WecomMailClient): Promise<void> {
+    if (!this.ctx.secrets.isAvailable()) {
+      throw new WecomMailPluginError(
+        503,
+        '加密密钥存储未配置，无法保存企业微信凭据',
+        'wecom-mail.no_secrets',
+      );
+    }
+    await this.ctx.secrets.set(CONFIG_KEY, JSON.stringify(config));
+    // 凭据变了，旧 token 属于旧企业：不换会拿着别人的凭据发信。
+    this.resolved?.client.invalidateToken();
+    this.resolved = { config, client: client ?? this.clientFor(config) };
   }
 
   /* ---------------------- NotificationChannel ---------------------- */
@@ -317,11 +430,25 @@ let service: WecomMailService | null = null;
 
 const testSendSchema = z.object({ to: z.string().email().max(320) });
 
+/**
+ * 一键接入的入参：`text` 是管理员粘贴的任意一段文字（解析器负责认），
+ * `corpId`/`corpSecret` 留给程序化调用（脚本、MCP）直接给结构化凭据。
+ */
+const connectSchema = z.object({
+  text: z.string().max(4000).optional(),
+  corpId: z.string().trim().max(64).optional(),
+  corpSecret: z.string().trim().max(1000).optional(),
+  baseUrl: z.string().trim().url().max(300).optional(),
+  publicBaseUrl: z.string().trim().url().max(500).optional(),
+  to: z.string().email().max(320).optional(),
+  testSend: z.boolean().optional(),
+});
+
 export const wecomMailPlugin = definePlugin({
   manifest: {
     id: 'wecom-mail',
     name: '企业微信邮箱',
-    version: '0.1.0',
+    version: '0.2.0',
     description:
       '通过企业微信「应用发送邮件」接口投递站内通知与注册验证码，无需自建 SMTP 与发信域名。',
     provides: [EXTENSION_POINTS.notificationChannel, EXTENSION_POINTS.identityChallengeSender],
@@ -350,6 +477,16 @@ export const wecomMailPlugin = definePlugin({
         destructive: true,
       },
       {
+        id: 'wecom-mail.admin.connect',
+        method: 'POST',
+        route: '/wecom-mail/admin/connect',
+        path: '/api/v1/wecom-mail/admin/connect',
+        summary: 'Connect a WeCom self-built app from pasted credentials and self-test it',
+        scope: 'wecom-mail.admin',
+        mutating: true,
+        destructive: true,
+      },
+      {
         id: 'wecom-mail.admin.test',
         method: 'POST',
         route: '/wecom-mail/admin/test',
@@ -367,7 +504,28 @@ export const wecomMailPlugin = definePlugin({
       path: '/wecom-mail/admin/config',
       auth: 'admin',
       permission: 'wecom-mail.admin',
-      handler: handle(async () => service?.status() ?? { configured: false }),
+      // 顺带回传当前管理员的邮箱：一键接入默认把测试信发给他自己，
+      // 这样"接通"和"收到信"是同一次点击里完成的。
+      handler: handle(async (req) => ({
+        ...((service?.status() as Record<string, unknown>) ?? { configured: false }),
+        adminEmail: req.user?.email ?? null,
+      })),
+    },
+    {
+      // 一粘贴就接通：解析 → 换 token 真校验 → 保存 → 自测发信。
+      method: 'POST',
+      path: '/wecom-mail/admin/connect',
+      auth: 'admin',
+      permission: 'wecom-mail.admin',
+      handler: handle(async (req) => {
+        if (!service) {
+          throw new WecomMailPluginError(503, '插件未就绪', 'wecom-mail.not_ready');
+        }
+        return service.connect(req.body, {
+          origin: originFromHeaders(req.headers),
+          adminEmail: req.user?.email ?? null,
+        });
+      }),
     },
     {
       method: 'POST',

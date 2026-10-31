@@ -17,6 +17,14 @@
 2. 该应用需具备**企业邮箱（邮件）**权限；
 3. 若企业启用了**可信 IP**，把本服务出口 IP 加入白名单，否则接口返回 `60020`。
 
+## 一键接入
+
+设置页的主路径是**粘贴一次、其余自动**（`POST /wecom-mail/admin/connect`，Capability `wecom-mail.admin.connect`）：管理员从企业微信后台把企业 ID 与 Secret 一起复制进来（两行、JSON、带 `corpid`/`corpsecret` 的链接都认），插件随即用真实接口换一次 `access_token`——这一步同时验证了 corpid、Secret 和可信 IP；换取成功才落盘，并把 token 预热进缓存，最后默认给当前管理员发一封测试邮件。
+
+换取失败时什么都不写，并回稳定错误码（如 `wecom.ip_not_allowed`），设置页按码给出「去后台做哪一件事」。测试邮件失败**不回滚配置**，单独以 `test.code` 报告。`publicBaseUrl` 从请求头自动推断，无需手填站点地址。
+
+唯一无法自动化的是 Secret 本身：企业微信没有「读取应用 Secret」的接口，必须由人复制一次。
+
 ## 配置
 
 配置保存在 `ctx.secrets`（加密）。必填 `corpId` 与 `corpSecret`（首次）；`corpSecret` 在后续保存时留空表示沿用已保存值。可选：`from`（发件邮箱，仅显示用）、`baseUrl`（默认为官方域名，可指向内网代理）、`publicBaseUrl`（把站内相对链接补成绝对链接）、`excludeTypes`（逗号分隔的通知 `type` 前缀，命中不发邮件）、`timeoutMs`（默认 15000）。未配置密钥存储时写配置返回 503。
@@ -29,6 +37,7 @@
 | --- | --- | --- | --- |
 | GET | `/wecom-mail/admin/config` | admin + `wecom-mail.admin` | 返回脱敏状态与 token 缓存状态。 |
 | POST | `/wecom-mail/admin/config` | admin + `wecom-mail.admin` | 保存企业微信配置。 |
+| POST | `/wecom-mail/admin/connect` | admin + `wecom-mail.admin` | 解析粘贴的凭据 → 真校验 → 保存 → 自测发信。 |
 | POST | `/wecom-mail/admin/test` | admin + `wecom-mail.admin` | 向 `to` 指定地址发送测试邮件。 |
 
 ## Capability
@@ -37,9 +46,10 @@
 | --- | --- | --- | --- |
 | `wecom-mail.admin.config.read` | GET | `/wecom-mail/admin/config` | 读取脱敏配置。 |
 | `wecom-mail.admin.config.write` | POST | `/wecom-mail/admin/config` | 写入配置（mutating、destructive）。 |
+| `wecom-mail.admin.connect` | POST | `/wecom-mail/admin/connect` | 一键接入（mutating、destructive）。 |
 | `wecom-mail.admin.test` | POST | `/wecom-mail/admin/test` | 发送测试邮件（mutating、destructive）。 |
 
-三者都分发到与内部路由**同一个 handler**，投影不会放宽鉴权。
+四者都分发到与内部路由**同一个 handler**，投影不会放宽鉴权。
 
 ## 设置页数据
 
@@ -54,3 +64,7 @@
 ## 集成规则
 
 不要在业务插件里重新实现邮件队列或把企业微信凭据暴露给前端。业务插件应先创建站内通知；内核根据用户偏好选择已配置的 `notification.channel`。发附件、成员 ID 模板翻译（`enable_id_trans`）都不在本插件范围内：需要给人看的东西写成链接，而不是把二进制塞进通知。
+
+## 与 `smtp` 并存
+
+内核把同一条通知分发给**每个** `wants()` 通过的渠道（`apps/api/src/notifications/dispatcher.ts`），不是二选一。同时配好 `smtp` 与 `wecom-mail` 会让用户收到两封邮件，除非在其中一个里用 `excludeTypes` 排除对应类型。设置页会探测其它渠道是否已配置并给出警告（`status().otherChannels`）。

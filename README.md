@@ -53,7 +53,7 @@
 | [`ticket`](./packages/plugins/ticket) | 0.2.0 | 用户工单、多轮回复、分配、优先级和状态管理。 |
 | [`referral`](./packages/plugins/referral) | 0.1.0 | 邀请链接、注册归因、余额奖励和推广管理。 |
 | [`smtp`](./packages/plugins/smtp) | 0.1.0 | 通过 SMTP 发送站内通知与注册验证码，支持 TLS、认证、连接池和限速。 |
-| [`wecom-mail`](./packages/plugins/wecom-mail) | 0.1.0 | 通过企业微信「应用发送邮件」接口发送站内通知与注册验证码，无需自建 SMTP 与发信域名。 |
+| [`wecom-mail`](./packages/plugins/wecom-mail) | 0.2.0 | 通过企业微信「应用发送邮件」接口发送站内通知与注册验证码，无需自建 SMTP 与发信域名。 |
 
 ### AI、身份与第三方系统
 
