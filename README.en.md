@@ -53,6 +53,7 @@ This repository contains **source code for optional StackPanel plugins**. The ke
 | [`ticket`](./packages/plugins/ticket) | 0.2.0 | Customer tickets, threaded replies, assignment, priorities, and status management. |
 | [`referral`](./packages/plugins/referral) | 0.1.0 | Referral links, registration attribution, wallet rewards, and referral administration. |
 | [`smtp`](./packages/plugins/smtp) | 0.1.0 | SMTP delivery for in-app notifications and registration challenges, with TLS, auth, pooling, and rate limits. |
+| [`wecom-mail`](./packages/plugins/wecom-mail) | 0.1.0 | Delivers in-app notifications and registration challenges through the WeCom “app send email” API, with no SMTP server or sending domain to run. |
 | [`captcha`](./packages/plugins/captcha) | 0.1.0 | Human verification in front of sign-in, sign-up and other sensitive operations, via Turnstile, hCaptcha, reCAPTCHA, Cap or any siteverify-compatible endpoint. |
 
 ### AI, identity, and third-party systems
