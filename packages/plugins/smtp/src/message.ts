@@ -101,22 +101,24 @@ export function renderCodeEmail(input: CodeTemplateInput): {
   const isEnglish = (input.locale ?? '').toLowerCase().startsWith('en');
   if (isEnglish) {
     const subject = `${brand} verification code`;
-    const text = `Your ${brand} verification code is ${input.code}.\n\nIt expires in ${input.expiresInMinutes} minutes. If you did not request this, you can ignore this email.\n`;
+    // "Use the newest one" matters: a resend retires the previous code, but the
+    // older mail is still sitting in the inbox and looks equally valid.
+    const text = `Your ${brand} verification code is ${input.code}.\n\nIt expires in ${input.expiresInMinutes} minutes. If you requested several codes, use the newest one — older ones no longer work. If you did not request this, you can ignore this email.\n`;
     const html = htmlShell(
       subject,
       `<p>Your <strong>${escapeHtml(brand)}</strong> verification code is:</p>
 <p style="font-size:28px;letter-spacing:6px;font-weight:700;margin:16px 0">${escapeHtml(input.code)}</p>
-<p>It expires in ${input.expiresInMinutes} minutes. If you did not request this, you can ignore this email.</p>`,
+<p>It expires in ${input.expiresInMinutes} minutes. If you requested several codes, use the newest one — older ones no longer work. If you did not request this, you can ignore this email.</p>`,
     );
     return { subject, text, html };
   }
   const subject = `${brand} 验证码`;
-  const text = `你的 ${brand} 验证码是 ${input.code}。\n\n验证码将在 ${input.expiresInMinutes} 分钟后失效。如非本人操作，请忽略本邮件。\n`;
+  const text = `你的 ${brand} 验证码是 ${input.code}。\n\n验证码将在 ${input.expiresInMinutes} 分钟后失效。如收到多封验证码邮件，请使用最新一封（旧验证码已失效）。如非本人操作，请忽略本邮件。\n`;
   const html = htmlShell(
     subject,
     `<p>你的 <strong>${escapeHtml(brand)}</strong> 验证码是：</p>
 <p style="font-size:28px;letter-spacing:6px;font-weight:700;margin:16px 0">${escapeHtml(input.code)}</p>
-<p>验证码将在 ${input.expiresInMinutes} 分钟后失效。如非本人操作，请忽略本邮件。</p>`,
+<p>验证码将在 ${input.expiresInMinutes} 分钟后失效。如收到多封验证码邮件，请使用最新一封（旧验证码已失效）。如非本人操作，请忽略本邮件。</p>`,
   );
   return { subject, text, html };
 }

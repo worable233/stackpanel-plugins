@@ -59,23 +59,23 @@ export function renderCodeEmail(input: CodeTemplateInput): RenderedMail {
   const minutes = input.expiresInMinutes;
   if (isEnglish(input.locale)) {
     const subject = `${brand} verification code`;
-    const text = `Your ${brand} verification code is ${input.code}.\n\nIt expires in ${minutes} minutes. If you did not request this, you can ignore this email.\n`;
+    const text = `Your ${brand} verification code is ${input.code}.\n\nIt expires in ${minutes} minutes. If you requested several codes, use the newest one — older ones no longer work. If you did not request this, you can ignore this email.\n`;
     const html = htmlShell(
       subject,
       `<p style="margin:0 0 8px">Your <strong>${escapeHtml(brand)}</strong> verification code is:</p>
 <p style="font-size:28px;letter-spacing:6px;font-weight:700;margin:16px 0">${escapeHtml(input.code)}</p>
-<p style="margin:0;color:#4b5563">It expires in ${minutes} minutes. If you did not request this, you can ignore this email.</p>`,
+<p style="margin:0;color:#4b5563">It expires in ${minutes} minutes. If you requested several codes, use the newest one — older ones no longer work. If you did not request this, you can ignore this email.</p>`,
       brand,
     );
     return { subject, html, text };
   }
   const subject = `${brand} 验证码`;
-  const text = `你的 ${brand} 验证码是 ${input.code}。\n\n${minutes} 分钟内有效。如非本人操作，请忽略本邮件。\n`;
+  const text = `你的 ${brand} 验证码是 ${input.code}。\n\n${minutes} 分钟内有效。如收到多封验证码邮件，请使用最新一封（旧验证码已失效）。如非本人操作，请忽略本邮件。\n`;
   const html = htmlShell(
     subject,
     `<p style="margin:0 0 8px">你的 <strong>${escapeHtml(brand)}</strong> 验证码是：</p>
 <p style="font-size:28px;letter-spacing:6px;font-weight:700;margin:16px 0">${escapeHtml(input.code)}</p>
-<p style="margin:0;color:#4b5563">${minutes} 分钟内有效。如非本人操作，请忽略本邮件。</p>`,
+<p style="margin:0;color:#4b5563">${minutes} 分钟内有效。如收到多封验证码邮件，请使用最新一封（旧验证码已失效）。如非本人操作，请忽略本邮件。</p>`,
     brand,
   );
   return { subject, html, text };

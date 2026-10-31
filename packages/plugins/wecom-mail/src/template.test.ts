@@ -17,6 +17,14 @@ describe('mail templates', () => {
     expect(mail.html).not.toContain('验证码');
   });
 
+  it('tells the reader which code to use when several arrived', () => {
+    const zh = renderCodeEmail({ code: '426913', expiresInMinutes: 10 });
+    expect(zh.text).toContain('请使用最新一封');
+    expect(zh.html).toContain('请使用最新一封');
+    const en = renderCodeEmail({ code: '426913', expiresInMinutes: 10, locale: 'en-US' });
+    expect(en.html).toContain('use the newest one');
+  });
+
   it('escapes user-controlled notification content', () => {
     const mail = renderNoticeEmail({
       title: '<script>alert(1)</script>',

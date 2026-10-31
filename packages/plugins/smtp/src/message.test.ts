@@ -71,6 +71,18 @@ describe('message encoding', () => {
     expect(en.text).toContain('654321');
   });
 
+  it('tells the reader which code to use when several arrived', () => {
+    // A resend retires the previous code, but the older mail stays in the inbox
+    // and looks equally valid — the template has to say so.
+    const zh = renderCodeEmail({ code: '123456', expiresInMinutes: 10 });
+    expect(zh.text).toContain('请使用最新一封');
+    expect(zh.html).toContain('请使用最新一封');
+
+    const en = renderCodeEmail({ code: '123456', expiresInMinutes: 10, locale: 'en-US' });
+    expect(en.text).toContain('use the newest one');
+    expect(en.html).toContain('use the newest one');
+  });
+
   it('escapeHtml covers the five XML entities', () => {
     expect(escapeHtml(`&<>"`)).toBe('&amp;&lt;&gt;&quot;');
   });
