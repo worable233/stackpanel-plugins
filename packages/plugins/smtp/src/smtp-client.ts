@@ -125,20 +125,31 @@ class SmtpPool {
       this.sendTimeoutMs,
       async () => {
         await this.acquireRateToken();
-        const connection = await this.acquire();
         try {
-          await connection.send(message);
-          this.idle.push(connection); // 成功：归还连接复用
+          await this.deliver(message);
         } catch (error) {
-          connection.destroy(); // 失败：丢弃，避免污染后续会话
-          throw error;
-        } finally {
-          this.active -= 1;
-          this.wake();
+          // 「连接未建立」意味着一个字节都没发出去（socket 已被清空），重连重发是
+          // 安全的；其它错误可能已经把报文递给了服务端，宁可交给内核退避重试。
+          if (!(error instanceof SmtpError) || error.message !== '连接未建立') throw error;
+          await this.deliver(message);
         }
       },
       'SMTP 发送超时',
     );
+  }
+
+  private async deliver(message: SmtpMessage): Promise<void> {
+    const connection = await this.acquire();
+    try {
+      await connection.send(message);
+      this.idle.push(connection); // 成功：归还连接复用
+    } catch (error) {
+      connection.destroy(); // 失败：丢弃，避免污染后续会话
+      throw error;
+    } finally {
+      this.active -= 1;
+      this.wake();
+    }
   }
 
   /** 关闭所有空闲连接（插件停用/配置变更时调用）。 */
@@ -151,10 +162,16 @@ class SmtpPool {
   }
 
   private async acquire(): Promise<SmtpConnection> {
-    const reused = this.idle.pop();
-    if (reused) {
-      this.active += 1;
-      return reused;
+    // 空闲连接可能已经被服务端关闭、或撞上自身的空闲读超时（`destroy()` 把 socket
+    // 置空后对象仍留在池里）。直接复用会立刻抛「连接未建立」——第二个用户就收不到
+    // 信。这里只交出仍然可写的连接，坏掉的当场丢弃。
+    while (this.idle.length > 0) {
+      const reused = this.idle.pop()!;
+      if (reused.isUsable()) {
+        this.active += 1;
+        return reused;
+      }
+      reused.destroy();
     }
     // 池未满：直接新建（建连本身受 connectionTimeoutMs 约束）。
     if (this.active < this.maxConnections) {
@@ -324,6 +341,11 @@ class SmtpConnection {
     if (this.config.auth) {
       await this.authenticate(this.config.auth, caps);
     }
+  }
+
+  /** 连接仍可写入（既没被关闭，也没被空闲读超时清掉 socket）。 */
+  isUsable(): boolean {
+    return this.socket !== null && !this.socket.destroyed && this.socket.writable;
   }
 
   async send(message: SmtpMessage): Promise<void> {

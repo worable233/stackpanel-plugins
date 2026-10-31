@@ -19,6 +19,8 @@ async function startFakeSmtp(
     auth?: boolean;
     failRcpt?: boolean;
     rejectAuth?: boolean;
+    /** Drop the connection right after accepting a message (idle-close like Exmail). */
+    closeAfterMail?: boolean;
   } = {},
 ) {
   const mails: FakeServer['mails'] = [];
@@ -49,6 +51,7 @@ async function startFakeSmtp(
             from = '';
             to = [];
             write('250 OK queued');
+            if (options.closeAfterMail) socket.end();
           } else {
             dataLines.push(line.replace(/^\.\./, '.'));
           }
@@ -108,6 +111,28 @@ afterEach(async () => {
 });
 
 describe('SmtpTransport', () => {
+  it('reconnects when the server closed the pooled connection', async () => {
+    // Real behaviour: the provider closes an idle connection; the pool kept the
+    // dead object and the next send threw 「连接未建立」 without trying.
+    const fake = await startFakeSmtp({ closeAfterMail: true });
+    cleanups.push(fake.close);
+    const transport = new SmtpTransport({
+      host: '127.0.0.1',
+      port: fake.port,
+      secure: false,
+      allowInsecure: true,
+      from: 'noreply@example.com',
+      commandTimeoutMs: 500,
+    });
+    cleanups.push(async () => transport.close());
+
+    await transport.send({ to: 'a@example.com', raw: 'Subject: a\r\n\r\n1' });
+    // Let the server's FIN land so the pooled connection is dead before reuse.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await transport.send({ to: 'b@example.com', raw: 'Subject: b\r\n\r\n2' });
+    expect(fake.mails.map((mail) => mail.to)).toEqual([['a@example.com'], ['b@example.com']]);
+  });
+
   it('delivers a message end to end, dot-stuffing the body', async () => {
     const fake = await startFakeSmtp();
     cleanups.push(fake.close);
