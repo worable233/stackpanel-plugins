@@ -213,6 +213,19 @@ for (const dataDir of dataDirs) {
       mkdirSync(revisionDir, { recursive: true });
       cpSync(join(frontendTarget, 'dist'), join(revisionDir, 'dist'), { recursive: true });
       writeFileSync(join(revisionDir, 'manifest.json'), `${JSON.stringify(parsed, null, 2)}\n`);
+      // Point the package at the revision we just materialized.
+      //
+      // Without `current.json` the kernel treats the package as having no
+      // published revision and falls back to the *flat* `frontend/dist/` — which
+      // this script used to skip entirely. The visible symptom was a 404 on
+      // `dist/admin.runtime.js`: the kernel derives that browser-loadable bundle
+      // from `frontend/dist/admin.js` (a compatibility repair for packages built
+      // before runtime loading), so a package that only exists as a revision dir
+      // never gets one, and every admin page it owns fails to load.
+      writeFileSync(
+        join(frontendTarget, 'current.json'),
+        `${JSON.stringify({ revision: parsed.revision, previous: null, activatedAt: new Date().toISOString() }, null, 2)}\n`,
+      );
     }
   }
   writeFileSync(join(target, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);

@@ -28,6 +28,10 @@
   "accountRoutes": [],
   "accountWidgets": [],
   "files": [
+    "frontend/dist/admin.js",
+    "frontend/dist/admin.js.map",
+    "frontend/dist/admin.runtime.js",
+    "frontend/dist/admin.runtime.js.map",
     "frontend/dist/index.js",
     "frontend/dist/index.js.map"
   ],
