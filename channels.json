@@ -2,11 +2,11 @@
   "channels": [
     {
       "channel": "stable",
-      "sequence": 2
+      "sequence": 3
     },
     {
       "channel": "beta",
-      "sequence": 2
+      "sequence": 3
     }
   ]
 }
