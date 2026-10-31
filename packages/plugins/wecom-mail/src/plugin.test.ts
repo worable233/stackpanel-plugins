@@ -38,6 +38,8 @@ interface Captured {
   extensions: Array<[string, unknown]>;
   secrets: Map<string, string>;
   users: Map<string, { email: string | null }>;
+  /** 同点上其它插件注册的通知渠道（用来验"双发"警告）。 */
+  otherChannels: Array<{ pluginId: string; implementation: unknown }>;
   context: PluginContext;
 }
 
@@ -46,6 +48,7 @@ function activate(): Captured {
     extensions: [],
     secrets: new Map<string, string>(),
     users: new Map([['user-1', { email: 'user@example.com' }]]),
+    otherChannels: [],
     context: undefined as unknown as PluginContext,
   };
   captured.context = {
@@ -68,6 +71,13 @@ function activate(): Captured {
       return () => undefined;
     },
     effect: () => () => undefined,
+    getExtensionsWithOwner: (point: string) =>
+      point === 'notification.channel'
+        ? [
+            ...captured.otherChannels,
+            { pluginId: 'wecom-mail', implementation: captured.extensions.at(-1)?.[1] },
+          ]
+        : [],
   } as unknown as PluginContext;
   return captured;
 }
@@ -84,10 +94,20 @@ async function call(
   method: string,
   path: string,
   body?: unknown,
+  request: {
+    headers?: Record<string, string>;
+    user?: { id: string; role: string; email?: string };
+  } = {},
 ): Promise<{ value?: unknown; error?: { code: string; status: number } }> {
   try {
     const value = await route(method, path).handler(
-      { body, headers: {}, query: {}, params: {} } as unknown as HttpRequest,
+      {
+        body,
+        headers: request.headers ?? {},
+        query: {},
+        params: {},
+        ...(request.user ? { user: request.user } : {}),
+      } as unknown as HttpRequest,
       {} as HttpReply,
     );
     return { value };
@@ -313,5 +333,156 @@ describe('admin test send', () => {
 
     const result = await call('POST', '/wecom-mail/admin/test', { to: 'admin@example.com' });
     expect(result.error).toMatchObject({ code: 'wecom.ip_not_allowed', status: 502 });
+  });
+});
+
+describe('one-click connect', () => {
+  const CORP_ID = 'ww0123456789abcdef';
+  const SECRET = 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v';
+
+  it('goes from one paste to a delivered test email', async () => {
+    const captured = activate();
+    await wecomMailPlugin.onActivate?.(captured.context);
+
+    const result = await call(
+      'POST',
+      '/wecom-mail/admin/connect',
+      { text: `企业ID：${CORP_ID}\n应用Secret：${SECRET}` },
+      {
+        headers: { host: 'panel.example.com', 'x-forwarded-proto': 'https' },
+        user: { id: 'admin-1', role: 'ADMIN', email: 'admin@example.com' },
+      },
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.value).toMatchObject({
+      connected: true,
+      corpId: CORP_ID,
+      // 站点地址自动从请求头推断：管理员不该再手填一次自己正在访问的地址。
+      publicBaseUrl: 'https://panel.example.com',
+      test: { sent: true, to: 'admin@example.com' },
+    });
+    // token 已预热：随后打开页面就能看到"已缓存"，而不是等第一封信才发现问题。
+    const read = await call('GET', '/wecom-mail/admin/config');
+    expect(read.value).toMatchObject({ configured: true, tokenCached: true });
+
+    const calls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const compose = calls.filter((call) => String(call[0]).includes('compose_send'));
+    expect(compose).toHaveLength(1);
+    expect(JSON.parse((compose[0]?.[1] as RequestInit).body as string).to).toEqual({
+      emails: ['admin@example.com'],
+    });
+  });
+
+  it('can connect without sending a test email', async () => {
+    const captured = activate();
+    await wecomMailPlugin.onActivate?.(captured.context);
+    const result = await call('POST', '/wecom-mail/admin/connect', {
+      text: `${CORP_ID} ${SECRET}`,
+      testSend: false,
+    });
+    expect(result.value).toMatchObject({ connected: true, test: { sent: false } });
+    const calls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(calls.filter((call) => String(call[0]).includes('compose_send'))).toHaveLength(0);
+  });
+
+  it('says exactly which half of the credentials is missing', async () => {
+    await wecomMailPlugin.onActivate?.(activate().context);
+    const noSecret = await call('POST', '/wecom-mail/admin/connect', { text: CORP_ID });
+    expect(noSecret.error).toMatchObject({ code: 'wecom-mail.missing_secret', status: 400 });
+
+    const noCorpId = await call('POST', '/wecom-mail/admin/connect', { text: SECRET });
+    expect(noCorpId.error).toMatchObject({ code: 'wecom-mail.missing_corp_id', status: 400 });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not persist anything when WeCom refuses the credentials', async () => {
+    const captured = activate();
+    await wecomMailPlugin.onActivate?.(captured.context);
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ errcode: 60020, errmsg: 'ip not allowed' })),
+    ) as unknown as typeof globalThis.fetch;
+
+    const result = await call('POST', '/wecom-mail/admin/connect', {
+      text: `${CORP_ID} ${SECRET}`,
+    });
+    // 稳定错误码即"去后台做哪一件事"的键：界面按它渲染处置办法。
+    expect(result.error).toMatchObject({ code: 'wecom.ip_not_allowed', status: 502 });
+    expect(captured.secrets.has('wecom-mail-config')).toBe(false);
+    const read = await call('GET', '/wecom-mail/admin/config');
+    expect(read.value).toMatchObject({ configured: false });
+  });
+
+  it('keeps the connection when only the test email fails', async () => {
+    const captured = activate();
+    await wecomMailPlugin.onActivate?.(captured.context);
+    let attempt = 0;
+    globalThis.fetch = vi.fn(async () => {
+      attempt += 1;
+      // 换 token 成功、发信被拒（例如应用没有邮箱权限）：凭据可用，配置要留下。
+      return new Response(
+        JSON.stringify(
+          attempt === 1
+            ? { errcode: 0, errmsg: 'ok', access_token: 'T', expires_in: 7200 }
+            : { errcode: 48002, errmsg: 'api forbidden' },
+        ),
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await call('POST', '/wecom-mail/admin/connect', {
+      text: `${CORP_ID} ${SECRET}`,
+      to: 'admin@example.com',
+    });
+    expect(result.value).toMatchObject({
+      connected: true,
+      test: { sent: false, code: 'wecom.mail_forbidden' },
+    });
+    expect(captured.secrets.has('wecom-mail-config')).toBe(true);
+  });
+
+  it('keeps the existing settings when reconnecting with only credentials', async () => {
+    const captured = activate();
+    await wecomMailPlugin.onActivate?.(captured.context);
+    await call('POST', '/wecom-mail/admin/config', {
+      corpId: CORP_ID,
+      corpSecret: SECRET,
+      excludeTypes: 'security.',
+      publicBaseUrl: 'https://kept.example.com',
+    });
+
+    const result = await call('POST', '/wecom-mail/admin/connect', {
+      text: `${CORP_ID} ${SECRET}`,
+    });
+    expect(result.value).toMatchObject({
+      connected: true,
+      publicBaseUrl: 'https://kept.example.com',
+    });
+    const read = await call('GET', '/wecom-mail/admin/config');
+    expect(read.value).toMatchObject({ excludeTypes: 'security.' });
+  });
+
+  it('warns that a second configured channel means duplicate emails', async () => {
+    const captured = activate();
+    captured.otherChannels = [
+      { pluginId: 'smtp', implementation: { isConfigured: () => true } },
+      { pluginId: 'mystery', implementation: {} },
+    ];
+    await wecomMailPlugin.onActivate?.(captured.context);
+    const read = await call('GET', '/wecom-mail/admin/config');
+    expect(read.value).toMatchObject({
+      otherChannels: [
+        { id: 'smtp', configured: true },
+        // 没暴露探测能力的渠道：我们不下结论，交给界面说"未知"。
+        { id: 'mystery', configured: null },
+      ],
+    });
+  });
+
+  it('exposes the admin email so the page can default the test recipient', async () => {
+    await wecomMailPlugin.onActivate?.(activate().context);
+    const read = await call('GET', '/wecom-mail/admin/config', undefined, {
+      user: { id: 'admin-1', role: 'ADMIN', email: 'admin@example.com' },
+    });
+    expect(read.value).toMatchObject({ adminEmail: 'admin@example.com' });
   });
 });
