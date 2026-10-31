@@ -97,12 +97,13 @@
       "remedy.wecom.invalid_corp_id": "企业 ID 不对。请重新复制「我的企业 → 企业信息」里的企业 ID。",
       "remedy.wecom.invalid_secret": "应用 Secret 不对或已被重置。请回后台重新生成并复制新的 Secret。",
       "remedy.wecom.ip_not_allowed": "该自建应用开启了可信 IP：请把这个服务器的出口 IP 加进「应用管理 → 你的应用 → 企业可信 IP」，或在应用设置里关闭可信 IP 限制。",
-      "remedy.wecom.mail_forbidden": "这个应用没有企业邮箱（邮件）权限。请在企业微信后台为该应用开启邮件权限后重试。",
+      "remedy.wecom.mail_forbidden": "这个应用没有企业邮箱（邮件）接口权限。到企业微信后台「应用管理 → 你的自建应用 → 企业邮箱（或\"邮件\"）」开通后再试；如果返回 48002，就是这个接口权限没开。",
       "remedy.wecom.rate_limited": "触发了企业微信的调用频率限制，请稍等一分钟再试。",
       "remedy.wecom.token_invalid": "企业微信拒绝了本次访问令牌（可能刚被重置）。已自动刷新一次仍然失败，请确认 Secret 是否刚刚重新生成。",
       "remedy.wecom.network_error": "连不上企业微信接口。请检查服务器出网、DNS 或代理设置。",
       "remedy.wecom.bad_response": "企业微信返回了非预期内容（可能是反向代理的报错页）。请检查 baseUrl 或网络出口。",
-      "remedy.wecom.send_failed": "企业微信拒绝了这次发信请求。请确认发件邮箱已在企业微信侧开通，并查看服务日志中的原始错误码。"
+      "remedy.wecom.send_failed": "企业微信拒绝了这次发信请求。请确认发件邮箱已在企业微信侧开通，并查看服务日志中的原始错误码。",
+      "connect.corpIdLink": "找不到企业 ID？打开企业微信后台「我的企业」（企业信息在最底部）"
     },
     "zh-TW": {
       "admin.systemSettings": "企業微信郵箱",
@@ -161,12 +162,13 @@
       "remedy.wecom.invalid_corp_id": "企業 ID 不對。請重新複製「我的企業 → 企業資訊」裡的企業 ID。",
       "remedy.wecom.invalid_secret": "應用 Secret 不對或已被重置。請回後臺重新生成並複製新的 Secret。",
       "remedy.wecom.ip_not_allowed": "該自建應用開啟了可信 IP：請把這個伺服器的出口 IP 加進「應用管理 → 你的應用 → 企業可信 IP」，或在應用設定裡關閉可信 IP 限制。",
-      "remedy.wecom.mail_forbidden": "這個應用沒有企業郵箱（郵件）許可權。請在企業微信後臺為該應用開啟郵件許可權後重試。",
+      "remedy.wecom.mail_forbidden": "這個應用沒有企業郵箱（郵件）介面許可權。到企業微信後臺「應用管理 → 你的自建應用 → 企業郵箱（或\"郵件\"）」開通後再試；如果返回 48002，就是這個介面許可權沒開。",
       "remedy.wecom.rate_limited": "觸發了企業微信的呼叫頻率限制，請稍等一分鐘再試。",
       "remedy.wecom.token_invalid": "企業微信拒絕了本次訪問令牌（可能剛被重置）。已自動重新整理一次仍然失敗，請確認 Secret 是否剛剛重新生成。",
       "remedy.wecom.network_error": "連不上企業微信介面。請檢查伺服器出網、DNS 或代理設定。",
       "remedy.wecom.bad_response": "企業微信返回了非預期內容（可能是反向代理的報錯頁）。請檢查 baseUrl 或網路出口。",
-      "remedy.wecom.send_failed": "企業微信拒絕了這次發信請求。請確認發件郵箱已在企業微信側開通，並檢視服務日誌中的原始錯誤碼。"
+      "remedy.wecom.send_failed": "企業微信拒絕了這次發信請求。請確認發件郵箱已在企業微信側開通，並檢視服務日誌中的原始錯誤碼。",
+      "connect.corpIdLink": "找不到企業 ID？開啟企業微信後臺「我的企業」（企業資訊在最底部）"
     },
     "zh-HK": {
       "admin.systemSettings": "企業微信郵箱",
@@ -225,12 +227,13 @@
       "remedy.wecom.invalid_corp_id": "企業 ID 不對。請重新複製「我的企業 → 企業資訊」裡的企業 ID。",
       "remedy.wecom.invalid_secret": "應用 Secret 不對或已被重置。請回後臺重新生成並複製新的 Secret。",
       "remedy.wecom.ip_not_allowed": "該自建應用開啟了可信 IP：請把這個伺服器的出口 IP 加進「應用管理 → 你的應用 → 企業可信 IP」，或在應用設置裡關閉可信 IP 限制。",
-      "remedy.wecom.mail_forbidden": "這個應用沒有企業郵箱（郵件）許可權。請在企業微信後臺為該應用開啟郵件許可權後重試。",
+      "remedy.wecom.mail_forbidden": "這個應用沒有企業郵箱（郵件）介面許可權。到企業微信後臺「應用管理 → 你的自建應用 → 企業郵箱（或\"郵件\"）」開通後再試；如果返回 48002，就是這個介面許可權沒開。",
       "remedy.wecom.rate_limited": "觸發了企業微信的呼叫頻率限制，請稍等一分鐘再試。",
       "remedy.wecom.token_invalid": "企業微信拒絕了本次訪問令牌（可能剛被重置）。已自動重新整理一次仍然失敗，請確認 Secret 是否剛剛重新生成。",
       "remedy.wecom.network_error": "連不上企業微信介面。請檢查伺服器出網、DNS 或代理設置。",
       "remedy.wecom.bad_response": "企業微信返回了非預期內容（可能是反向代理的報錯頁）。請檢查 baseUrl 或網絡出口。",
-      "remedy.wecom.send_failed": "企業微信拒絕了這次發信請求。請確認發件郵箱已在企業微信側開通，並檢視服務日誌中的原始錯誤碼。"
+      "remedy.wecom.send_failed": "企業微信拒絕了這次發信請求。請確認發件郵箱已在企業微信側開通，並檢視服務日誌中的原始錯誤碼。",
+      "connect.corpIdLink": "找不到企業 ID？開啟企業微信後臺「我的企業」（企業資訊在最底部）"
     },
     "en-US": {
       "admin.systemSettings": "WeCom Mail",
@@ -289,12 +292,13 @@
       "remedy.wecom.invalid_corp_id": "The enterprise ID is wrong. Copy it again from My Enterprise → Enterprise info.",
       "remedy.wecom.invalid_secret": "The app secret is wrong or was reset. Regenerate it in the console and copy the new value.",
       "remedy.wecom.ip_not_allowed": "This app enforces trusted IPs: add this server's egress IP under Apps → your app → Trusted IPs, or turn the restriction off.",
-      "remedy.wecom.mail_forbidden": "The app has no enterprise-mailbox (mail) permission. Enable mail for it in the WeCom console and retry.",
+      "remedy.wecom.mail_forbidden": "This app has no enterprise-mailbox (mail) API permission. Enable the mailbox/mail permission for your self-built app in the WeCom console and retry; errcode 48002 means exactly that.",
       "remedy.wecom.rate_limited": "WeCom rate-limited the call. Wait a minute and try again.",
       "remedy.wecom.token_invalid": "WeCom rejected the access token (it was probably just reset). We refreshed it once and still failed — check whether the secret was regenerated moments ago.",
       "remedy.wecom.network_error": "Cannot reach the WeCom API. Check egress, DNS or proxy settings.",
       "remedy.wecom.bad_response": "WeCom returned something unexpected (possibly a proxy error page). Check `baseUrl` and the network path.",
-      "remedy.wecom.send_failed": "WeCom rejected this send. Make sure the sender mailbox is enabled on the WeCom side and check the raw error code in the service logs."
+      "remedy.wecom.send_failed": "WeCom rejected this send. Make sure the sender mailbox is enabled on the WeCom side and check the raw error code in the service logs.",
+      "connect.corpIdLink": "Cannot find the enterprise ID? Open My Enterprise in the WeCom console (the ID sits at the bottom)."
     }
   }
 }

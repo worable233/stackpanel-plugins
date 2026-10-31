@@ -55,10 +55,11 @@
   "remedy.wecom.invalid_corp_id": "The enterprise ID is wrong. Copy it again from My Enterprise → Enterprise info.",
   "remedy.wecom.invalid_secret": "The app secret is wrong or was reset. Regenerate it in the console and copy the new value.",
   "remedy.wecom.ip_not_allowed": "This app enforces trusted IPs: add this server's egress IP under Apps → your app → Trusted IPs, or turn the restriction off.",
-  "remedy.wecom.mail_forbidden": "The app has no enterprise-mailbox (mail) permission. Enable mail for it in the WeCom console and retry.",
+  "remedy.wecom.mail_forbidden": "This app has no enterprise-mailbox (mail) API permission. Enable the mailbox/mail permission for your self-built app in the WeCom console and retry; errcode 48002 means exactly that.",
   "remedy.wecom.rate_limited": "WeCom rate-limited the call. Wait a minute and try again.",
   "remedy.wecom.token_invalid": "WeCom rejected the access token (it was probably just reset). We refreshed it once and still failed — check whether the secret was regenerated moments ago.",
   "remedy.wecom.network_error": "Cannot reach the WeCom API. Check egress, DNS or proxy settings.",
   "remedy.wecom.bad_response": "WeCom returned something unexpected (possibly a proxy error page). Check `baseUrl` and the network path.",
-  "remedy.wecom.send_failed": "WeCom rejected this send. Make sure the sender mailbox is enabled on the WeCom side and check the raw error code in the service logs."
+  "remedy.wecom.send_failed": "WeCom rejected this send. Make sure the sender mailbox is enabled on the WeCom side and check the raw error code in the service logs.",
+  "connect.corpIdLink": "Cannot find the enterprise ID? Open My Enterprise in the WeCom console (the ID sits at the bottom)."
 }
