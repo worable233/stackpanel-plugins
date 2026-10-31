@@ -180,6 +180,19 @@ if (hasFrontend) {
   frontendFiles.push('frontend/manifest.json');
 }
 
+// 4b) 体积预检：内核 `validateFrontendFiles` 对单个前端产物（不含 `.map`）有
+//     2 MiB 上限（`MAX_FRONTEND_FILE_BYTES`）。在这里挡下来，比让用户点「安装」
+//     时收到 422 好得多——而且这类失败发生在下载完整包之后。
+const MAX_PACKAGED_FRONTEND_FILE_BYTES = 2 * 1024 * 1024;
+for (const [name, data] of files) {
+  if (!name.startsWith('frontend/dist/') || name.endsWith('.map')) continue;
+  if (data.byteLength > MAX_PACKAGED_FRONTEND_FILE_BYTES) {
+    throw new Error(
+      `前端产物过大：${name} 为 ${data.byteLength} 字节，超过内核上限 ${MAX_PACKAGED_FRONTEND_FILE_BYTES}`,
+    );
+  }
+}
+
 // 5) 签名：对「除 signature.json 外」的全部文件摘要签名。
 const privateKeyPem = readFileSync(keyPath, 'utf8');
 const signature = spec.signPackageFiles(files, privateKeyPem);
