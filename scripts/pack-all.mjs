@@ -86,7 +86,12 @@ for (const dir of ids) {
     throw new Error(`${dir}: 期望新增 1 个目录条目，实际 ${created.length}（${created.join(', ')}）`);
   }
   const entry = path.join(entriesDir, created[0]);
-  packed.push({ dir, id: created[0].replace(/\.json$/, ''), entry, size: statSync(entry).size });
+  packed.push({
+    dir,
+    id: created[0].replace(/^plugin-/, '').replace(/\.json$/, ''),
+    entry,
+    size: statSync(entry).size,
+  });
 }
 
 console.log(`\n[pack-all] ${packed.length} 个包已产出 → ${outDir}`);

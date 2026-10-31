@@ -79,13 +79,25 @@ const publisher = opts['publisher'] ?? 'stackpanel';
 const repository = opts['repository'] ?? 'worable233/stackpanel-plugins';
 const tag = opts['tag'] ?? 'plugins-v0.1.0';
 const channel = opts['channel'] ?? 'stable';
-const compatKernel = opts['compat-kernel'] ?? '>=0.1.0 <1.0.0';
-const compatApi = opts['compat-api'] ?? '>=0.4.0';
-const compatAbi = opts['compat-abi'] ?? '^1.0.0';
+// 兼容区间的默认值与文档口径一致：从 `KERNEL_VERSION` 起、到下一个 minor 之前
+// （`rehearse-distribution.mjs` 用的是同一条规则）。写死 `<1.0.0` 会把「0.9 也能装」
+// 这种没人验证过的承诺签进条目里。
+function nextMinor(version) {
+  const [major, minor] = version.split('.').map(Number);
+  return `${major}.${minor + 1}.0`;
+}
+
 
 const spec = await import(
   pathToFileURL(path.join(kernelRoot, 'packages/spec/dist/index.js')).href
 );
+
+// 兼容区间的默认值与文档口径一致：`KERNEL_VERSION` 起、到下一个 minor 之前
+// （`rehearse-distribution.mjs` 用同一条规则）。
+const compatKernel =
+  opts['compat-kernel'] ?? `>=${spec.KERNEL_VERSION} <${nextMinor(spec.KERNEL_VERSION)}`;
+const compatApi = opts['compat-api'] ?? `>=${spec.KERNEL_API_VERSION}`;
+const compatAbi = opts['compat-abi'] ?? '^1.0.0';
 
 const pkg = JSON.parse(readFileSync(path.join(pluginDir, 'package.json'), 'utf8'));
 const frontendDir = path.join(pluginDir, 'frontend');
@@ -245,7 +257,9 @@ writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
 
 const entriesDir = path.resolve(opts['entries'] ?? path.join(outDir, 'entries'));
 mkdirSync(entriesDir, { recursive: true });
-const manifestPath = path.join(entriesDir, `${id}.json`);
+// 条目文件名按 `<kind>-<id>.json`：插件与主题允许同 id（`minimal` 两边都有），
+// 只写 `<id>.json` 时后拷进去的会静默覆盖前一个，目录里凭空少一条。
+const manifestPath = path.join(entriesDir, `plugin-${id}.json`);
 execSync(
   `node ${JSON.stringify(path.join(kernelRoot, 'scripts/release/build-manifest.mjs'))} ` +
     `--zip ${JSON.stringify(zipPath)} --input ${JSON.stringify(metaPath)} --out ${JSON.stringify(manifestPath)}`,
