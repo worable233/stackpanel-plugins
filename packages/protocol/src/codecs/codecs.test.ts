@@ -161,6 +161,50 @@ describe('anthropic / gemini 的方言差异', () => {
   });
 });
 
+describe('openai-responses 的工具回合编码', () => {
+  const codec = codecFor('openai-responses');
+
+  it('assistant 同时有文本与 tool-call 时，工具调用不会被丢掉', () => {
+    // 实测回归：Agent 的常态是「先说一句、再调工具」。早先只有在
+    // `parts.length === 1` 时才编码 `function_call`，于是混合回合里工具调用
+    // 被静默丢弃，紧跟其后的 `function_call_output` 找不到 call_id，上游 400
+    // （`function_call_output requires item_reference ids matching each call_id`）。
+    const body = codec.encodeRequest({
+      model: 'm',
+      stream: false,
+      messages: [
+        { role: 'user', parts: [{ type: 'text', text: '列出插件' }] },
+        {
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: '我先查一下。' },
+            { type: 'tool-call', id: 'call_1', name: 'plugins_list', arguments: '{}' },
+          ],
+        },
+        {
+          role: 'tool',
+          toolCallId: 'call_1',
+          parts: [{ type: 'tool-result', id: 'call_1', content: '{"ok":true}' }],
+        },
+      ],
+    }) as { input: Array<Record<string, unknown>> };
+
+    const calls = body.input.filter((item) => item['type'] === 'function_call');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ call_id: 'call_1', name: 'plugins_list' });
+    // 文本仍在（作为 assistant 的 output_text），且顺序在 function_call 之前。
+    const textIndex = body.input.findIndex((item) => item['role'] === 'assistant');
+    const callIndex = body.input.findIndex((item) => item['type'] === 'function_call');
+    expect(textIndex).toBeGreaterThanOrEqual(0);
+    expect(textIndex).toBeLessThan(callIndex);
+    // 工具结果依然按 call_id 回灌。
+    expect(body.input.at(-1)).toMatchObject({
+      type: 'function_call_output',
+      call_id: 'call_1',
+    });
+  });
+});
+
 describe('协议中立助手', () => {
   it('textOf 只取文本片段', () => {
     expect(

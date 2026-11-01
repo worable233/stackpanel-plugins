@@ -117,14 +117,40 @@ export const openaiResponsesCodec: ProtocolCodec = {
         });
         continue;
       }
-      const call = message.parts.find((part) => part.type === 'tool-call');
-      if (call && call.type === 'tool-call' && message.parts.length === 1) {
-        input.push({
-          type: 'function_call',
-          call_id: call.id,
-          name: call.name,
-          arguments: call.arguments,
-        });
+      /**
+       * assistant 回合必须**按 part 顺序拆成多个 input item**：
+       * 文本 → `message`，每个 tool-call → `function_call`。
+       *
+       * 早先只在 `parts.length === 1` 时才编码 `function_call`，否则整条
+       * assistant 消息被压成一条 `{role:'assistant', content:[input_text…]}`。
+       * 于是「模型先说一句、再调工具」（Agent 的常态）里工具调用被静默丢弃，
+       * 紧接着的 `function_call_output` 就找不到对应的 call —— 上游回
+       * `function_call_output requires item_reference ids matching each call_id`。
+       * 这类 400 只在真正跑过 Agent 时出现，单测里没人拼过混合回合。
+       */
+      const calls = message.parts.filter(
+        (part): part is Extract<IRPart, { type: 'tool-call' }> => part.type === 'tool-call',
+      );
+      if (calls.length > 0) {
+        const content: Array<Record<string, unknown>> = [];
+        for (const part of message.parts) {
+          if (part.type === 'text' && part.text) content.push({ type: 'output_text', text: part.text });
+          else if (part.type === 'image') {
+            const url =
+              part.url ??
+              (part.data ? `data:${part.mediaType ?? 'image/png'};base64,${part.data}` : '');
+            if (url) content.push({ type: 'input_image', image_url: url });
+          }
+        }
+        if (content.length > 0) input.push({ role: 'assistant', content });
+        for (const call of calls) {
+          input.push({
+            type: 'function_call',
+            call_id: call.id,
+            name: call.name,
+            arguments: call.arguments,
+          });
+        }
         continue;
       }
       const content: Array<Record<string, unknown>> = [];
