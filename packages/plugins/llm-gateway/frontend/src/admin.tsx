@@ -91,6 +91,29 @@ function failure(cause: unknown, message: string): string {
 const MODEL_LIMIT = 500;
 
 /**
+ * 创建成功后从回执里读出新账号 id。
+ *
+ * 内核 `PluginActionResult` 不回传响应体（只有 `ok` / `message` / `error` /
+ * `requestId`），所以这里优先读插件自己放进 `message` 的 id；读不到就返回
+ * null，页面整页刷新（`onDone`）也能看到新账号——只是少了“直接跳到编辑页”。
+ */
+function createdIdFrom(result: unknown, tr: Translator): string | null {
+  if (!result || typeof result !== 'object') return null;
+  const record = result as Record<string, unknown>;
+  for (const key of ['id', 'accountId', 'resourceId']) {
+    const value = record[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  const message = record['message'];
+  if (typeof message === 'string') {
+    const match = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(message);
+    if (match) return match[0];
+  }
+  void tr;
+  return null;
+}
+
+/**
  * 把「美元/token」格式化成「美元/百万 token」，保留 4 位有效小数。
  *
  * 界面要显示 `$0.30/M` 这种人能读的量纲；直接给 `3e-7` 谁都看不懂。
@@ -1319,8 +1342,19 @@ function GatewayAdminAccountEditor(props: AdminPageComponentProps): ReactElement
   const tr = t(props.locale);
   const data = props.data as { accounts?: z.infer<typeof adminAccountsSchema> };
   const accountId = props.params?.id;
-  const editing = accountId
-    ? ((data.accounts?.accounts ?? []).find((account) => account.id === accountId) ?? null)
+  /**
+   * 当前编辑的账号：先看路由参数，再看「刚创建成功」的那一条。
+   *
+   * 后者是 A-2 的修复点：以前保存链路是「先 POST 建主体，再由页面补齐其它
+   * 字段」，第二步抛错时页面直接 `catch` 成「保存失败，请重试」，于是库里留下
+   * 一个半成品账号、界面却报失败——用户以为没建成，重试一次再建一条。
+   * 现在建主体与全部字段是同一次提交，这里额外记住「刚建好的账号」，
+   * 万一后续刷新失败也不会变成「查无此页」。
+   */
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const effectiveId = accountId ?? createdId;
+  const editing = effectiveId
+    ? ((data.accounts?.accounts ?? []).find((account) => account.id === effectiveId) ?? null)
     : null;
   const createAction = props.actions['llm-gateway.create-account'];
   const updateAction = props.actions['llm-gateway.update-account'];
@@ -1356,6 +1390,11 @@ function GatewayAdminAccountEditor(props: AdminPageComponentProps): ReactElement
             editing={editing}
             createAction={createAction}
             updateAction={updateAction}
+            onCreated={(id) => {
+              // 主体已经落库，页面切成「编辑这条」，后续任何失败都只影响字段。
+              setCreatedId(id);
+              router.replace(`/admin/plugin/llm-gateway/accounts/${id}/edit`);
+            }}
             onDone={returnToList}
             onPendingChange={setSaving}
             tr={tr}
@@ -1398,6 +1437,7 @@ function AccountForm({
   editing,
   createAction,
   updateAction,
+  onCreated,
   onDone,
   onPendingChange,
   tr,
@@ -1405,6 +1445,8 @@ function AccountForm({
   editing: AccountRow | null;
   createAction: (formData: FormData) => Promise<void>;
   updateAction: (formData: FormData) => Promise<void>;
+  /** 主体创建成功后回调（带新账号 id），用于把页面切成编辑态。 */
+  onCreated: (id: string) => void;
   onDone: () => void;
   onPendingChange: (pending: boolean) => void;
   tr: Translator;
@@ -1530,13 +1572,32 @@ function AccountForm({
         if (editing) {
           form.set('id', editing.id);
           form.set('status', status);
-          await updateAction(form);
+          const result = await updateAction(form);
+          if (result && result.ok === false) {
+            setError(result.error || tr('common.saveFailed'));
+            return;
+          }
         } else {
-          await createAction(form);
+          /**
+           * 单请求原子提交（A-1）：`models` 与主体在同一个 body 里落库。
+           * 以前这里只建主体、之后再补 models，第二步在浏览器里抛错时就成了
+           * 「后端全 2xx、界面报失败、库里半成品」。
+           */
+          const result = await createAction(form);
+          if (result && result.ok === false) {
+            setError(result.error || tr('common.saveFailed'));
+            return;
+          }
+          const created = createdIdFrom(result, tr);
+          if (created) {
+            onCreated(created);
+            return;
+          }
         }
         onDone();
-      } catch {
-        setError(tr('common.saveFailed'));
+      } catch (cause) {
+        // 真实原因上屏（内核 action 封装已把 `error` / `reqId` 透出，见 C-1）。
+        setError(failure(cause, tr('common.saveFailed')));
       } finally {
         onPendingChange(false);
       }

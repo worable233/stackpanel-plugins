@@ -121,6 +121,7 @@ import {
   listPoliciesByTokens,
   listRecentAllLogs,
   listRecentLogs,
+  findAccountByName,
   getTask,
   listTasks,
   listUserTasks,
@@ -226,6 +227,8 @@ const GATEWAY_ERROR_CODES: Record<string, string> = {
 const GATEWAY_ERROR_PREFIX_CODES: Record<string, string> = {
   上游返回: 'llm_gateway.upstream_failed',
   拉取模型失败: 'llm_gateway.models_fetch_failed',
+  // A-3：同名账号是 409 的稳定原因，界面据此给出「已存在同名账号」而不是通用失败。
+  已存在同名账号: 'llm_gateway.account_name_taken',
 };
 
 function gatewayErrorCode(message: string): string {
@@ -923,7 +926,45 @@ function taskView(
   };
 }
 
-/** 统一的 handler 错误包装。 */
+/** `Idempotency-Key` 请求头（与内核写操作契约同名）。 */
+function idempotencyKey(req: HttpRequest): string | null {
+  const raw = req.headers?.['idempotency-key'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length >= 8 && trimmed.length <= 200 ? trimmed : null;
+}
+
+/**
+ * 创建账号的幂等记录：`Idempotency-Key` → 已建账号 id（落 `ctx.state`）。
+ *
+ * 前端双击/网络重试时，同一把 key 回来的是同一个账号，而不是第二条同名记录
+ * （A-3）。这里只存 id，不做完整响应回放：名字查重（`findAccountByName`）是
+ * 第二道闸。
+ */
+const ACCOUNT_IDEMPOTENCY_PREFIX = 'account-create:';
+const ACCOUNT_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function readAccountIdempotency(key: string): Promise<string | null> {
+  try {
+    return await state().get(`${ACCOUNT_IDEMPOTENCY_PREFIX}${key}`);
+  } catch {
+    return null;
+  }
+}
+
+async function rememberAccountIdempotency(key: string, accountId: string): Promise<void> {
+  try {
+    await state().set(
+      `${ACCOUNT_IDEMPOTENCY_PREFIX}${key}`,
+      accountId,
+      ACCOUNT_IDEMPOTENCY_TTL_MS,
+    );
+  } catch {
+    // 幂等记录写失败不能把已成功的创建变成 500：名字查重仍会拦住下一次重试。
+  }
+}
+
 /**
  * 管理端操作的审计（D2）。
  *
@@ -2425,6 +2466,19 @@ export const llmGatewayPlugin = definePlugin({
         const parsed = accountSchema.safeParse(req.body);
         if (!parsed.success) throw new GatewayError(400, '参数无效');
         const { apiKey, keys: extraKeys, rewrites: rawRewrites, ...rest } = parsed.data;
+        // A-3 唯一性：同名账号是运维事故，而且幂等缺失时重试会静默多建一条。
+        // 先查重；并发两条同时通过检查时，下一次合并进“同名”分支（见下方
+        // `idempotentKey` 分支）——真正的强一致仍需库级唯一索引，但插件数据表
+        // 是内核托管 JSONB（`name` 在 `spec` 里），这里只能做到“请求级”保证。
+        const duplicate = await findAccountByName(rest.name);
+        if (duplicate) {
+          // 带相同 `Idempotency-Key` 的重试直接回同一条（幂等），否则 409。
+          const retryKey = idempotencyKey(req);
+          if (retryKey && (await readAccountIdempotency(retryKey)) === duplicate.id) {
+            return reply.code(200).send({ account: { id: duplicate.id, name: duplicate.name } });
+          }
+          throw new GatewayError(409, `已存在同名账号：${duplicate.name}`);
+        }
         // C4：改写配置在写入时校验（点路径/头名/状态码范围），非法直接 400，
         // 避免一份坏配置在运行期悄悄改坏所有请求。
         const rewrites = validateRewriteConfig(rawRewrites);
@@ -2460,6 +2514,8 @@ export const llmGatewayPlugin = definePlugin({
           provider: rest.provider ?? 'openai-chat',
           baseUrl: rest.baseUrl,
           apiKeyRef,
+          // `models` 与主体同一次写入（A-1）：不再有「先建账号、再补模型、第二步在
+          // 浏览器里炸掉」的中间态。未选模型就是 `[]`（= 不限定），而不是丢失。
           models: rest.models ?? [],
           status: rest.status ?? 'ACTIVE',
           priority: rest.priority ?? 0,
@@ -2486,7 +2542,13 @@ export const llmGatewayPlugin = definePlugin({
           rewritesEnabled:
             (created.rewrites as Record<string, unknown> | null)?.['enabled'] === true,
         });
-        return reply.code(201).send({ account: { id: created.id, name: created.name } });
+        const retryKey = idempotencyKey(req);
+        if (retryKey) await rememberAccountIdempotency(retryKey, created.id);
+        // 回执带上真正的 models 数量：前端拿它标注“已建 %d 个模型”，
+        // 也让“建了但字段全丢”这种半成品不可能再被当成成功。
+        return reply
+          .code(201)
+          .send({ account: { id: created.id, name: created.name }, models: created.models.length });
       }),
     },
     {

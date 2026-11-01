@@ -229,12 +229,23 @@ export function createAgentProvider(
       } finally {
         signal.removeEventListener('abort', onAbort);
       }
-      if (status >= 400)
+      if (status >= 400) {
+        /**
+         * 把上游的真实原因带上（C-1 的同一类问题：失败信息在链路上被逐层吞掉）。
+         *
+         * 以前这里只有 `模型网关拒绝推理（502）`：管理员看到的状态码是网关自己
+         * 的，真正的 400 与那句 `function_call_output requires item_reference`
+         * 只存在于插件的用量台账里。于是「Agent 跑不通」变成了只能靠翻库排障。
+         * 现在把错误体截断后附在消息里——内核的「测试连接」据此能直接判出
+         * 「上游拒绝工具协议」，而不是笼统的不可达。
+         */
+        const detail = Buffer.concat(chunks).toString('utf8').replace(/\s+/g, ' ').slice(0, 500);
         throw new LlmProviderError(
           status === 429 ? 'rate_limited' : 'upstream_error',
-          `模型网关拒绝推理（${status}）`,
+          `模型网关拒绝推理（${status}）${detail ? `：${detail}` : ''}`,
           false,
         );
+      }
       const parsed = z
         .object({
           model: z.string(),

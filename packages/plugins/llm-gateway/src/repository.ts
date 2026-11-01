@@ -131,6 +131,18 @@ export async function createAccount(spec: GatewayAccountData): Promise<AccountRo
   return toRow(instance);
 }
 
+/**
+ * Resolve an account by name (case-insensitive). Used to reject duplicates.
+ *
+ * `name` 是运维识别上游的唯一手段（账号池列表、选号日志、审计都按它读）；
+ * 同名多条会让「这个号到底走的哪一条」无法回答，也会让重试悄悄多建一条。
+ */
+export async function findAccountByName(name: string): Promise<AccountRow | null> {
+  const rows = await listAllAccounts();
+  const wanted = name.trim().toLowerCase();
+  return rows.find((row) => row.name.trim().toLowerCase() === wanted) ?? null;
+}
+
 export async function updateAccount(
   id: string,
   patch: Partial<GatewayAccountData>,
