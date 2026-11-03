@@ -33,7 +33,6 @@ import { originFromHeaders, parseCredentials } from './credential-parser.js';
  */
 
 const CONFIG_KEY = 'wecom-mail-config';
-const BRAND = 'StackPanel';
 
 const configSchema = z.object({
   /** 企业 ID（我的企业 → 企业信息）。 */
@@ -298,7 +297,7 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
     const content = renderNoticeEmail({
       title: '企业微信邮箱测试',
       body: '如果你看到这封邮件，说明企业微信邮箱渠道已配置成功。',
-      brand: BRAND,
+      brand: '系统',
       ...(config.publicBaseUrl ? { link: absoluteUrl(config.publicBaseUrl, '/admin') } : {}),
     });
     await client.send({
@@ -346,7 +345,7 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
     const content = renderNoticeEmail({
       title: dispatch.title,
       body: dispatch.body ?? '',
-      brand: BRAND,
+      ...(dispatch.brand ? { brand: dispatch.brand } : {}),
       ...(absoluteUrl(config.publicBaseUrl, dispatch.link)
         ? { link: absoluteUrl(config.publicBaseUrl, dispatch.link) as string }
         : {}),
@@ -370,7 +369,7 @@ class WecomMailService implements NotificationChannel, IdentityChallengeSender {
     const content = renderCodeEmail({
       code: message.code,
       expiresInMinutes,
-      brand: BRAND,
+      ...(message.brand ? { brand: message.brand } : {}),
       ...(message.locale ? { locale: message.locale } : {}),
     });
     await client.send({

@@ -222,7 +222,7 @@ class SmtpService implements NotificationChannel, IdentityChallengeSender {
     const content = renderNoticeEmail({
       title: 'SMTP 测试邮件',
       body: '如果你看到这封邮件，说明 SMTP 通知渠道已配置成功。',
-      brand: 'StackPanel',
+      brand: resolved.secret.fromName ?? '系统',
     });
     await this.transport().send({
       to: email.data,
@@ -258,6 +258,7 @@ class SmtpService implements NotificationChannel, IdentityChallengeSender {
     const content = renderNoticeEmail({
       title: dispatch.title,
       body: dispatch.body ?? '',
+      ...(dispatch.brand ? { brand: dispatch.brand } : {}),
       ...(absoluteUrl(resolved.secret.publicBaseUrl, dispatch.link)
         ? {
             link: absoluteUrl(resolved.secret.publicBaseUrl, dispatch.link) as string,
@@ -288,7 +289,7 @@ class SmtpService implements NotificationChannel, IdentityChallengeSender {
     const content = renderCodeEmail({
       code: message.code,
       expiresInMinutes,
-      brand: 'StackPanel',
+      ...(message.brand ? { brand: message.brand } : {}),
       ...(message.locale ? { locale: message.locale } : {}),
     });
     await this.transport().send({
