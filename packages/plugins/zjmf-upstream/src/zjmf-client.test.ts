@@ -1923,3 +1923,76 @@ describe('已用流量（单位 GB 由速率曲线交叉取证）', () => {
     expect(await build([]).getTrafficUsage('42')).toBeNull();
   });
 });
+
+/**
+ * 上游商品列表缓存。
+ *
+ * 现场：`GET /api/product/list` 单次 1.8~2.3s / 4.47MB（1890 商品），而一次
+ * 页面渲染会打 2~4 次上游，其中商品列表每次都是全量重拉。缓存必须真的省掉
+ * 那次回源，否则「加了缓存但服务会每次新建 client」照样白搭。
+ */
+describe('listProducts snapshot cache', () => {
+  function cachedFixture() {
+    let productHits = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const path = new URL(input.toString()).pathname;
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      productHits += 1;
+      return json({
+        status: 200,
+        data: { list: [{ id: 'p1', name: 'VPS', sale_price: '9.90' }], currency_code: 'CNY' },
+      });
+    });
+    const client = new ZJMFClient(
+      {
+        id: 'cached',
+        baseUrl: 'https://finance.example',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+    return { client, fetchMock, hits: () => productHits };
+  }
+
+  it('serves the second call from the snapshot instead of re-fetching 4.4MB', async () => {
+    const { client, hits } = cachedFixture();
+    const first = await client.listProducts();
+    const second = await client.listProducts();
+    expect(hits()).toBe(1);
+    expect(second).toBe(first);
+  });
+
+  it('keeps login + first fetch as the only upstream work', async () => {
+    const { client, fetchMock } = cachedFixture();
+    await client.listProducts();
+    await client.listProducts();
+    await client.listProducts();
+    // 1 次登录 + 1 次列举。
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache product detail lookups (pricing must stay authoritative)', async () => {
+    let detailHits = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const path = new URL(input.toString()).pathname;
+      if (path === '/zjmf_api_login') return json({ status: 200, jwt: 'jwt' });
+      detailHits += 1;
+      return json({ status: 200, data: { product: { id: '7', name: 'VPS', sale_price: '9.90' } } });
+    });
+    const client = new ZJMFClient(
+      {
+        id: 'detail',
+        baseUrl: 'https://finance.example',
+        protocol: 'finance',
+        username: 'u',
+        password: 'p',
+      },
+      fetchMock,
+    );
+    await client.getProduct('7');
+    await client.getProduct('7');
+    expect(detailHits).toBe(2);
+  });
+});

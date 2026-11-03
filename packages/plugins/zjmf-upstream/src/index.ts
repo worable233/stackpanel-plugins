@@ -210,6 +210,9 @@ export function idleSyncReason(
 
 /** Backend service that owns all source credentials and supplier synchronization. */
 export class ZJMFUpstreamService {
+  /** 按上游复用的 client（见 `clientFor`）。 */
+  private readonly clientCache = new Map<string, { key: string; client: ZJMFClient }>();
+
   constructor(private readonly ctx: PluginContext) {}
 
   /** 执行一轮到期同步。由内核任务 `scheduled-sync` 周期调用（集群唯一执行）。 */
@@ -236,6 +239,29 @@ export class ZJMFUpstreamService {
     const parsed = createUpstreamSchema.safeParse(input);
     if (!parsed.success) throw new UpstreamError(400, '上游配置参数无效');
     const data = parsed.data;
+    /**
+     * 应用层查重。
+     *
+     * `name` 有唯一索引兜底，但索引冲突抛出来的是数据库错误，用户看不懂。
+     * 这里先查一遍给出可执行提示；真正的并发竞争仍由索引挡下。
+     *
+     * 判重口径是 baseUrl（归一化后）+ 协议：同一地址、同一协议再来一条，只会
+     * 让同步任务重复拉同一份 1890 个商品，没有任何收益。
+     */
+    const baseUrl = normalizeBaseUrl(data.baseUrl);
+    const existing = await listUpstreams();
+    const duplicate = existing.find(
+      (row) => row.name === data.name || (row.baseUrl === baseUrl && row.protocol === data.protocol),
+    );
+    if (duplicate) {
+      throw new UpstreamError(
+        409,
+        duplicate.name === data.name
+          ? `上游名称“${data.name}”已存在`
+          : `该地址已有同协议的上游配置：“${duplicate.name}”`,
+        'zjmf.upstream_duplicate',
+      );
+    }
     /**
      * 资源与凭证必须同时成立。
      *
@@ -468,7 +494,7 @@ export class ZJMFUpstreamService {
     if (!source.enabled) throw new UpstreamError(409, '上游已停用');
     const runId = await createSyncRun(id);
     try {
-      const client = new ZJMFClient(await this.connectionFor(source));
+      const client = await this.clientFor(source);
       const listed = await client.listProducts();
       const listedById = new Map(listed.products.map((product) => [product.id, product]));
       // 只更新已绑定商品；绝不创建商店商品（商品由管理员显式创建后绑定）。
@@ -682,7 +708,43 @@ export class ZJMFUpstreamService {
     };
   }
 
+  /**
+   * 按上游复用 client。
+   *
+   * 原先每次调用都 `new ZJMFClient(await this.connectionFor(source))`：每次请求
+   * 都要重新读凭证 + 做一次 DNS/公网地址校验，更关键的是 **client 上的商品列表
+   * 缓存永远无法跨请求复用** —— 于是 4.47MB / 1.8~2.3s 的列举被反复重买。
+   *
+   * 缓存键带上 baseUrl / protocol / 凭证指纹：任何一项变了就换新 client，
+   * 不会拿旧连接去连新配置。凭证更新走 `setCredentials` 时会主动清掉。
+   */
+  private async clientFor(source: {
+    id: string;
+    baseUrl: string;
+    protocol: string;
+    allowUnverifiedV10Routes?: boolean;
+    v10Module?: ZJMFV10Module;
+  }): Promise<ZJMFClient> {
+    const connection = await this.connectionFor(source);
+    const key = JSON.stringify([
+      connection.id,
+      connection.baseUrl,
+      connection.protocol,
+      connection.username,
+      connection.password,
+      connection.allowUnverifiedV10Routes,
+      connection.v10Module,
+    ]);
+    const cached = this.clientCache.get(source.id);
+    if (cached && cached.key === key) return cached.client;
+    const client = new ZJMFClient(connection);
+    this.clientCache.set(source.id, { key, client });
+    return client;
+  }
+
   private async setCredentials(id: string, credentials: Credentials): Promise<void> {
+    // 换了凭证就必须换 client：否则旧连接（连同它缓存的商品列表）会继续被用。
+    this.clientCache.delete(id);
     if (!this.ctx.secrets.isAvailable()) {
       throw new UpstreamError(503, '密钥存储未配置');
     }
@@ -708,7 +770,7 @@ export class ZJMFUpstreamService {
     }> = [];
     for (const source of sources) {
       try {
-        const client = new ZJMFClient(await this.connectionFor(source));
+        const client = await this.clientFor(source);
         clients.push({
           upstreamId: source.id,
           client,
@@ -793,7 +855,7 @@ export class ZJMFUpstreamService {
     if (options?.sourceRef) {
       const source = await getUpstream(options.sourceRef);
       if (!source || !source.enabled) return null;
-      const product = await new ZJMFClient(await this.connectionFor(source)).getProduct(id);
+      const product = await (await this.clientFor(source)).getProduct(id);
       return this.toUpstreamItem(product, source.id, null, source.currency, source.defaultStock);
     }
     for (const { upstreamId, client, currency, defaultStock } of await this.clients()) {
@@ -818,7 +880,7 @@ export class ZJMFUpstreamService {
     if (options?.sourceRef) {
       const source = await getUpstream(options.sourceRef);
       if (!source || !source.enabled) return null;
-      const config = await new ZJMFClient(await this.connectionFor(source)).getConfig(id);
+      const config = await (await this.clientFor(source)).getConfig(id);
       return config ? normalizeCheckoutConfig(config) : null;
     }
     for (const { client } of await this.clients()) {
@@ -855,7 +917,7 @@ export class ZJMFUpstreamService {
     const errors: Array<{ sourceName: string; code: string; detail: string | null }> = [];
     for (const account of accounts) {
       try {
-        const client = new ZJMFClient(await this.connectionFor(account));
+        const client = await this.clientFor(account);
         const instances = await client.listHosts();
         await mapWithConcurrency(
           instances.filter((host) => !host.expiresAt || !host.openedAt),

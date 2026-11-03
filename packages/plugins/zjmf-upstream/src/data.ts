@@ -77,6 +77,18 @@ export const zjmfUpstreamModel = defineModel({
     { fields: ['enabled'], types: { enabled: 'boolean' } },
     { fields: ['syncState'], types: { syncState: 'string' } },
     { fields: ['lastAttemptAtMs'], types: { lastAttemptAtMs: 'number' } },
+    /**
+     * 名称唯一。
+     *
+     * 现场一度存在 3 条同名同 baseUrl 的 moebun —— 每条都会完整拉一遍 1890 个
+     * 商品，同步任务三倍开销，用户自己也分不清该改哪条。之前没有唯一约束，
+     * 唯一性只靠「列表里看起来没有」这个错觉。
+     *
+     * 只约束 `name`（真实列）。`baseUrl` 的唯一性放到应用层判，因为
+     * 「同一地址允许存在两条不同协议的配置」是合法需求，而内核的表达式索引
+     * 不支持这种带条件的唯一性。
+     */
+    { fields: ['name'], types: { name: 'string' }, unique: true },
   ],
 });
 

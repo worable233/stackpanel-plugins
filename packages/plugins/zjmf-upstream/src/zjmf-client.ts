@@ -157,6 +157,15 @@ export class ZJMFClientError extends Error {
 
 type Fetch = typeof fetch;
 
+/**
+ * 商品列表快照的复用窗口。
+ *
+ * 现场：单次列举 1.8~2.3s / 4.47MB，每次页面渲染都可能重拉。60s 足够覆盖一次
+ * 渲染里的多次调用与短时间内的重复访问，又不会让价格/库存长时间失真——
+ * 真正影响下单的价格与库存由 `getProduct` 单条与写接口负责，不走这份快照。
+ */
+const PRODUCT_LIST_TTL_MS = 60_000;
+
 const upstreamResponseSchema = z
   .object({
     status: z.coerce.number().optional(),
@@ -176,6 +185,12 @@ export class ZJMFClient {
   private token: string | null = null;
   /** 探测到的 console 路由家族（per-instance 缓存，避免每条请求都探测）。 */
   private moduleFamily: Exclude<ZJMFV10Module, 'auto'> | null = null;
+
+  /** 商品列表快照缓存（见 `listProducts`）。 */
+  private productsCache: {
+    value: { products: ZJMFProduct[]; currency: string | null };
+    expiresAt: number;
+  } | null = null;
 
   constructor(
     private readonly connection: ZJMFConnection,
@@ -272,18 +287,32 @@ export class ZJMFClient {
     products: ZJMFProduct[];
     currency: string | null;
   }> {
+    /**
+     * 带 TTL 的进程内缓存。
+     *
+     * 现场实测：`GET /api/product/list` 单次 **1.8~2.3s / 4.47MB（1890 商品）**，
+     * 而页面渲染会一次打 2~4 次上游，其中商品列表每次都是全量重拉。这不是
+     * 上游慢到不可用，是我们把一次可复用的结果反复买了单。
+     *
+     * 只缓存列举结果：它天然是「某个时刻的快照」，短 TTL 内复用不会影响
+     * 下单/开通的正确性（那些路径走 `getProduct` 单条与写接口，不读这份缓存）。
+     */
+    const cached = this.productsCache;
+    if (cached && Date.now() < cached.expiresAt) return cached.value;
     // 证据：10.4.6/route/api.php:13 `Route::get('product', ...)`（V10 开放 API 已取证）。
     const data = await this.authorizedGet(
       this.connection.protocol === 'finance' ? '/api/product/list' : '/api/v1/product',
     );
     const payload = object(data['data']);
     const list = Array.isArray(payload['list']) ? payload['list'] : [];
-    return {
+    const value = {
       products: list
         .map(normalizeProduct)
         .filter((product): product is ZJMFProduct => product !== null),
       currency: stringOrNull(payload['currency_code']),
     };
+    this.productsCache = { value, expiresAt: Date.now() + PRODUCT_LIST_TTL_MS };
+    return value;
   }
 
   async getProduct(id: string): Promise<ZJMFProduct> {
