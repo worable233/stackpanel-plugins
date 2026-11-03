@@ -36,6 +36,9 @@ interface Upstream {
   allowUnverifiedV10Routes?: boolean;
   v10Module?: 'auto' | 'mf_cloud' | 'remf_cloud' | 'mf_dcim' | 'idcsmart_common';
   lastSyncedAt: string | null;
+  lastAttemptAtMs?: number | null;
+  lastSyncError?: string | null;
+  lastSyncFailedAt?: string | null;
   productCount: number;
   credentialsConfigured: boolean;
 }
@@ -53,6 +56,8 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
   const sync = props.actions['zjmf-upstream.sync'];
   const remove = props.actions['zjmf-upstream.delete'];
   const upstreams = result?.upstreams ?? [];
+  // 读失败与「确实一条都没有」必须区分开：前者是故障，后者才是空态。
+  const dataFailed = (props.dataErrors ?? []).some((failure) => failure.as === 'upstreams');
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Upstream | null>(null);
 
@@ -319,6 +324,11 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
         <div className="border-b px-4 py-3">
           <SectionTitle>{tr('list.title')}</SectionTitle>
         </div>
+        {dataFailed ? (
+          <p className="border-b bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {tr('list.dataUnavailable')}
+          </p>
+        ) : null}
         {upstreams.length > 0 ? (
           <div className="divide-y">
             {upstreams.map((upstream) => (
@@ -351,6 +361,33 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                       minutes: upstream.syncIntervalMinutes,
                     })}
                   </p>
+                  {upstream.lastSyncError ? (
+                    /**
+                     * 上次同步失败的面板。
+                     *
+                     * 同步失败只写进 sync-run 时，列表上只能看到
+                     * `lastAttemptAtMs` 有值、状态仍是 IDLE —— 用户知道“试过了”
+                     * 却不知道“为什么没成”，只能来问人。这里直接给出原因 +
+                     * 时间，并在原地提供重试入口。
+                     */
+                    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-destructive">
+                      <span>
+                        {tr('list.lastSyncFailed', {
+                          reason: tr(`sync.reason.${syncReasonKey(upstream.lastSyncError)}`),
+                          time: formatSyncTime(upstream.lastSyncFailedAt),
+                        })}
+                      </span>
+                      {sync ? (
+                        <button
+                          type="button"
+                          className="underline underline-offset-2"
+                          onClick={() => void sync.run({ id: upstream.id })}
+                        >
+                          {tr('list.retrySync')}
+                        </button>
+                      ) : null}
+                    </p>
+                  ) : null}
                 </div>
                 {update || sync || remove ? (
                   <div className="flex items-center gap-2">
@@ -416,6 +453,25 @@ function SyncSubmitButton({ locale }: { locale: string | undefined }): ReactElem
 
 function formatPercent(bps: number): string {
   return `${(bps / 100).toFixed(2)}%`;
+}
+
+/**
+ * 把服务端的稳定 code 映射到本地词条的键。
+ *
+ * 词表里没有对应条目时回退到 `sync_failed`，而不是把 code 原文印到界面上：
+ * 界面文案归界面（ADR-0012），code 只用于选词。
+ */
+function syncReasonKey(code: string | null | undefined): string {
+  const suffix = (code ?? '').replace(/^zjmf\.(client\.)?/, '');
+  return suffix === 'credentials_rejected' ? 'credentials_rejected' : 'sync_failed';
+}
+
+/** 失败时间按本地时区显示；缺失时退回占位而不是 "Invalid Date"。 */
+function formatSyncTime(value: string | null | undefined): string {
+  if (!value) return '--';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '--';
+  return parsed.toLocaleString();
 }
 
 function UpstreamOverview(props: AdminPageComponentProps) {

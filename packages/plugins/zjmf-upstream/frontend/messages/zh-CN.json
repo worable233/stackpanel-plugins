@@ -119,5 +119,10 @@
   "pager.next": "下一页",
   "feedback.created": "上游已添加",
   "feedback.updated": "上游已更新",
-  "feedback.deleted": "上游已删除"
+  "feedback.deleted": "上游已删除",
+  "list.lastSyncFailed": "上次同步失败：{reason}（{time}）",
+  "list.retrySync": "重试同步",
+  "list.dataUnavailable": "上游列表读取失败，以下内容可能不完整。",
+  "sync.reason.credentials_rejected": "上游拒绝登录，请检查账号、密码与接口地址",
+  "sync.reason.sync_failed": "同步过程出错"
 }

@@ -188,29 +188,35 @@ export class ZJMFUpstreamService {
     const parsed = createUpstreamSchema.safeParse(input);
     if (!parsed.success) throw new UpstreamError(400, '上游配置参数无效');
     const data = parsed.data;
-    const instance = await extensions().create<ZjmfUpstreamData>(zjmfUpstreamModel, {
-      name: data.name,
-      baseUrl: normalizeBaseUrl(data.baseUrl),
-      ...(data.downstreamUrl ? { downstreamUrl: normalizeBaseUrl(data.downstreamUrl) } : {}),
-      protocol: data.protocol,
-      currency: data.currency.toUpperCase(),
-      markupBps: data.markupBps,
-      defaultStock: data.defaultStock,
-      syncIntervalMinutes: data.syncIntervalMinutes,
-      enabled: true,
-      syncState: 'IDLE',
-      allowUnverifiedV10Routes: data.allowUnverifiedV10Routes,
-      v10Module: data.v10Module,
-    });
-    try {
-      await this.setCredentials(instance.name, {
-        username: data.username,
-        password: data.password,
+    /**
+     * 资源与凭证必须同时成立。
+     *
+     * 旧写法是「先建资源、再单独存凭证，失败就删资源」。补偿删除本身也可能
+     * 失败（进程被杀、数据库抖动），于是留下一条点进去就报错的孤儿记录 ——
+     * 现场 `ed6205f7` 有资源无凭证正是这么来的。这里改用同一事务：任何一步
+     * 失败都整体回滚，不存在中间态，也不需要补偿。
+     */
+    const { instance } = await runTransaction(async (tx) => {
+      const created = await tx.extensions.create<ZjmfUpstreamData>(zjmfUpstreamModel, {
+        name: data.name,
+        baseUrl: normalizeBaseUrl(data.baseUrl),
+        ...(data.downstreamUrl ? { downstreamUrl: normalizeBaseUrl(data.downstreamUrl) } : {}),
+        protocol: data.protocol,
+        currency: data.currency.toUpperCase(),
+        markupBps: data.markupBps,
+        defaultStock: data.defaultStock,
+        syncIntervalMinutes: data.syncIntervalMinutes,
+        enabled: true,
+        syncState: 'IDLE',
+        allowUnverifiedV10Routes: data.allowUnverifiedV10Routes,
+        v10Module: data.v10Module,
       });
-    } catch (error) {
-      await extensions().delete(zjmfUpstreamModel, instance.name);
-      throw error;
-    }
+      await tx.secrets.set(
+        credentialsKey(created.name),
+        JSON.stringify({ username: data.username, password: data.password }),
+      );
+      return { instance: created };
+    });
     this.warnIfUnverifiedRoutesEnabled(instance.name, data.protocol, data.allowUnverifiedV10Routes);
     return {
       upstream: publicSource(toUpstream(instance)),
@@ -452,6 +458,9 @@ export class ZJMFUpstreamService {
         await tx.extensions.update<ZjmfUpstreamData>(zjmfUpstreamModel, id, {
           ...stripMeta(source),
           lastSyncedAt: new Date().toISOString(),
+          // 成功后清掉上一次的失败标记，否则列表会一直挂着一句过期的失败原因。
+          lastSyncError: null,
+          lastSyncFailedAt: null,
         });
       });
       await finishSyncRun(runId, { status: 'SUCCEEDED', ...aggregate });
@@ -469,6 +478,31 @@ export class ZJMFUpstreamService {
         status: 'FAILED',
         error: messageOf(displayError).slice(0, 191),
       });
+      /**
+       * 同时把失败回写到上游记录本身。
+       *
+       * sync-run 只有点进详情才看得到，而列表读的是上游记录：不同步这一份，
+       * 用户看到 `lastAttemptAtMs` 有值、状态还是 IDLE，完全不知道上次为什么
+       * 没成。这里存**稳定 code** 而不是散文（ADR-0012），文案交给界面词表。
+       */
+      const failureCode =
+        displayError instanceof UpstreamError
+          ? displayError.code
+          : displayError instanceof ZJMFClientError
+            ? displayError.code
+            : 'zjmf.sync_failed';
+      await extensions()
+        .update<ZjmfUpstreamData>(zjmfUpstreamModel, id, {
+          ...stripMeta(source),
+          lastSyncError: failureCode,
+          lastSyncFailedAt: new Date().toISOString(),
+        })
+        .catch((error) => {
+          // 回写失败不能盖住真正的同步错误，否则用户看到的是「记不下失败」。
+          this.ctx.logger.warn(
+            `zjmf-upstream: 记录同步失败原因失败 ${id}: ${messageOf(error)}`,
+          );
+        });
       if (displayError instanceof UpstreamError || displayError instanceof ZJMFClientError)
         throw displayError;
       throw new UpstreamError(502, '上游同步失败');

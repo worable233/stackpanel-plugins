@@ -119,5 +119,10 @@
   "pager.next": "Next",
   "feedback.created": "Upstream added",
   "feedback.updated": "Upstream updated",
-  "feedback.deleted": "Upstream deleted"
+  "feedback.deleted": "Upstream deleted",
+  "list.lastSyncFailed": "Last sync failed: {reason} ({time})",
+  "list.retrySync": "Retry sync",
+  "list.dataUnavailable": "Could not load the upstream list; the content below may be incomplete.",
+  "sync.reason.credentials_rejected": "The upstream rejected the login. Check the account, password and API host",
+  "sync.reason.sync_failed": "The sync run failed"
 }

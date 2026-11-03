@@ -63,6 +63,15 @@ export const zjmfUpstreamModel = defineModel({
     /** 上次同步尝试的 epoch 毫秒（同步锁的陈旧判定依赖数值比较）。 */
     lastAttemptAtMs: z.number().int().nullable().optional(),
     lastSyncedAt: z.string().nullable().optional(),
+    /**
+     * 上次同步失败的稳定错误码与时间。
+     *
+     * 只写进 sync-run 是不够的：列表读的是上游记录本身，「上次失败原因/时间」
+     * 就永远无处可显，用户只能看到 `lastAttemptAtMs` 有值却不知道发生了什么。
+     * `lastSyncError` 存 code（不是散文），文案由界面词表决定（ADR-0012）。
+     */
+    lastSyncError: z.string().nullable().optional(),
+    lastSyncFailedAt: z.string().nullable().optional(),
   }),
   indexes: [
     { fields: ['enabled'], types: { enabled: 'boolean' } },
@@ -104,6 +113,8 @@ export interface ZjmfUpstreamData {
   v10Module: 'auto' | 'mf_cloud' | 'remf_cloud' | 'mf_dcim' | 'idcsmart_common';
   lastAttemptAtMs?: number | null;
   lastSyncedAt?: string | null;
+  lastSyncError?: string | null;
+  lastSyncFailedAt?: string | null;
 }
 
 export interface ZjmfSyncRunData {
