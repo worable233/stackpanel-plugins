@@ -28,6 +28,14 @@ export interface ZJMFConnection {
   protocol: ZJMFProtocol;
   username: string;
   password: string;
+  /**
+   * `password` 里是站内登录密码还是上游 API 密钥。
+   *
+   * 魔方财务的 `/zjmf_api_login` 把两者放在同一个 `password` 字段，所以协议层
+   * 无需区分；但失败提示必须区分 —— 否则用户永远不知道「密码明明是对的」时
+   * 该往哪里改。
+   */
+  secretKind?: 'password' | 'api_key';
   /** V10 console 路由家族；默认 auto（探测）。 */
   v10Module?: ZJMFV10Module;
   /**
@@ -112,6 +120,7 @@ const ZJMF_CLIENT_ERROR_CODES: Record<string, string> = {
   清空购物车超时: 'zjmf.client.cart_clear_timeout',
   上游请求失败: 'zjmf.client.request_failed',
   上游凭证被拒绝: 'zjmf.client.credentials_rejected',
+  '上游凭证被拒绝（若密码无误，请改用 API 密钥模式）': 'zjmf.client.credentials_rejected',
   '上游登录响应缺少 JWT': 'zjmf.client.jwt_missing',
   '上游 URL 无效': 'zjmf.client.url_invalid',
   '上游 URL 必须为公网地址': 'zjmf.client.url_not_public',
@@ -1903,9 +1912,18 @@ export class ZJMFClient {
       password: this.connection.password,
     });
     if (response.status !== undefined && response.status !== 200) {
-      // This is an upstream login failure, never a StackPanel session failure.
-      // Preserve a stable code while keeping the HTTP status in the gateway range.
-      throw new ZJMFClientError(502, '上游凭证被拒绝');
+      /**
+       * 上游登录失败，绝不是 StackPanel 会话失败（保持 502，不染 401）。
+       *
+       * 魔方财务对「账号不存在」和「密码错」返回**完全相同**的
+       * `{"status":400,"msg":"鉴权失败"}`，所以无法从响应判断到底哪一项错了。
+       * 但我们可以按用户选择的凭证模式给出**可操作**的方向：填的是站内密码
+       * 时，最可能的原因就是这里需要的是 API 密钥。
+       */
+      throw new ZJMFClientError(
+        502,
+        this.connection.secretKind === 'api_key' ? '上游凭证被拒绝' : '上游凭证被拒绝（若密码无误，请改用 API 密钥模式）',
+      );
     }
     const token =
       this.connection.protocol === 'finance'

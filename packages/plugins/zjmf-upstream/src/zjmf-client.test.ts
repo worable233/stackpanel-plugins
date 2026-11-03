@@ -408,11 +408,38 @@ describe('ZJMFClient', () => {
 
     const error = await client.listProducts().catch((cause: unknown) => cause);
     expect(error).toBeInstanceOf(ZJMFClientError);
+    // 断言的是契约：502（网关类，不染 401）+ 稳定 code。
+    // 消息会随凭证模式变化（见下一条），不该被钉死在这里。
     expect(error).toMatchObject({
       status: 502,
       code: 'zjmf.client.credentials_rejected',
-      message: '上游凭证被拒绝',
     });
+  });
+
+  it('points at API-key mode when a login password was rejected', async () => {
+    // 魔方财务对「账号不存在」和「密码错」返回完全相同的鉴权失败，
+    // 无法从响应区分；但可以按凭证模式给出可操作的方向。
+    const make = (secretKind?: 'password' | 'api_key') =>
+      new ZJMFClient(
+        {
+          id: 'legacy',
+          baseUrl: 'https://finance.example',
+          protocol: 'finance',
+          username: 'u',
+          password: 'p',
+          ...(secretKind ? { secretKind } : {}),
+        },
+        vi.fn<typeof fetch>(async () => json({ status: 400, msg: '鉴权失败' })),
+      );
+
+    const asPassword = await make().listProducts().catch((cause: unknown) => cause);
+    expect(asPassword.code).toBe('zjmf.client.credentials_rejected');
+    expect(asPassword.message).toMatch(/API 密钥/);
+
+    // 已经声明是 API 密钥时不要再重复这句话：那会把用户引向错误的方向。
+    const asKey = await make('api_key').listProducts().catch((cause: unknown) => cause);
+    expect(asKey.code).toBe('zjmf.client.credentials_rejected');
+    expect(asKey.message).not.toMatch(/API 密钥/);
   });
 
   it('uses the legacy V1 JWT field and product routes', async () => {

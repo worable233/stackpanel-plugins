@@ -120,6 +120,12 @@ const createUpstreamSchema = z.object({
   protocol: protocolSchema,
   username: z.string().trim().min(1).max(191),
   password: z.string().min(1).max(191),
+  /**
+   * 凭证模式：`api_key` 表示 `password` 里存的是上游「API 密钥」而不是
+   * 站内登录密码。魔方财务的开放接口把两者放在同一个 `password` 字段，
+   * 用户几乎必然先填错一次（见 `credentialsSchema.secretKind` 的实测证据）。
+   */
+  secretKind: z.enum(['password', 'api_key']).default('password'),
   currency: z.string().trim().min(1).max(8).default('CNY'),
   markupBps: z.number().int().min(0).max(100_000).default(0),
   defaultStock: z.number().int().min(1).max(1_000_000).default(1_000_000),
@@ -152,6 +158,8 @@ const sourceIdSchema = z.object({ id: z.string().min(1).max(191) });
 interface Credentials {
   username: string;
   password: string;
+  /** 见 `credentialsSchema.secretKind`。 */
+  secretKind?: 'password' | 'api_key';
 }
 
 interface SyncSummary {
@@ -287,7 +295,11 @@ export class ZJMFUpstreamService {
       });
       await tx.secrets.set(
         credentialsKey(created.name),
-        JSON.stringify({ username: data.username, password: data.password }),
+        JSON.stringify({
+          username: data.username,
+          password: data.password,
+          secretKind: data.secretKind,
+        }),
       );
       return { instance: created };
     });
@@ -703,6 +715,7 @@ export class ZJMFUpstreamService {
       baseUrl: await assertPublicUpstreamUrl(source.baseUrl),
       protocol: protocol.data,
       ...credentials,
+      ...(credentials.secretKind ? { secretKind: credentials.secretKind } : {}),
       allowUnverifiedV10Routes: source.allowUnverifiedV10Routes ?? false,
       v10Module: source.v10Module ?? 'auto',
     };
@@ -732,6 +745,7 @@ export class ZJMFUpstreamService {
       connection.protocol,
       connection.username,
       connection.password,
+      connection.secretKind,
       connection.allowUnverifiedV10Routes,
       connection.v10Module,
     ]);
@@ -1025,6 +1039,23 @@ export class ZJMFUpstreamService {
 const credentialsSchema = z.object({
   username: z.string().min(1).max(191),
   password: z.string().min(1).max(191),
+  /**
+   * 凭证模式。
+   *
+   * 现场实测（小兔互联 / moebun.com，魔方财务 V1）：
+   *
+   *   POST /zjmf_api_login  username=<邮箱或手机>  password=<用户中心 API 管理里的 API 密钥>
+   *   → {"jwt":"…","status":200}
+   *
+   * 用**站内登录密码**提交会返回 {"status":400,"msg":"鉴权失败"} —— 而且
+   * 「账号不存在」和「密码错」返回完全相同的响应，无法从上游区分。插件原先
+   * 把用户填的密码原样提交、不给任何提示，于是「密码明明是对的」变成一条
+   * 永远说不清楚的失败。
+   *
+   * `apiKey` 表示 password 字段里放的是 API 密钥而非登录密码。两者在协议层
+   * 走同一个字段，区别只在**给用户的提示**与失败时的解释上。
+   */
+  secretKind: z.enum(['password', 'api_key']).default('password'),
 });
 
 let service: ZJMFUpstreamService | null = null;

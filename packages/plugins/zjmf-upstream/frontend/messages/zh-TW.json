@@ -127,5 +127,9 @@
   "sync.reason.sync_failed": "同步过程出错",
   "sync.reason.sync_no_bound_products": "没有已绑定上游的商品，同步无事可做",
   "sync.reason.sync_upstream_empty": "上游未返回任何商品，请检查接口地址与凭证",
-  "sync.reason.sync_no_effect": "同步未处理任何商品"
+  "sync.reason.sync_no_effect": "同步未处理任何商品",
+  "form.secretKind": "凭证类型",
+  "form.secretKindApiKey": "API 密钥（推荐）",
+  "form.secretKindPassword": "站内登录密码",
+  "form.secretKindHint": "魔方财务的开放接口要求填用户中心「API 管理」里的 API 密钥，不是站内登录密码。填错会得到无法区分的「鉴权失败」。"
 }

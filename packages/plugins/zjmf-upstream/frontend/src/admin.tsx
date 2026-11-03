@@ -130,6 +130,21 @@ export function ZjmfUpstreamAdminPage(props: AdminPageComponentProps): ReactElem
                 <Input id="zjmf-username" name="username" required />
               </div>
               <div className="grid gap-1.5">
+                <Label htmlFor="zjmf-secret-kind">{tr('form.secretKind')}</Label>
+                <select
+                  id="zjmf-secret-kind"
+                  name="secretKind"
+                  defaultValue="api_key"
+                  className="h-9 rounded-lg border bg-transparent px-3 text-sm"
+                >
+                  <option value="api_key">{tr('form.secretKindApiKey')}</option>
+                  <option value="password">{tr('form.secretKindPassword')}</option>
+                </select>
+                {/* 默认推荐 API 密钥：魔方财务的开放接口要的就是它，
+                    用站内密码会得到一句无法区分的「鉴权失败」。 */}
+                <p className="text-xs text-muted-foreground">{tr('form.secretKindHint')}</p>
+              </div>
+              <div className="grid gap-1.5">
                 <Label htmlFor="zjmf-password">{tr('form.password')}</Label>
                 <Input id="zjmf-password" name="password" type="password" required />
               </div>
