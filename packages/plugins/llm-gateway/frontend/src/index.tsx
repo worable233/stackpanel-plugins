@@ -41,8 +41,9 @@ import {
   Input,
   Label,
   PageHeader,
-  UsageTrendChart,
 } from '@stackpanel/ui';
+// 图表组件的客户端入口由宿主收编（Recharts 不能在 RSC 图里执行）。
+import { UsageTrendChart } from './charts.js';
 import {
   Empty,
   IconBadge,
@@ -301,7 +302,7 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
       ? tr('overview.chartTitleToday')
       : tr('overview.chartTitleRange', { range: rangeLabelText });
   return (
-    <main className="space-y-8">
+    <main className="flex flex-col gap-8">
       <PageHeader
         title={tr('overview.title')}
         actions={<RangePicker range={range} href={href} tr={tr} />}
@@ -310,7 +311,7 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
       {billing && !billing.enabled ? (
         <form
           action={setBilling}
-          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-3.5 text-sm"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-amber-500/10 px-5 py-3.5 text-sm"
         >
           <input type="hidden" name="enabled" value="true" />
           <span className="text-amber-700 dark:text-amber-400">{tr('overview.billingOff')}</span>
@@ -409,11 +410,11 @@ export function GatewayOverviewPage(props: AccountPageComponentProps): ReactElem
             }
           >
             {byModel.length ? (
-              <ul className="divide-y overflow-hidden rounded-2xl bg-muted/25">
+              <ul className="flex flex-col gap-2">
                 {byModel.map((row) => (
                   <li
                     key={row.model}
-                    className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm"
+                    className="flex items-center justify-between gap-4 rounded-xl bg-muted/30 px-4 py-3 text-sm"
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium">{modelDisplayName(row.model, tr)}</p>
@@ -591,7 +592,7 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
   const base = '/account/gateway/pricing';
 
   return (
-    <main className="space-y-8">
+    <main className="flex flex-col gap-8">
       <PageHeader
         title={tr('pricing.title')}
         actions={
@@ -603,7 +604,7 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
                 name="q"
                 defaultValue={props.searchParams['q'] ?? ''}
                 placeholder={tr('pricing.searchPlaceholder')}
-                className="h-9 w-56 rounded-lg border bg-background pl-8 pr-3 text-sm outline-none focus-visible:border-ring"
+                className="h-10 w-56 rounded-[10px] border border-border/80 bg-muted/30 pl-8 pr-3 text-sm outline-none focus-visible:border-ring"
               />
             </form>
             <span className="text-xs text-muted-foreground tabular-nums">
@@ -616,9 +617,9 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <section className="min-w-0">
           {filtered.length ? (
-            <div className="overflow-x-auto rounded-2xl border bg-card shadow-sm">
+            <div className="overflow-x-auto rounded-2xl bg-muted/25 p-2">
               <table className="w-full text-sm">
-                <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                <thead className="text-left text-xs text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">{tr('pricing.colModel')}</th>
                     <th className="px-3 py-2">{tr('pricing.colCapability')}</th>
@@ -634,9 +635,7 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
                     return (
                       <tr
                         key={price.model}
-                        className={
-                          active ? 'border-b bg-primary/5 last:border-0' : 'border-b last:border-0'
-                        }
+                        className={active ? 'bg-background' : 'hover:bg-background/60'}
                       >
                         <td className="px-3 py-2">
                           <Link
@@ -672,7 +671,7 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
 
         <aside className="h-fit lg:sticky lg:top-6">
           {selected ? (
-            <div className="rounded-2xl border bg-card p-5 shadow-sm">
+            <div className="rounded-2xl bg-muted/25 p-5">
               <div className="flex items-center gap-2">
                 <IconBadge>
                   <Tags />
@@ -721,7 +720,7 @@ export function GatewayPricingPage(props: AccountPageComponentProps): ReactEleme
 
 function PriceRow({ label, value }: { label: string; value: string }): ReactElement {
   return (
-    <div className="flex items-center justify-between gap-3 border-b pb-1.5 last:border-0">
+    <div className="flex items-center justify-between gap-3 py-1.5">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="tabular-nums">{value}</dd>
     </div>
@@ -754,7 +753,7 @@ function CapabilityIcons({
           <span
             key={capability}
             title={entry ? tr(entry.labelKey) : capabilityLabel(capability, tr)}
-            className="inline-flex size-6 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground"
+            className="inline-flex size-6 items-center justify-center rounded-md bg-muted/40 text-muted-foreground"
           >
             <Icon className="size-3.5" />
           </span>
@@ -878,7 +877,7 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
   const setBilling = props.actions['llm-gateway.set-billing'];
 
   return (
-    <main className="space-y-8">
+    <main className="flex flex-col gap-8">
       <PageHeader
         title={tr('keys.title')}
         actions={<CreateKeyDialog action={createKey} tr={tr} />}
@@ -890,8 +889,8 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
         description={tr('keys.billingDescription')}
         action={<BillingToggle enabled={billing?.enabled ?? false} action={setBilling} tr={tr} />}
       >
-        <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
-          <li className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm">
+        <ul className="flex flex-col gap-2">
+          <li className="flex items-center justify-between gap-4 rounded-xl bg-muted/30 px-4 py-3 text-sm">
             <span className="text-muted-foreground">{tr('keys.statusLabel')}</span>
             <span
               className={
@@ -903,7 +902,7 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
               {billing?.enabled ? tr('keys.statusEnabled') : tr('keys.statusDisabled')}
             </span>
           </li>
-          <li className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm">
+          <li className="flex items-center justify-between gap-4 rounded-xl bg-muted/30 px-4 py-3 text-sm">
             <span className="text-muted-foreground">{tr('keys.balance')}</span>
             <span className="font-mono font-semibold tabular-nums">
               {money(billing?.balance ?? 0)}
@@ -913,7 +912,7 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
       </Section>
 
       {keys?.revealedKey ? (
-        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-5">
+        <div className="rounded-2xl bg-emerald-500/10 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
             <IconBadge className="bg-emerald-500/15 text-emerald-600">
               <KeyRound />
@@ -928,11 +927,11 @@ export function GatewayKeysPage(props: AccountPageComponentProps): ReactElement 
 
       <Section icon={<KeyRound />} title={tr('keys.mine')} description={tr('keys.mineDescription')}>
         {keys?.keys?.length ? (
-          <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
+          <ul className="flex flex-col gap-2">
             {keys.keys.map((key) => (
               <li
                 key={key.id}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4 text-sm"
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-xl bg-muted/30 px-4 py-3.5 text-sm"
               >
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 font-medium">

@@ -158,11 +158,11 @@ function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
 
       <Section icon={<TrendingUp />} title={tr('admin.overview.topModels')}>
         {overview?.topModels.length ? (
-          <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
+          <ul className="flex flex-col gap-2">
             {overview.topModels.map((row) => (
               <li
                 key={row.model}
-                className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm"
+                className="flex items-center justify-between gap-4 rounded-xl bg-muted/30 px-4 py-3 text-sm"
               >
                 <span className="min-w-0 truncate font-medium">{row.model}</span>
                 <div className="flex shrink-0 items-center gap-4 text-xs text-muted-foreground">
@@ -188,11 +188,11 @@ function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
         description={tr('admin.overview.recentDescription')}
       >
         {overview?.logs.length ? (
-          <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
+          <ul className="flex flex-col gap-2">
             {overview.logs.map((log) => (
               <li
                 key={log.id}
-                className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm"
+                className="flex items-center justify-between gap-4 rounded-xl bg-muted/30 px-4 py-3 text-sm"
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">{log.model}</p>
@@ -445,7 +445,7 @@ function PriceTierEditor({
           {rows.map((row, index) => (
             <div
               key={index}
-              className="grid gap-3 rounded-lg border border-border/60 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]"
+              className="grid gap-3 rounded-xl bg-muted/25 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]"
             >
               <Field>
                 <Label htmlFor={`tier-from-${index}`}>{tr('admin.editor.tierFrom')}</Label>
@@ -635,10 +635,7 @@ function PriceWindowEditor({
           {rows.map((row, index) => {
             const explicit = row.percent === undefined;
             return (
-              <div
-                key={index}
-                className="flex flex-col gap-3 rounded-lg border border-border/60 p-3"
-              >
+              <div key={index} className="flex flex-col gap-3 rounded-xl bg-muted/25 p-3">
                 <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
                   <Field>
                     <Label htmlFor={`window-hours-${index}`}>
@@ -1059,7 +1056,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
                     ) : null}
                   </div>
                   {suggest ? (
-                    <div className="flex flex-col gap-2 rounded-lg border border-border/60 p-3 text-sm">
+                    <div className="flex flex-col gap-2 rounded-xl bg-muted/25 p-3 text-sm">
                       <p className="font-medium">
                         {suggest.model}
                         <span className="ml-2 text-xs font-normal text-muted-foreground">
@@ -1110,7 +1107,7 @@ function GatewayAdminPriceEditor(props: AdminPageComponentProps): ReactElement {
                         节假日窗口，节假日当天就会按峰时价多收用户的钱。
                       */}
                       {suggest.holidayGap ? (
-                        <p className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-600 dark:text-amber-400">
+                        <p className="rounded-xl bg-amber-500/10 p-2 text-xs text-amber-600 dark:text-amber-400">
                           {tr('admin.editor.catalogHolidayGap')}
                         </p>
                       ) : null}
@@ -1359,7 +1356,7 @@ function GatewayAdminAccountEditor(props: AdminPageComponentProps): ReactElement
         }
       />
       <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0 rounded-xl border bg-card p-5 sm:p-6">
+        <div className="min-w-0 rounded-2xl bg-muted/30 p-5 sm:p-6">
           <AccountForm
             key={editing?.id ?? 'new'}
             editing={editing}
@@ -1375,7 +1372,7 @@ function GatewayAdminAccountEditor(props: AdminPageComponentProps): ReactElement
             tr={tr}
           />
         </div>
-        <aside className="rounded-xl border bg-card p-5 xl:sticky xl:top-24">
+        <aside className="rounded-2xl bg-muted/30 p-5 xl:sticky xl:top-24">
           <SectionTitle>{tr('admin.editor.accountOverview')}</SectionTitle>
           <p className="mt-1 text-sm text-muted-foreground">
             {tr('admin.editor.accountOverviewDescription')}
@@ -1732,16 +1729,14 @@ function AccountForm({
               {tr('admin.editor.selectAll')}
             </Button>
           </div>
-          <div className="flex max-h-56 flex-wrap gap-1.5 overflow-y-auto rounded-lg border bg-muted/20 p-2">
+          <div className="flex max-h-56 flex-wrap gap-1.5 overflow-y-auto rounded-xl bg-muted/25 p-2">
             {filtered.map((model) => {
               const checked = selected.includes(model);
               return (
                 <label
                   key={model}
-                  className={`flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                    checked
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'bg-background hover:bg-muted'
+                  className={`flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-colors ${
+                    checked ? 'bg-primary/10 text-primary' : 'bg-background hover:bg-muted'
                   }`}
                 >
                   <input
@@ -2011,7 +2006,7 @@ function GatewayAdminUsageLogs(props: AdminPageComponentProps): ReactElement {
       <Section icon={<Activity />} title={tr('admin.usage.listTitle')}>
         {error ? <InlineError>{error}</InlineError> : null}
         {rows.length ? (
-          <div className="overflow-x-auto rounded-2xl border bg-card shadow-sm">
+          <div className="overflow-x-auto rounded-2xl bg-muted/25 p-2">
             <table className="w-full min-w-[860px] text-sm">
               <thead className="bg-muted/40 text-xs text-muted-foreground">
                 <tr>
@@ -2025,7 +2020,7 @@ function GatewayAdminUsageLogs(props: AdminPageComponentProps): ReactElement {
                   <th className="px-3 py-2 text-left">{tr('admin.usage.status')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} className="align-top">
                     <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
@@ -2249,7 +2244,7 @@ function GatewayAdminOps(props: AdminPageComponentProps): ReactElement {
           </Button>
         </form>
         {maps.length ? (
-          <div className="overflow-x-auto rounded-2xl border bg-card shadow-sm">
+          <div className="overflow-x-auto rounded-2xl bg-muted/25 p-2">
             <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-muted/40 text-xs text-muted-foreground">
                 <tr>
@@ -2260,7 +2255,7 @@ function GatewayAdminOps(props: AdminPageComponentProps): ReactElement {
                   <th className="px-3 py-2 text-right">{tr('common.edit')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {maps.map((row) => (
                   <tr key={row.id}>
                     <td className="px-3 py-2 font-mono text-xs">{row.from}</td>
@@ -2348,7 +2343,7 @@ function GatewayAdminOps(props: AdminPageComponentProps): ReactElement {
           </Button>
         </form>
         {limits.length ? (
-          <div className="overflow-x-auto rounded-2xl border bg-card shadow-sm">
+          <div className="overflow-x-auto rounded-2xl bg-muted/25 p-2">
             <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-muted/40 text-xs text-muted-foreground">
                 <tr>
@@ -2360,7 +2355,7 @@ function GatewayAdminOps(props: AdminPageComponentProps): ReactElement {
                   <th className="px-3 py-2 text-right">{tr('common.edit')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {limits.map((row) => (
                   <tr key={row.id}>
                     <td className="px-3 py-2 text-xs">{row.userId || tr('admin.ops.global')}</td>
@@ -2448,7 +2443,7 @@ function GatewayAdminOps(props: AdminPageComponentProps): ReactElement {
           </Button>
         </form>
         {entitlements.length ? (
-          <div className="overflow-x-auto rounded-2xl border bg-card shadow-sm">
+          <div className="overflow-x-auto rounded-2xl bg-muted/25 p-2">
             <table className="w-full min-w-[860px] text-sm">
               <thead className="bg-muted/40 text-xs text-muted-foreground">
                 <tr>
@@ -2462,7 +2457,7 @@ function GatewayAdminOps(props: AdminPageComponentProps): ReactElement {
                   <th className="px-3 py-2 text-right">{tr('common.edit')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {entitlements.map((row) => (
                   <tr key={row.id}>
                     <td className="px-3 py-2 text-xs">{row.userId}</td>
@@ -2629,7 +2624,7 @@ function GatewayAdminPlayground(props: AdminPageComponentProps): ReactElement {
               <Label htmlFor="pg-system">{tr('admin.playground.system')}</Label>
               <textarea
                 id="pg-system"
-                className="min-h-16 w-full rounded-md border bg-background p-2 text-sm"
+                className="min-h-16 w-full rounded-xl border border-border/80 bg-background p-2 text-sm"
                 value={system}
                 placeholder={tr('admin.playground.systemPlaceholder')}
                 onChange={(event) => setSystem(event.target.value)}
@@ -2639,7 +2634,7 @@ function GatewayAdminPlayground(props: AdminPageComponentProps): ReactElement {
               <Label htmlFor="pg-prompt">{tr('admin.playground.prompt')}</Label>
               <textarea
                 id="pg-prompt"
-                className="min-h-28 w-full rounded-md border bg-background p-2 text-sm"
+                className="min-h-28 w-full rounded-xl border border-border/80 bg-background p-2 text-sm"
                 value={prompt}
                 placeholder={tr('admin.playground.promptPlaceholder')}
                 onChange={(event) => setPrompt(event.target.value)}
@@ -2680,7 +2675,7 @@ function GatewayAdminPlayground(props: AdminPageComponentProps): ReactElement {
         <CardContent>
           {result ? (
             <div className="space-y-3">
-              <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-sm">
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl bg-muted/30 p-3 text-sm">
                 {result.text === '' ? tr('admin.playground.emptyText') : result.text}
               </pre>
               <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
