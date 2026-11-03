@@ -172,6 +172,7 @@ describe('openai-responses 的工具回合编码', () => {
     const body = codec.encodeRequest({
       model: 'm',
       stream: false,
+      raw: {},
       messages: [
         { role: 'user', parts: [{ type: 'text', text: '列出插件' }] },
         {

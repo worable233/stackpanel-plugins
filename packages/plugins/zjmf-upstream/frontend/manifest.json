@@ -398,7 +398,19 @@
       "pager.next": "下一页",
       "feedback.created": "上游已添加",
       "feedback.updated": "上游已更新",
-      "feedback.deleted": "上游已删除"
+      "feedback.deleted": "上游已删除",
+      "list.lastSyncFailed": "上次同步失败：{reason}（{time}）",
+      "list.retrySync": "重试同步",
+      "list.dataUnavailable": "上游列表读取失败，以下内容可能不完整。",
+      "sync.reason.credentials_rejected": "上游拒绝登录，请检查账号、密码与接口地址",
+      "sync.reason.sync_failed": "同步过程出错",
+      "sync.reason.sync_no_bound_products": "没有已绑定上游的商品，同步无事可做",
+      "sync.reason.sync_upstream_empty": "上游未返回任何商品，请检查接口地址与凭证",
+      "sync.reason.sync_no_effect": "同步未处理任何商品",
+      "form.secretKind": "凭证类型",
+      "form.secretKindApiKey": "API 密钥（推荐）",
+      "form.secretKindPassword": "站内登录密码",
+      "form.secretKindHint": "魔方财务的开放接口要求填用户中心「API 管理」里的 API 密钥，不是站内登录密码。填错会得到无法区分的「鉴权失败」。"
     },
     "zh-TW": {
       "nav.group": "上游",
@@ -521,7 +533,19 @@
       "pager.next": "下一頁",
       "feedback.created": "上游已新增",
       "feedback.updated": "上游已更新",
-      "feedback.deleted": "上游已刪除"
+      "feedback.deleted": "上游已刪除",
+      "list.lastSyncFailed": "上次同步失敗：{reason}（{time}）",
+      "list.retrySync": "重試同步",
+      "list.dataUnavailable": "上游列表讀取失敗，以下內容可能不完整。",
+      "sync.reason.credentials_rejected": "上游拒絕登入，請檢查賬號、密碼與介面地址",
+      "sync.reason.sync_failed": "同步過程出錯",
+      "sync.reason.sync_no_bound_products": "沒有已繫結上游的商品，同步無事可做",
+      "sync.reason.sync_upstream_empty": "上游未返回任何商品，請檢查介面地址與憑證",
+      "sync.reason.sync_no_effect": "同步未處理任何商品",
+      "form.secretKind": "憑證型別",
+      "form.secretKindApiKey": "API 金鑰（推薦）",
+      "form.secretKindPassword": "站內登入密碼",
+      "form.secretKindHint": "魔方財務的開放介面要求填使用者中心「API 管理」裡的 API 金鑰，不是站內登入密碼。填錯會得到無法區分的「鑑權失敗」。"
     },
     "zh-HK": {
       "nav.group": "上游",
@@ -644,7 +668,19 @@
       "pager.next": "下一頁",
       "feedback.created": "上游已新增",
       "feedback.updated": "上游已更新",
-      "feedback.deleted": "上游已刪除"
+      "feedback.deleted": "上游已刪除",
+      "list.lastSyncFailed": "上次同步失敗：{reason}（{time}）",
+      "list.retrySync": "重試同步",
+      "list.dataUnavailable": "上游列表讀取失敗，以下內容可能不完整。",
+      "sync.reason.credentials_rejected": "上游拒絕登錄，請檢查賬號、密碼與介面地址",
+      "sync.reason.sync_failed": "同步過程出錯",
+      "sync.reason.sync_no_bound_products": "沒有已繫結上游的商品，同步無事可做",
+      "sync.reason.sync_upstream_empty": "上游未返回任何商品，請檢查介面地址與憑證",
+      "sync.reason.sync_no_effect": "同步未處理任何商品",
+      "form.secretKind": "憑證型別",
+      "form.secretKindApiKey": "API 金鑰（推薦）",
+      "form.secretKindPassword": "站內登錄密碼",
+      "form.secretKindHint": "魔方財務的開放介面要求填用戶中心「API 管理」裡的 API 金鑰，不是站內登錄密碼。填錯會得到無法區分的「鑑權失敗」。"
     },
     "en-US": {
       "nav.group": "Upstream",
@@ -767,7 +803,19 @@
       "pager.next": "Next",
       "feedback.created": "Upstream added",
       "feedback.updated": "Upstream updated",
-      "feedback.deleted": "Upstream deleted"
+      "feedback.deleted": "Upstream deleted",
+      "list.lastSyncFailed": "Last sync failed: {reason} ({time})",
+      "list.retrySync": "Retry sync",
+      "list.dataUnavailable": "Could not load the upstream list; the content below may be incomplete.",
+      "sync.reason.credentials_rejected": "The upstream rejected the login. Check the account, password and API host",
+      "sync.reason.sync_failed": "The sync run failed",
+      "sync.reason.sync_no_bound_products": "No products are bound to this upstream, so the sync had nothing to do",
+      "sync.reason.sync_upstream_empty": "The upstream returned no products. Check the API host and credentials",
+      "sync.reason.sync_no_effect": "The sync did not process any product",
+      "form.secretKind": "Credential type",
+      "form.secretKindApiKey": "API key (recommended)",
+      "form.secretKindPassword": "Account password",
+      "form.secretKindHint": "Mofang Finance's open API expects the API key from the user center, not the account login password. A wrong choice returns an indistinguishable auth failure."
     }
   }
 }

@@ -36,6 +36,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  GatewayPlayground,
+  type GatewayPlaygroundLabels,
   Input,
   Label,
   PageHeader,
@@ -512,6 +514,53 @@ function RangePicker({
         })}
       </div>
     </details>
+  );
+}
+
+/** C 端模型体验：ChatGPT 式对话，参数收在右侧抽屉。 */
+export function GatewayPlaygroundPage(props: AccountPageComponentProps): ReactElement {
+  const tr = t(props.locale);
+  const data = props.data as { prices?: z.infer<typeof publicPricesSchema> };
+  const models = (data.prices?.prices ?? [])
+    .filter((price) => price.model !== '*')
+    .map((price) => ({
+      id: price.model,
+      label: modelDisplayName(price.model, tr),
+    }));
+  const labels: GatewayPlaygroundLabels = {
+    title: tr('playground.title'),
+    subtitle: tr('playground.subtitle'),
+    newChat: tr('playground.newChat'),
+    conversations: tr('playground.conversations'),
+    emptyTitle: tr('playground.emptyTitle'),
+    emptyHint: tr('playground.emptyHint'),
+    placeholder: tr('playground.placeholder'),
+    send: tr('playground.send'),
+    sending: tr('playground.sending'),
+    stop: tr('playground.stop'),
+    you: tr('playground.you'),
+    assistant: tr('playground.assistant'),
+    settings: tr('playground.settings'),
+    settingsDescription: tr('playground.settingsDescription'),
+    model: tr('playground.model'),
+    temperature: tr('playground.temperature'),
+    maxTokens: tr('playground.maxTokens'),
+    systemPrompt: tr('playground.systemPrompt'),
+    systemPromptPlaceholder: tr('playground.systemPromptPlaceholder'),
+    resetSettings: tr('playground.resetSettings'),
+    close: tr('playground.close'),
+    requestFailed: tr('playground.requestFailed'),
+    thinking: tr('playground.thinking'),
+    deleteChat: tr('playground.deleteChat'),
+    noModels: tr('playground.noModels'),
+    latency: tr('playground.latency'),
+  };
+  return (
+    <GatewayPlayground
+      endpoint="/api/plugins/llm-gateway/playground"
+      models={models}
+      labels={labels}
+    />
   );
 }
 
@@ -1295,27 +1344,18 @@ const frontend: FrontendPackage = {
         ],
       },
       {
-        path: '/playground',
-        component: 'admin/playground',
-        permission: 'llm-gateway.admin',
-        // 放在账号页之前：排查「这个号通不通」是最常开的一页。
-        nav: { labelKey: 'nav.playground', groupKey: 'nav.group', order: 5 },
-        data: [{ finder: 'llm-gateway.adminPrices', as: 'prices' }],
-      },
-      {
         path: '/accounts',
         component: 'admin/accounts',
         permission: 'llm-gateway.admin',
-        nav: {
-          labelKey: 'nav.adminAccounts',
-          groupKey: 'nav.group',
-          order: 10,
-          activePaths: ['/prices'],
-        },
-        data: [
-          { finder: 'llm-gateway.adminAccounts', as: 'accounts' },
-          { finder: 'llm-gateway.adminPrices', as: 'prices' },
-        ],
+        nav: { labelKey: 'nav.adminAccounts', groupKey: 'nav.group', order: 10 },
+        data: [{ finder: 'llm-gateway.adminAccounts', as: 'accounts' }],
+      },
+      {
+        path: '/prices',
+        component: 'admin/prices',
+        permission: 'llm-gateway.admin',
+        nav: { labelKey: 'nav.adminPrices', groupKey: 'nav.group', order: 20 },
+        data: [{ finder: 'llm-gateway.adminPrices', as: 'prices' }],
       },
     ],
     accountRoutes: [
@@ -1334,6 +1374,13 @@ const frontend: FrontendPackage = {
         component: 'account/gateway-pricing',
         permission: 'llm-gateway.use',
         nav: { labelKey: 'nav.pricing', groupKey: 'nav.group' },
+        data: [{ finder: 'llm-gateway.prices', as: 'prices' }],
+      },
+      {
+        path: '/gateway/playground',
+        component: 'account/gateway-playground',
+        permission: 'llm-gateway.use',
+        nav: { labelKey: 'nav.playground', groupKey: 'nav.group' },
         data: [{ finder: 'llm-gateway.prices', as: 'prices' }],
       },
       {
@@ -1358,6 +1405,7 @@ const frontend: FrontendPackage = {
     accountPages: {
       'account/gateway-overview': GatewayOverviewPage,
       'account/gateway-pricing': GatewayPricingPage,
+      'account/gateway-playground': GatewayPlaygroundPage,
       'account/gateway-keys': GatewayKeysPage,
     },
     accountWidgetComponents: { 'account/gateway': GatewayAccountWidget },

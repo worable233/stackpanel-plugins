@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import { SectionTitle } from '@stackpanel/ui';
-import { Boxes } from 'lucide-react';
+import { SectionTitle, Tooltip, TooltipContent, TooltipTrigger } from '@stackpanel/ui';
+import { Boxes, CircleHelp } from 'lucide-react';
 import { z } from 'zod';
 
 /**
@@ -501,6 +501,26 @@ export function Stat({ label, value }: { label: string; value: string }): ReactE
         {value}
       </div>
     </div>
+  );
+}
+
+/** 说明文字不占版面：标题旁的问号，悬停才出现。 */
+export function HelpTip({ text }: { text: string }): ReactElement {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={text}
+            className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          />
+        }
+      >
+        <CircleHelp className="size-4" aria-hidden="true" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs leading-relaxed">{text}</TooltipContent>
+    </Tooltip>
   );
 }
 

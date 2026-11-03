@@ -955,11 +955,7 @@ async function readAccountIdempotency(key: string): Promise<string | null> {
 
 async function rememberAccountIdempotency(key: string, accountId: string): Promise<void> {
   try {
-    await state().set(
-      `${ACCOUNT_IDEMPOTENCY_PREFIX}${key}`,
-      accountId,
-      ACCOUNT_IDEMPOTENCY_TTL_MS,
-    );
+    await state().set(`${ACCOUNT_IDEMPOTENCY_PREFIX}${key}`, accountId, ACCOUNT_IDEMPOTENCY_TTL_MS);
   } catch {
     // 幂等记录写失败不能把已成功的创建变成 500：名字查重仍会拦住下一次重试。
   }
@@ -1177,6 +1173,28 @@ function statementCsv(rows: readonly UsageLogRow[]): string {
     );
   }
   return lines.join('\n');
+}
+
+/**
+ * 用户端体验的轻量限流（每用户 60 秒 12 次）。
+ *
+ * 体验请求不扣钱包（与运营 Playground 同一条上游通道），因此必须有频次上限，
+ * 否则一个登录用户就能把上游额度当成免费聊天接口刷。真实业务请走 OpenAI 兼容面。
+ */
+const playgroundHits = new Map<string, number[]>();
+const PLAYGROUND_WINDOW_MS = 60_000;
+const PLAYGROUND_MAX_HITS = 12;
+
+function takePlaygroundSlot(userId: string): boolean {
+  const now = Date.now();
+  const hits = (playgroundHits.get(userId) ?? []).filter((at) => now - at < PLAYGROUND_WINDOW_MS);
+  if (hits.length >= PLAYGROUND_MAX_HITS) {
+    playgroundHits.set(userId, hits);
+    return false;
+  }
+  hits.push(now);
+  playgroundHits.set(userId, hits);
+  return true;
 }
 
 export const llmGatewayPlugin = definePlugin({
@@ -1797,6 +1815,36 @@ export const llmGatewayPlugin = definePlugin({
           range: headerValue(req, 'range'),
         });
       },
+    },
+    {
+      method: 'POST',
+      path: '/llm-gateway/playground',
+      auth: 'user',
+      permission: 'llm-gateway.use',
+      handler: handle(async (req: HttpRequest) => {
+        const userId = req.user?.id;
+        if (!userId) throw new GatewayError(401, '请先登录');
+        if (!takePlaygroundSlot(userId)) {
+          throw new GatewayError(429, '请求过于频繁，请稍后再试');
+        }
+        const parsed = playgroundSchema.safeParse(req.body);
+        if (!parsed.success) throw new GatewayError(400, '参数无效');
+        const result = await runPlayground(getRuntime(), {
+          model: parsed.data.model,
+          messages: parsed.data.messages,
+          temperature: parsed.data.temperature,
+          maxTokens: parsed.data.maxTokens,
+        });
+        // 只回前端需要展示的字段：账号 id/上游模型属于运营信息。
+        return {
+          result: {
+            text: result.text,
+            latencyMs: result.latencyMs,
+            usage: result.usage,
+            stopReason: result.stopReason,
+          },
+        };
+      }),
     },
     {
       method: 'POST',

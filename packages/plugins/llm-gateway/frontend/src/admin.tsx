@@ -1,5 +1,5 @@
 'use client';
-import { InlineError, InlineNotice } from './ui';
+import { HelpTip, InlineError, InlineNotice } from './ui';
 import { SectionTitle } from '@stackpanel/ui';
 
 import Link from 'next/link';
@@ -10,6 +10,7 @@ import type { ReactElement } from 'react';
 import type { AdminPageComponentProps } from '@stackpanel/sdk';
 import type { z } from 'zod';
 import {
+  Badge,
   Button,
   Card,
   CardHeader,
@@ -22,6 +23,9 @@ import {
   FieldDescription,
   Input,
   Label,
+  List,
+  ListEmpty,
+  ListItem,
   PageHeader,
   Select,
 } from '@stackpanel/ui';
@@ -224,21 +228,19 @@ function GatewayAdminOverview(props: AdminPageComponentProps): ReactElement {
 
 function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
   const tr = t(props.locale);
-  const data = props.data as {
-    accounts?: z.infer<typeof adminAccountsSchema>;
-    prices?: z.infer<typeof adminPricesSchema>;
-  };
+  const data = props.data as { accounts?: z.infer<typeof adminAccountsSchema> };
   const accounts = data.accounts?.accounts ?? [];
-  const prices = data.prices?.prices ?? [];
 
   return (
-    <div className="grid gap-6">
-      <PageHeader title={tr('admin.accounts.title')} />
-      <Section
-        icon={<Server />}
-        title={tr('admin.accounts.poolTitle')}
-        description={tr('admin.accounts.poolDescription')}
-        action={
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            {tr('admin.accounts.title')}
+            <HelpTip text={tr('admin.accounts.poolDescription')} />
+          </span>
+        }
+        actions={
           <Button
             type="button"
             nativeButton={false}
@@ -248,107 +250,91 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
             {tr('admin.accounts.addAccount')}
           </Button>
         }
-      >
-        {accounts.length ? (
-          <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
-            {accounts.map((account) => {
-              const models = asStringArray(account.models);
-              return (
-                <li
-                  key={account.id}
-                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4 text-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-2 font-medium">
-                      {account.name}
-                      <span
-                        className={
-                          account.status === 'ACTIVE'
-                            ? 'rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-600'
-                            : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
-                        }
-                      >
-                        {account.status === 'ACTIVE' ? tr('common.enabled') : tr('common.disabled')}
-                      </span>
-                      <span className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-normal text-muted-foreground">
-                        {protocolLabel(account.provider)}
-                      </span>
-                    </p>
-                    <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                      {account.baseUrl}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {tr('admin.accounts.meta', {
-                        models: models.length
-                          ? tr('admin.accounts.modelCount', { count: models.length })
-                          : tr('admin.accounts.allModels'),
-                        priority: account.priority,
-                        weight: account.weight,
-                        concurrency: account.maxConcurrency || '∞',
-                      })}
-                    </p>
-                    <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span>{tr('admin.accounts.keyCount', { count: account.keyCount })}</span>
-                      <span>
-                        {account.balance !== null
-                          ? tr('admin.accounts.balanceValue', {
-                              amount: `${account.balance} ${account.balanceCurrency}`.trim(),
-                            })
-                          : tr('admin.accounts.balanceUnknown')}
-                      </span>
-                      {account.lastError ? (
-                        <span className="text-destructive">
-                          {tr('admin.accounts.lastError', { error: account.lastError })}
-                        </span>
-                      ) : null}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <AccountProbe account={account} tr={tr} />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      nativeButton={false}
-                      render={
-                        <Link href={`/admin/plugin/llm-gateway/accounts/${account.id}/edit`} />
+      />
+      {accounts.length ? (
+        <List>
+          {accounts.map((account) => {
+            const models = asStringArray(account.models);
+            return (
+              <ListItem
+                key={account.id}
+                className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-medium">{account.name}</p>
+                    <Badge
+                      className={
+                        account.status === 'ACTIVE' ? 'bg-primary/10 text-primary' : undefined
                       }
                     >
-                      <Pencil className="size-3.5" />
-                      {tr('common.edit')}
-                    </Button>
-                    <form action={props.actions['llm-gateway.set-account-status']}>
-                      <input type="hidden" name="id" value={account.id} />
-                      <input
-                        type="hidden"
-                        name="status"
-                        value={account.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'}
-                      />
-                      <Button type="submit" variant="ghost" size="sm">
-                        {account.status === 'ACTIVE' ? tr('common.disabled') : tr('common.enabled')}
-                      </Button>
-                    </form>
-                    <form action={props.actions['llm-gateway.delete-account']}>
-                      <input type="hidden" name="id" value={account.id} />
-                      <Button type="submit" variant="ghost" size="sm" className="text-destructive">
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </form>
+                      {account.status === 'ACTIVE' ? tr('common.enabled') : tr('common.disabled')}
+                    </Badge>
+                    <Badge>{protocolLabel(account.provider)}</Badge>
                   </div>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <Empty text={tr('admin.accounts.empty')} icon={<Server />} />
-        )}
-      </Section>
+                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                    {account.baseUrl}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span>
+                      {models.length
+                        ? tr('admin.accounts.modelCount', { count: models.length })
+                        : tr('admin.accounts.allModels')}
+                    </span>
+                    <span>{tr('admin.accounts.keyCount', { count: account.keyCount })}</span>
+                    <span>
+                      {account.balance !== null
+                        ? tr('admin.accounts.balanceValue', {
+                            amount: `${account.balance} ${account.balanceCurrency}`.trim(),
+                          })
+                        : tr('admin.accounts.balanceUnknown')}
+                    </span>
+                  </div>
+                  {account.lastError ? (
+                    <p className="mt-2 line-clamp-2 text-xs text-destructive">
+                      {tr('admin.accounts.lastError', { error: account.lastError })}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+                  <AccountProbe account={account} tr={tr} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    nativeButton={false}
+                    render={<Link href={`/admin/plugin/llm-gateway/accounts/${account.id}/edit`} />}
+                  >
+                    <Pencil className="size-3.5" />
+                    {tr('common.edit')}
+                  </Button>
+                </div>
+              </ListItem>
+            );
+          })}
+        </List>
+      ) : (
+        <ListEmpty>{tr('admin.accounts.empty')}</ListEmpty>
+      )}
+    </div>
+  );
+}
 
-      <Section
-        icon={<Tags />}
-        title={tr('admin.accounts.pricingTitle')}
-        description={tr('admin.accounts.pricingDescription')}
-        action={
+function GatewayAdminPrices(props: AdminPageComponentProps): ReactElement {
+  const tr = t(props.locale);
+  const data = props.data as { prices?: z.infer<typeof adminPricesSchema> };
+  const prices = data.prices?.prices ?? [];
+
+  return (
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            {tr('admin.accounts.pricingTitle')}
+            <HelpTip text={tr('admin.accounts.pricingDescription')} />
+          </span>
+        }
+        actions={
           <Button
             type="button"
             nativeButton={false}
@@ -358,72 +344,61 @@ function GatewayAdminAccounts(props: AdminPageComponentProps): ReactElement {
             {tr('admin.accounts.addPrice')}
           </Button>
         }
-      >
-        {prices.length ? (
-          <ul className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
-            {prices.map((price) => (
-              <li
-                key={price.id}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 font-medium">
-                    {price.model}
-                    {price.upstreamModel && price.upstreamModel !== price.model ? (
-                      <span className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs font-normal text-muted-foreground">
-                        {tr('admin.accounts.upstreamBadge', { model: price.upstreamModel })}
-                      </span>
-                    ) : null}
-                    <span
-                      className={
-                        price.enabled
-                          ? 'rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-600'
-                          : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
-                      }
-                    >
-                      {price.enabled ? tr('common.enabled') : tr('common.disabled')}
-                    </span>
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-                    {tr('admin.accounts.priceMeta', {
-                      input: money(price.inputPrice),
-                      output: money(price.outputPrice),
-                      cacheRead: price.cacheReadPrice ? money(price.cacheReadPrice) : '—',
-                      cacheWrite: price.cacheWritePrice ? money(price.cacheWritePrice) : '—',
-                    })}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {price.capabilities.length
-                      ? price.capabilities.map((item) => capabilityLabel(item, tr)).join(' / ')
-                      : '—'}{' '}
-                    · {tr('admin.accounts.priceMultiplier', { multiplier: price.multiplier })}
-                  </p>
+      />
+      {prices.length ? (
+        <List>
+          {prices.map((price) => (
+            <ListItem
+              key={price.id}
+              className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-medium">{price.model}</p>
+                  <Badge className={price.enabled ? 'bg-primary/10 text-primary' : undefined}>
+                    {price.enabled ? tr('common.enabled') : tr('common.disabled')}
+                  </Badge>
+                  {price.upstreamModel && price.upstreamModel !== price.model ? (
+                    <Badge>
+                      {tr('admin.accounts.upstreamBadge', { model: price.upstreamModel })}
+                    </Badge>
+                  ) : null}
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    nativeButton={false}
-                    render={<Link href={`/admin/plugin/llm-gateway/prices/${price.id}/edit`} />}
-                  >
-                    <Pencil className="size-3.5" />
-                    {tr('common.edit')}
-                  </Button>
-                  <form action={props.actions['llm-gateway.delete-price']}>
-                    <input type="hidden" name="id" value={price.id} />
-                    <Button type="submit" variant="ghost" size="sm" className="text-destructive">
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </form>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
+                  <span>
+                    {tr('admin.accounts.inputPriceShort', { input: money(price.inputPrice) })}
+                  </span>
+                  <span>
+                    {tr('admin.accounts.outputPriceShort', { output: money(price.outputPrice) })}
+                  </span>
+                  <span>
+                    {tr('admin.accounts.priceMultiplier', { multiplier: price.multiplier })}
+                  </span>
                 </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <Empty text={tr('admin.accounts.priceEmpty')} icon={<Tags />} />
-        )}
-      </Section>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {price.capabilities.length
+                    ? price.capabilities.map((item) => capabilityLabel(item, tr)).join(' / ')
+                    : '—'}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center self-end sm:self-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  nativeButton={false}
+                  render={<Link href={`/admin/plugin/llm-gateway/prices/${price.id}/edit`} />}
+                >
+                  <Pencil className="size-3.5" />
+                  {tr('common.edit')}
+                </Button>
+              </div>
+            </ListItem>
+          ))}
+        </List>
+      ) : (
+        <ListEmpty>{tr('admin.accounts.priceEmpty')}</ListEmpty>
+      )}
     </div>
   );
 }
@@ -2740,6 +2715,7 @@ function GatewayAdminPlayground(props: AdminPageComponentProps): ReactElement {
 export const adminPages = {
   'admin/overview': GatewayAdminOverview,
   'admin/accounts': GatewayAdminAccounts,
+  'admin/prices': GatewayAdminPrices,
   'admin/usage': GatewayAdminUsageLogs,
   'admin/ops': GatewayAdminOps,
   'admin/account-editor': GatewayAdminAccountEditor,
