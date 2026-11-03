@@ -155,9 +155,57 @@ interface Credentials {
 }
 
 interface SyncSummary {
+  /** 上游一次列举返回的商品数（本地商品是否绑定无关）。 */
+  fetched: number;
+  /** 本次实际参与刷新的已绑定商品数。 */
+  bound: number;
   created: number;
   updated: number;
   skipped: number;
+  /**
+   * 是否有任何一项真的被处理过。
+   *
+   * `skipped` 也算「处理过」：上游不再提供某商品时标记下架是有效动作。但
+   * `fetched=1890 && bound=0` 意味着**什么都没做**，不能报成功 —— 现场就是
+   * 这样一直挂着 SUCCEEDED、0/0/0，商品表始终是 0。
+   */
+  productive: boolean;
+}
+
+/**
+ * 这次同步是否真的动过东西。
+ *
+ * `skipped` 也算：上游不再提供某商品时标记下架是有效动作。但「抓到 1890 个
+ * 商品、本地 0 个绑定」是**什么都没做**，不能报成功 —— 现场就是长期挂着
+ * SUCCEEDED + 0/0/0，商品表始终为 0，用户完全看不出来。
+ */
+export function isProductiveSync(summary: SyncSummary): boolean {
+  return summary.updated + summary.created + summary.skipped > 0;
+}
+
+/**
+ * 无事可做时的稳定错误码与可执行提示；真的干了活则返回 null。
+ *
+ * 三种「没干活」要分开报，因为修法完全不同：上游没数据（查地址/凭证）、
+ * 本地没绑定（去绑商品）、绑了但一个都没命中（查映射是否一致）。
+ */
+export function idleSyncReason(
+  summary: SyncSummary,
+): { code: string; message: string } | null {
+  if (isProductiveSync(summary)) return null;
+  if (summary.fetched === 0) {
+    return {
+      code: 'zjmf.sync_upstream_empty',
+      message: '上游未返回任何商品，请检查接口地址与凭证',
+    };
+  }
+  if (summary.bound === 0) {
+    return {
+      code: 'zjmf.sync_no_bound_products',
+      message: '没有已绑定上游的商品，同步无事可做。请先在商品管理里绑定上游商品',
+    };
+  }
+  return { code: 'zjmf.sync_no_effect', message: '同步未处理任何商品' };
 }
 
 /** Backend service that owns all source credentials and supplier synchronization. */
@@ -428,9 +476,12 @@ export class ZJMFUpstreamService {
         (entry) => entry.binding.sourceRef === source.id,
       );
       const aggregate: SyncSummary = {
+        fetched: listed.products.length,
+        bound: bound.length,
         created: 0,
         updated: 0,
         skipped: 0,
+        productive: false,
       };
       await mapWithConcurrency(bound, 6, async (entry) => {
         const upstreamProductId = entry.binding.productId;
@@ -463,6 +514,19 @@ export class ZJMFUpstreamService {
           lastSyncFailedAt: null,
         });
       });
+      /**
+       * 成功判据：必须有商品被真的处理过。
+       *
+       * 原先无条件写 SUCCEEDED，于是「抓到了 1890 个商品、但本地一个都没绑定
+       * 上游」这种**什么都没干**的运行也报成功，用户看到绿灯、商品表却是 0，
+       * 完全无从察觉。现在这类运行按失败记，并给出可执行的错误码。
+       */
+      aggregate.productive = isProductiveSync(aggregate);
+      const idle = idleSyncReason(aggregate);
+      if (idle) {
+        await finishSyncRun(runId, { status: 'FAILED', error: idle.code, ...aggregate });
+        throw new UpstreamError(409, idle.message, idle.code);
+      }
       await finishSyncRun(runId, { status: 'SUCCEEDED', ...aggregate });
       return aggregate;
     } catch (error) {

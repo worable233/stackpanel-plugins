@@ -461,9 +461,18 @@ function formatPercent(bps: number): string {
  * 词表里没有对应条目时回退到 `sync_failed`，而不是把 code 原文印到界面上：
  * 界面文案归界面（ADR-0012），code 只用于选词。
  */
+const SYNC_REASON_KEYS = new Set([
+  'credentials_rejected',
+  'sync_no_bound_products',
+  'sync_upstream_empty',
+  'sync_no_effect',
+]);
+
 function syncReasonKey(code: string | null | undefined): string {
   const suffix = (code ?? '').replace(/^zjmf\.(client\.)?/, '');
-  return suffix === 'credentials_rejected' ? 'credentials_rejected' : 'sync_failed';
+  // 只认已知 code：真失败要能说出「为什么」（没绑定商品 / 上游空 / 凭证被拒），
+  // 未知 code 走通用句，不把内部标识印到界面上。
+  return SYNC_REASON_KEYS.has(suffix) ? suffix : 'sync_failed';
 }
 
 /** 失败时间按本地时区显示；缺失时退回占位而不是 "Invalid Date"。 */

@@ -87,6 +87,10 @@ export const zjmfSyncRunModel = defineModel({
   schema: z.object({
     upstreamId: z.string(),
     status: z.enum(['RUNNING', 'SUCCEEDED', 'FAILED']).default('RUNNING'),
+    /** 上游本次返回的商品数；0 说明连数据都没拿到。 */
+    fetched: z.number().int().default(0),
+    /** 已绑定上游、因而参与本次刷新的本地商品数。 */
+    bound: z.number().int().default(0),
     created: z.number().int().default(0),
     updated: z.number().int().default(0),
     skipped: z.number().int().default(0),
@@ -120,6 +124,8 @@ export interface ZjmfUpstreamData {
 export interface ZjmfSyncRunData {
   upstreamId: string;
   status: 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+  fetched: number;
+  bound: number;
   created: number;
   updated: number;
   skipped: number;

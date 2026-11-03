@@ -101,6 +101,8 @@ export async function createSyncRun(upstreamId: string): Promise<string> {
   const created = await extensions().create<ZjmfSyncRunData>(zjmfSyncRunModel, {
     upstreamId,
     status: 'RUNNING',
+    fetched: 0,
+    bound: 0,
     created: 0,
     updated: 0,
     skipped: 0,
@@ -112,6 +114,8 @@ export async function finishSyncRun(
   id: string,
   data: {
     status: 'SUCCEEDED' | 'FAILED';
+    fetched?: number;
+    bound?: number;
     created?: number;
     updated?: number;
     skipped?: number;
@@ -122,6 +126,8 @@ export async function finishSyncRun(
   const base: ZjmfSyncRunData = instance?.spec ?? {
     upstreamId: '',
     status: 'RUNNING',
+    fetched: 0,
+    bound: 0,
     created: 0,
     updated: 0,
     skipped: 0,
@@ -129,6 +135,8 @@ export async function finishSyncRun(
   await extensions().update<ZjmfSyncRunData>(zjmfSyncRunModel, id, {
     ...base,
     status: data.status,
+    ...(data.fetched !== undefined ? { fetched: data.fetched } : {}),
+    ...(data.bound !== undefined ? { bound: data.bound } : {}),
     ...(data.created !== undefined ? { created: data.created } : {}),
     ...(data.updated !== undefined ? { updated: data.updated } : {}),
     ...(data.skipped !== undefined ? { skipped: data.skipped } : {}),

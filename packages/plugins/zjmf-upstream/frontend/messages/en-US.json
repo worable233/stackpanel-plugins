@@ -124,5 +124,8 @@
   "list.retrySync": "Retry sync",
   "list.dataUnavailable": "Could not load the upstream list; the content below may be incomplete.",
   "sync.reason.credentials_rejected": "The upstream rejected the login. Check the account, password and API host",
-  "sync.reason.sync_failed": "The sync run failed"
+  "sync.reason.sync_failed": "The sync run failed",
+  "sync.reason.sync_no_bound_products": "No products are bound to this upstream, so the sync had nothing to do",
+  "sync.reason.sync_upstream_empty": "The upstream returned no products. Check the API host and credentials",
+  "sync.reason.sync_no_effect": "The sync did not process any product"
 }
