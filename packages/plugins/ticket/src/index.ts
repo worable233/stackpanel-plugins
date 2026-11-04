@@ -675,7 +675,7 @@ export const ticketPlugin = definePlugin({
     version: '0.3.0',
     description:
       '工单系统：用户提交/关闭/催单，管理员接单/转交/内部备注，支持分类、部门与关联订单。',
-    permissions: ['ticket.view', 'ticket.create', 'ticket.admin'],
+    permissions: [{ key: 'ticket.view', scope: 'ticket' }, { key: 'ticket.create', scope: 'ticket' }, { key: 'ticket.admin', scope: 'ticket' }],
     roleTemplates: [
       { role: 'USER', permissions: ['ticket.view', 'ticket.create'] },
       { role: 'ADMIN', permissions: ['ticket.admin'] },
@@ -733,7 +733,7 @@ export const ticketPlugin = definePlugin({
         route: '/ticket/admin/tickets',
         path: '/api/v1/ticket/admin/tickets',
         summary: 'List every ticket (admin view)',
-        scope: 'ticket.admin',
+        scope: 'ticket:read',
       },
       {
         id: 'ticket.admin.read',
@@ -741,7 +741,7 @@ export const ticketPlugin = definePlugin({
         route: '/ticket/admin/tickets/:id',
         path: '/api/v1/ticket/admin/tickets/:id',
         summary: 'Read one ticket with its messages; params: {id}',
-        scope: 'ticket.admin',
+        scope: 'ticket:read',
       },
       {
         id: 'ticket.admin.update',
@@ -750,7 +750,7 @@ export const ticketPlugin = definePlugin({
         path: '/api/v1/ticket/admin/tickets/:id',
         summary: 'Update a ticket status or assignment; params: {id}',
         mutating: true,
-        scope: 'ticket.admin',
+        scope: 'ticket:write',
       },
     ],
   },

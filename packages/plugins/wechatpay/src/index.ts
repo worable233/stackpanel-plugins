@@ -428,7 +428,7 @@ export const wechatpayPlugin = definePlugin({
     version: '0.1.0',
     description: '微信支付 v3 Native 直连：扫码支付 + 回调验签与 AES-GCM 解密，不经过第三方聚合。',
     provides: [EXTENSION_POINTS.paymentProvider],
-    permissions: ['wechatpay.admin'],
+    permissions: [{ key: 'wechatpay.admin', scope: 'wechatpay' }],
     roleTemplates: [{ role: 'ADMIN', permissions: ['wechatpay.admin'] }],
     // Open-platform surface: every entry mirrors one internal route below and
     // dispatches to the *same* handler, so the alias never widens auth.
@@ -439,7 +439,7 @@ export const wechatpayPlugin = definePlugin({
         route: '/wechatpay/admin/config',
         path: '/api/v1/wechatpay/admin/config',
         summary: 'Read the WeChat Pay configuration',
-        scope: 'wechatpay.admin',
+        scope: 'wechatpay:read',
       },
       {
         id: 'wechatpay.admin.config.write',
@@ -447,7 +447,7 @@ export const wechatpayPlugin = definePlugin({
         route: '/wechatpay/admin/config',
         path: '/api/v1/wechatpay/admin/config',
         summary: 'Update the WeChat Pay configuration and credentials',
-        scope: 'wechatpay.admin',
+        scope: 'wechatpay:write',
         mutating: true,
         destructive: true,
       },
@@ -457,7 +457,7 @@ export const wechatpayPlugin = definePlugin({
         route: '/wechatpay/admin/refresh-certificates',
         path: '/api/v1/wechatpay/admin/refresh-certificates',
         summary: 'Re-download the WeChat Pay platform certificates',
-        scope: 'wechatpay.admin',
+        scope: 'wechatpay:write',
         mutating: true,
         destructive: false,
       },

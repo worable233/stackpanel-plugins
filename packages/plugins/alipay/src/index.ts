@@ -241,7 +241,7 @@ export const alipayPlugin = definePlugin({
     version: '0.1.0',
     description: '支付宝当面付直连：扫码支付 + 异步通知验签，不经过第三方聚合网关。',
     provides: [EXTENSION_POINTS.paymentProvider],
-    permissions: ['alipay.admin'],
+    permissions: [{ key: 'alipay.admin', scope: 'alipay' }],
     roleTemplates: [{ role: 'ADMIN', permissions: ['alipay.admin'] }],
     // Open-platform surface: every entry mirrors one internal route below and
     // dispatches to the *same* handler, so the alias never widens auth.
@@ -252,7 +252,7 @@ export const alipayPlugin = definePlugin({
         route: '/alipay/admin/config',
         path: '/api/v1/alipay/admin/config',
         summary: 'Read the Alipay configuration',
-        scope: 'alipay.admin',
+        scope: 'alipay:read',
       },
       {
         id: 'alipay.admin.config.write',
@@ -260,7 +260,7 @@ export const alipayPlugin = definePlugin({
         route: '/alipay/admin/config',
         path: '/api/v1/alipay/admin/config',
         summary: 'Update the Alipay configuration and credentials',
-        scope: 'alipay.admin',
+        scope: 'alipay:write',
         mutating: true,
         destructive: true,
       },

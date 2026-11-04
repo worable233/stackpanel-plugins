@@ -433,7 +433,6 @@ export const referralPlugin = definePlugin({
         route: '/store/admin/referrals',
         path: '/api/v1/store/admin/referrals',
         summary: 'List referral records across users',
-        scope: 'store.admin',
       },
       {
         id: 'referral.admin.config.read',
@@ -441,7 +440,6 @@ export const referralPlugin = definePlugin({
         route: '/store/admin/referrals/config',
         path: '/api/v1/store/admin/referrals/config',
         summary: 'Read the referral program configuration',
-        scope: 'store.admin',
       },
       {
         id: 'referral.admin.config.write',
@@ -449,7 +447,6 @@ export const referralPlugin = definePlugin({
         route: '/store/admin/referrals/config',
         path: '/api/v1/store/admin/referrals/config',
         summary: 'Update the referral program configuration',
-        scope: 'store.admin',
         mutating: true,
         destructive: false,
       },
@@ -459,7 +456,6 @@ export const referralPlugin = definePlugin({
         route: '/store/admin/referrals/adjustments',
         path: '/api/v1/store/admin/referrals/adjustments',
         summary: 'Apply a manual referral adjustment. Moves reward balances.',
-        scope: 'store.admin',
         mutating: true,
         destructive: true,
       },

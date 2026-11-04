@@ -359,7 +359,7 @@ export const altchaPlugin = definePlugin({
     description:
       '插件自己签发并校验 ALTCHA 工作量证明挑战：无第三方服务、无需站点密钥、装完即用，可保护登录、注册、改密码、改邮箱等操作。',
     provides: [EXTENSION_POINTS.captchaProvider],
-    permissions: ['altcha.admin'],
+    permissions: [{ key: 'altcha.admin', scope: 'altcha' }],
     roleTemplates: [{ role: 'ADMIN', permissions: ['altcha.admin'] }],
     capabilities: [
       {
@@ -368,7 +368,7 @@ export const altchaPlugin = definePlugin({
         route: '/altcha/admin/config',
         path: '/api/v1/altcha/admin/config',
         summary: 'Read the self-hosted captcha configuration',
-        scope: 'altcha.admin',
+        scope: 'altcha:read',
       },
       {
         id: 'altcha.admin.config.write',
@@ -376,7 +376,7 @@ export const altchaPlugin = definePlugin({
         route: '/altcha/admin/config',
         path: '/api/v1/altcha/admin/config',
         summary: 'Update the per-action policy and proof-of-work difficulty',
-        scope: 'altcha.admin',
+        scope: 'altcha:write',
         mutating: true,
         destructive: false,
       },
@@ -386,7 +386,7 @@ export const altchaPlugin = definePlugin({
         route: '/altcha/admin/test',
         path: '/api/v1/altcha/admin/test',
         summary: 'Solve and verify a self-issued challenge to prove the provider works',
-        scope: 'altcha.admin',
+        scope: 'altcha:write',
         mutating: true,
         destructive: false,
       },

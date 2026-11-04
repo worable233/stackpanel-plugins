@@ -204,7 +204,7 @@ export const epayPlugin = definePlugin({
     version: '0.3.1',
     description: '易支付（EasyPay）网关：为余额充值与订单结算提供 RSA 签名支付。',
     provides: [EXTENSION_POINTS.paymentProvider],
-    permissions: ['epay.admin'],
+    permissions: [{ key: 'epay.admin', scope: 'epay' }],
     roleTemplates: [{ role: 'ADMIN', permissions: ['epay.admin'] }],
     // Open-platform surface: every entry mirrors one internal route below and
     // dispatches to the *same* handler, so the alias never widens auth.
@@ -215,7 +215,7 @@ export const epayPlugin = definePlugin({
         route: '/epay/admin/config',
         path: '/api/v1/epay/admin/config',
         summary: 'Read the Epay configuration',
-        scope: 'epay.admin',
+        scope: 'epay:read',
       },
       {
         id: 'epay.admin.config.write',
@@ -223,7 +223,7 @@ export const epayPlugin = definePlugin({
         route: '/epay/admin/config',
         path: '/api/v1/epay/admin/config',
         summary: 'Update the Epay configuration and credentials',
-        scope: 'epay.admin',
+        scope: 'epay:write',
         mutating: true,
         destructive: true,
       },

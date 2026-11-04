@@ -323,7 +323,7 @@ export const captchaPlugin = definePlugin({
       '在登录、注册、改密码、改邮箱等敏感操作前加人机验证。支持 Turnstile / hCaptcha / reCAPTCHA / Cap 与任意 siteverify 兼容接口。',
     // 内核的单一扩展点。策略不落在内核，也不落在别的插件。
     provides: [EXTENSION_POINTS.captchaProvider],
-    permissions: ['captcha.admin'],
+    permissions: [{ key: 'captcha.admin', scope: 'captcha' }],
     roleTemplates: [{ role: 'ADMIN', permissions: ['captcha.admin'] }],
     capabilities: [
       {
@@ -332,7 +332,7 @@ export const captchaPlugin = definePlugin({
         route: '/captcha/admin/config',
         path: '/api/v1/captcha/admin/config',
         summary: 'Read the human-verification configuration',
-        scope: 'captcha.admin',
+        scope: 'captcha:read',
       },
       {
         id: 'captcha.admin.config.write',
@@ -340,7 +340,7 @@ export const captchaPlugin = definePlugin({
         route: '/captcha/admin/config',
         path: '/api/v1/captcha/admin/config',
         summary: 'Update the human-verification configuration and per-action policy',
-        scope: 'captcha.admin',
+        scope: 'captcha:write',
         mutating: true,
         destructive: false,
       },
@@ -350,7 +350,7 @@ export const captchaPlugin = definePlugin({
         route: '/captcha/admin/test',
         path: '/api/v1/captcha/admin/test',
         summary: 'Verify one challenge token against the configured provider',
-        scope: 'captcha.admin',
+        scope: 'captcha:write',
         mutating: true,
         // It spends a one-time token against an external service; treat it as
         // destructive so an agent cannot burn tokens incidentally.

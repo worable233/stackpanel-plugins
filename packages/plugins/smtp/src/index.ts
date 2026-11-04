@@ -354,7 +354,7 @@ export const smtpPlugin = definePlugin({
     version: '0.1.0',
     description: '通过 SMTP 投递站内通知与注册验证码（TLS、认证、超时、连接复用、限速）。',
     provides: [EXTENSION_POINTS.notificationChannel, EXTENSION_POINTS.identityChallengeSender],
-    permissions: ['smtp.admin'],
+    permissions: [{ key: 'smtp.admin', scope: 'smtp' }],
     roleTemplates: [{ role: 'ADMIN', permissions: ['smtp.admin'] }],
     // Open-platform surface: every entry mirrors one internal route below and
     // dispatches to the *same* handler, so the alias never widens auth.
@@ -365,7 +365,7 @@ export const smtpPlugin = definePlugin({
         route: '/smtp/admin/config',
         path: '/api/v1/smtp/admin/config',
         summary: 'Read the SMTP configuration',
-        scope: 'smtp.admin',
+        scope: 'smtp:read',
       },
       {
         id: 'smtp.admin.config.write',
@@ -373,7 +373,7 @@ export const smtpPlugin = definePlugin({
         route: '/smtp/admin/config',
         path: '/api/v1/smtp/admin/config',
         summary: 'Update the SMTP configuration',
-        scope: 'smtp.admin',
+        scope: 'smtp:write',
         mutating: true,
         destructive: false,
       },
@@ -383,7 +383,7 @@ export const smtpPlugin = definePlugin({
         route: '/smtp/admin/test',
         path: '/api/v1/smtp/admin/test',
         summary: 'Send a test email through the configured SMTP relay',
-        scope: 'smtp.admin',
+        scope: 'smtp:write',
         mutating: true,
         destructive: true,
       },
