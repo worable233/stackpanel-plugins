@@ -2022,6 +2022,128 @@ export const llmGatewayPlugin = definePlugin({
       }),
     },
 
+    /* ------------------------------ 公开实时概览 ------------------------------ */
+    {
+      method: 'GET',
+      path: '/llm-gateway/stats',
+      auth: 'public',
+      handler: handle(async () => {
+        // 口径：滚动 24 小时。用「今天 0 点起」会让凌晨看板全零，滚动窗口
+        // 既实时又不会因跨零点重置，和页面上「近 24 小时」的文案一致。
+        const now = new Date();
+        const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const rows = await listLogsSince(since, 20_000);
+        const hourFormat = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Shanghai',
+          hour: '2-digit',
+          hour12: false,
+        });
+        const models = new Map<
+          string,
+          {
+            model: string;
+            calls: number;
+            tokens: number;
+            success: number;
+            latencySum: number;
+            latencyCount: number;
+          }
+        >();
+        let totalTokens = 0;
+        let successCalls = 0;
+        let latencySum = 0;
+        let latencyCount = 0;
+        // 桶按「距今整小时数」累积：0 = 当前小时，23 = 23 小时前。
+        const buckets = Array.from({ length: 24 }, () => 0);
+        for (const row of rows) {
+          totalTokens += row.totalTokens;
+          if (row.status === 'SUCCESS') successCalls += 1;
+          if (typeof row.latencyMs === 'number') {
+            latencySum += row.latencyMs;
+            latencyCount += 1;
+          }
+          const created = new Date(row.createdAt);
+          if (!Number.isNaN(created.getTime())) {
+            const hoursAgo = Math.floor((now.getTime() - created.getTime()) / 3_600_000);
+            if (hoursAgo >= 0 && hoursAgo < 24) {
+              buckets[23 - hoursAgo] = (buckets[23 - hoursAgo] ?? 0) + 1;
+            }
+          }
+          const item = models.get(row.model) ?? {
+            model: row.model,
+            calls: 0,
+            tokens: 0,
+            success: 0,
+            latencySum: 0,
+            latencyCount: 0,
+          };
+          item.calls += 1;
+          item.tokens += row.totalTokens;
+          if (row.status === 'SUCCESS') item.success += 1;
+          if (typeof row.latencyMs === 'number') {
+            item.latencySum += row.latencyMs;
+            item.latencyCount += 1;
+          }
+          models.set(row.model, item);
+        }
+        return {
+          window: '24h',
+          since: since.toISOString(),
+          updatedAt: now.toISOString(),
+          // 每个桶对应的北京时间小时，供图表横轴标注。
+          hourlyLabels: buckets.map((_, index) => {
+            const stamp = new Date(now.getTime() - (23 - index) * 3_600_000);
+            return hourFormat.format(stamp);
+          }),
+          totalCalls: rows.length,
+          successCalls,
+          successRate: rows.length > 0 ? successCalls / rows.length : 0,
+          totalTokens,
+          avgLatencyMs: latencyCount > 0 ? Math.round(latencySum / latencyCount) : null,
+          activeModels: models.size,
+          hourly: buckets,
+          models: [...models.values()]
+            .sort((a, b) => b.calls - a.calls || b.tokens - a.tokens)
+            .slice(0, 8)
+            .map((item) => ({
+              model: item.model,
+              calls: item.calls,
+              tokens: item.tokens,
+              successRate: item.calls > 0 ? item.success / item.calls : 0,
+              avgLatencyMs:
+                item.latencyCount > 0 ? Math.round(item.latencySum / item.latencyCount) : null,
+            })),
+        };
+      }),
+    },
+
+    /* ------------------------------ 模型定价（公开） ------------------------------ */
+    {
+      method: 'GET',
+      path: '/llm-gateway/public-prices',
+      auth: 'public',
+      handler: handle(async () => {
+        // 公开价目表：只暴露模型名、能力标签与最终售价，不涉及账号余额、
+        // 成本价和使用者身份，因此可以对未登录访客开放（首页/数据页要用）。
+        const prices = await listEnabledPrices();
+        return {
+          currency: 'CNY',
+          unitTokens: 1_000_000,
+          prices: prices
+            .sort((a, b) => a.model.localeCompare(b.model))
+            .map((price) => ({
+              model: price.model,
+              multiplier: price.multiplier,
+              capabilities: toStringArray(price.capabilities),
+              inputPrice: scale(price.inputPrice, price.multiplier),
+              outputPrice: scale(price.outputPrice, price.multiplier),
+              cacheReadPrice: scale(price.cacheReadPrice || price.inputPrice, price.multiplier),
+              cacheWritePrice: scale(price.cacheWritePrice || price.inputPrice, price.multiplier),
+            })),
+        };
+      }),
+    },
+
     /* ------------------------------ 模型定价（用户） ------------------------------ */
     {
       method: 'GET',

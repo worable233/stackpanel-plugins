@@ -10,6 +10,8 @@
     "llm-gateway.billing",
     "llm-gateway.usage",
     "llm-gateway.prices",
+    "llm-gateway.publicStats",
+    "llm-gateway.publicPrices",
     "llm-gateway.keys"
   ],
   "adminRoutes": [

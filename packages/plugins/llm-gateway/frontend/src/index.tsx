@@ -1134,6 +1134,12 @@ const gatewayFinders: Record<string, FinderProvider> = {
   'llm-gateway.prices': {
     handler: (_input, ctx) => ctx.api.get('/llm-gateway/prices', zAny),
   },
+  'llm-gateway.publicStats': {
+    handler: (_input, ctx) => ctx.api.get('/llm-gateway/stats', zAny),
+  },
+  'llm-gateway.publicPrices': {
+    handler: (_input, ctx) => ctx.api.get('/llm-gateway/public-prices', zAny),
+  },
   'llm-gateway.keys': {
     handler: (_input, ctx) => ctx.api.get('/llm-gateway/keys', zAny),
   },
