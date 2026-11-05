@@ -1,6 +1,6 @@
 {
   "algorithm": "ed25519",
   "keyId": "catalog-2026",
-  "digest": "b7ee5a87874140c59a25611b2c219a4c1a4254d0cbc760a6a06f9939abb155de",
-  "signature": "H+Ns99yRM1gnO4ynk1tU0Xjz0FWKw+CDyC0T6/JiX1cCNmlCWd735i0ZGC5D19lmZP+QV6IvdKeMqLaktp7lAw=="
+  "digest": "39197eb85b0be2a881fc559c4b03bd907077a13005b0b204b71272b0e5ef1ba8",
+  "signature": "8pqI/ww8MqrGPR/UrHfnqHTafJmWMosZ+1pPKe9GH7gejU2EkpQoA2n6VQp6s3JDnVB/ZoWUQqkZ8fjj4ns8Dg=="
 }
