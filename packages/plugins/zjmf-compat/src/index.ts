@@ -251,6 +251,11 @@ export const zjmfCompatPlugin = definePlugin({
   },
 
   onDeactivate: (ctx: PluginContext) => {
+    // 必须把**所有**模块级引用置空，不只是 service。
+    //
+    // 插件被停用后再装载新版本时，旧模块实例仍被引用，而它内存着
+    // **已失效的 PluginContext**（其中 secrets 句柄、登录会话、数据库连接
+    // 在上一代上下文里）。下一次请求落到旧实例上就拿着死句柄去读密钥。
     service = null;
     ctx.logger.info('zjmf-compat: deactivated');
   },

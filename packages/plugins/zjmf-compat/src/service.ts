@@ -5,6 +5,7 @@ import type { ExtensionInstance } from '@stackpanel/sdk';
 import type { CommerceOperations } from '@stackpanel/sdk';
 import { commerceClient, type SpV1Client } from './bridge.js';
 import { issueToken, hashCredential, verifyCredential } from './credential.js';
+import { isUniqueViolation } from '@stackpanel/sdk';
 import { zjmfConnectionModel, type ConnectionData } from './data.js';
 import {
   collectSelections,
@@ -327,7 +328,24 @@ export class ZjmfCompatService {
       enabled: data.enabled,
       productIds: data.productIds,
     };
-    const created = await this.ctx.extensions.create<ConnectionData>(zjmfConnectionModel, spec);
+    /**
+     * 并发下的唯一性归集到**一次**写入（以前是先查后写、中间有窗口）。
+     *
+     * 上面的应用层查重只能给出好读的提示，挡不住并发：两个请求可以同时
+     * 通过 `existing.items.length === 0`，然后同时 create。真正的唯一性由
+     * `username` 的唯一索引保证，但它抛的是数据库错误（用户看不懂）。
+     *
+     * 这里把那个数据库错误**译成业务错误**，与查重路径给出完全一致
+     * 的 code 和文案——用户无需知道自己走的是哪条路径。
+     */
+    const created = await this.ctx.extensions
+      .create<ConnectionData>(zjmfConnectionModel, spec)
+      .catch((error: unknown) => {
+        if (isUniqueViolation(error)) {
+          throw new PluginError('zjmf-compat.username_taken', 409, '用户名已存在');
+        }
+        throw error;
+      });
     return redactConnection(created);
   }
 

@@ -449,8 +449,41 @@ export class ZJMFUpstreamService {
         await this.syncSource(source.id);
       } catch (error) {
         this.ctx.logger.warn(`zjmf-upstream: ${source.id} sync failed: ${messageOf(error)}`);
+        // 定时同步的失败必须落到上游记录上，否则就是「死信」：
+        //
+        // `syncSourceOnce` 内部已经会写 `lastSyncError`，但**拿不到同步锁**
+        // 的那条路径（并发 / 残留 SYNCING）在它之外抛，只进日志。
+        // 用户看列表只见 `lastAttemptAtMs` 有值、状态回到 IDLE，完全不知道
+        // 为什么没同步成。
+        await this.recordScheduledFailure(source, error);
       }
     }
+  }
+
+  /**
+   * 把**定时**同步的失败回写到上游记录（防止死信）。
+   *
+   * 只写稳定 code，不写散文（ADR-0012）。回写本身失败不能盖住真正
+   * 的同步错误——否则用户看到的是「记不下失败」。
+   */
+  private async recordScheduledFailure(source: UpstreamRecord, error: unknown): Promise<void> {
+    const code =
+      error instanceof UpstreamError
+        ? error.code
+        : error instanceof ZJMFClientError
+          ? error.code
+          : 'zjmf.sync_failed';
+    await extensions()
+      .update<ZjmfUpstreamData>(zjmfUpstreamModel, source.id, {
+        ...stripMeta(source),
+        lastSyncError: code,
+        lastSyncFailedAt: new Date().toISOString(),
+      })
+      .catch((updateError: unknown) => {
+        this.ctx.logger.warn(
+          `zjmf-upstream: 记录定时同步失败原因失败 ${source.id}: ${messageOf(updateError)}`,
+        );
+      });
   }
 
   private async syncSource(id: string): Promise<SyncSummary> {

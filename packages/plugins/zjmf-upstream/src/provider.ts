@@ -458,6 +458,14 @@ export class ZJMFProvider implements FulfillmentProvider {
       runtime: {
         ...created.runtime,
         upstreamId,
+        /**
+         * 归属用户必须落到服务实例上（owner 传播）。
+         *
+         * `ctx.userId` 之前**只**用来算幂等指纹，从未写入任何可查询的地方。
+         * 后果：从上游导入的实例无法反查「它属于谁」，对账、客服排查、
+         * 上游回调到底应落到哪个账号，都只能靠 orderId 反查订单。
+         */
+        userId: ctx.userId,
         status: created.runtime.status === 'PENDING_INVOICE' ? 'PENDING_INVOICE' : 'PROVISIONING',
       },
     };
